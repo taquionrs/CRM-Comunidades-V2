@@ -102,15 +102,6 @@ const supabase = (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY)
   ? createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { db: { schema: 'crm_comunidades_v2' } })
   : null;
 
-/* ---------- sin login (temporal, ver README) ---------- */
-const configError = document.getElementById('configError');
-if (!supabase) {
-  configError.style.display = 'block';
-  configError.innerHTML = '<h3 style="color:var(--danger)">Config no disponible</h3><div class="sub">Falta SUPABASE_URL/SUPABASE_ANON_KEY (variables de entorno de Vercel).</div>';
-} else {
-  enterApp();
-}
-
 /* ---------- estado + navegación ---------- */
 const TABS = [
   { key:'overview', label:'Overview' },
@@ -512,6 +503,15 @@ async function renderAll(){
   } catch (err) {
     content.innerHTML = `<div class="card"><h3>Error consultando Supabase</h3><div class="sub" style="color:var(--danger)">${err.message}</div></div>`;
   }
+}
+
+/* ---------- sin login (temporal, ver README) ---------- */
+const configError = document.getElementById('configError');
+if (!supabase) {
+  configError.style.display = 'block';
+  configError.innerHTML = '<h3 style="color:var(--danger)">Config no disponible</h3><div class="sub">Falta SUPABASE_URL/SUPABASE_ANON_KEY (variables de entorno de Vercel).</div>';
+} else {
+  enterApp();
 }
 </script>
 </body>
