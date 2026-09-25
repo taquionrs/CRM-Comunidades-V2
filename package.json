@@ -1,0 +1,7 @@
+{
+  "name": "crm-comunidades-v2",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/generate-config.js"
+  }
+}

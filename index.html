@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM de Comunidades V2</title>
+<style>
+:root{
+  --bg:#0B0D12; --panel:#12151C; --panel-raised:#1A1E27; --panel-sunken:#0E1016;
+  --border:rgba(255,255,255,.10); --border-strong:rgba(255,255,255,.22);
+  --text-strong:#FFFFFF; --text-body:#C7CBD4; --text-muted:#8B90A0; --text-faint:#5B6070;
+  --accent:#4C7EFF; --accent-dim:rgba(76,126,255,.14);
+  --warn:#FF9D3D; --danger:#FF5C7A;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r-in:5px; --r-card:9px;
+}
+*{box-sizing:border-box}
+html,body{margin:0; height:100%}
+body{background:var(--bg); color:var(--text-body); font-family:var(--font)}
+h1,h2,h3,h4{color:var(--text-strong); margin:0; font-weight:700}
+button,input,select{font-family:inherit}
+[hidden]{display:none !important}
+
+.login-screen{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px}
+.login-card{width:100%; max-width:360px; background:var(--panel); border:1px solid var(--border); border-radius:var(--r-card); padding:28px}
+.login-card h1{font-size:18px; margin-bottom:4px}
+.login-card .sub{font-size:12.5px; color:var(--text-faint); margin-bottom:20px}
+.login-card label{display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); margin:14px 0 6px}
+.login-card input{width:100%; background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:14px; padding:10px 11px; border-radius:var(--r-in)}
+.login-error{color:var(--danger); font-size:12px; margin-top:12px; min-height:1em}
+.btn{display:inline-flex; align-items:center; gap:6px; border-radius:var(--r-in); border:1px solid var(--border-strong); background:transparent; color:var(--text-strong); padding:9px 14px; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap}
+.btn:hover{background:var(--panel-raised)}
+.btn[disabled]{opacity:.4; cursor:not-allowed}
+.btn-fill{background:var(--accent); border-color:var(--accent); color:#fff; width:100%; justify-content:center; margin-top:18px}
+.btn-fill:hover{background:#3a6bef}
+
+.app{display:grid; grid-template-columns:230px 1fr; min-height:100vh}
+.sidebar{background:var(--panel-sunken); border-right:1px solid var(--border); padding:20px 14px; display:flex; flex-direction:column}
+.brand{font-size:14px; font-weight:700; color:#fff; margin-bottom:2px}
+.brand-sub{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:20px}
+.navlist{display:flex; flex-direction:column; gap:2px; margin-bottom:auto}
+.nav-item{display:block; text-align:left; padding:9px 10px; border-radius:var(--r-in); font-size:13px; color:var(--text-body); background:none; border:1px solid transparent; cursor:pointer; width:100%}
+.nav-item:hover{background:var(--panel-raised)}
+.nav-item.active{background:var(--accent-dim); border-color:rgba(76,126,255,.4); color:#fff; font-weight:700}
+.sidebar-foot{padding-top:14px; border-top:1px solid var(--border); font-size:11px; color:var(--text-faint)}
+.sidebar-foot button{background:none; border:none; color:var(--accent); font-size:11px; cursor:pointer; padding:0; margin-top:6px}
+
+.main{padding:26px 32px 60px; max-width:1280px}
+.main-head{margin-bottom:20px}
+.main-head h2{font-size:20px}
+.main-head .sub{font-size:12.5px; color:var(--text-muted); margin-top:3px}
+
+.kpi-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:20px}
+.kpi{background:var(--panel); border:1px solid var(--border); border-radius:var(--r-card); padding:14px 16px}
+.kpi .v{font-size:22px; font-weight:800; color:#fff; line-height:1.15}
+.kpi .l{font-size:10.5px; color:var(--text-muted); margin-top:6px; text-transform:uppercase; letter-spacing:.03em}
+
+.card{background:var(--panel); border:1px solid var(--border); border-radius:var(--r-card); padding:18px; margin-bottom:16px}
+.card h3{font-size:13.5px; margin-bottom:3px}
+.card .sub{font-size:11.5px; color:var(--text-muted); margin-bottom:14px}
+
+table{border-collapse:collapse; width:100%}
+th{text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); padding:0 10px 8px; border-bottom:1px solid var(--border)}
+td{padding:9px 10px; font-size:12px; color:var(--text-body); border-bottom:1px solid var(--border); vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--border-strong)}
+.tbl-wrap{overflow-x:auto}
+.mono{font-variant-numeric:tabular-nums; color:var(--text-muted)}
+.empty-row td{color:var(--text-faint); text-align:center; padding:20px 10px}
+.na{color:var(--text-faint)}
+
+.filters{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:flex-end}
+.filters label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
+.filters input, .filters select{background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
+
+.form-row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; padding:14px; background:var(--panel-raised); border:1px solid var(--border); border-radius:var(--r-in)}
+.form-row label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
+.form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
+
+.pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
+.badge-warn{color:var(--warn); border-color:rgba(255,157,61,.4); background:rgba(255,157,61,.08)}
+.codeblock{font-family:ui-monospace,monospace; font-size:11px; color:var(--text-muted); white-space:pre-wrap; word-break:break-all; max-width:360px}
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <form class="login-card" id="loginForm">
+    <h1>CRM de Comunidades V2</h1>
+    <div class="sub">Overview · Control_Comunidades · Base_Limpia · Data_Deduplicada · Data_Cruda</div>
+    <label>Email</label>
+    <input type="email" id="loginEmail" required autocomplete="username">
+    <label>Contraseña</label>
+    <input type="password" id="loginPassword" required autocomplete="current-password">
+    <button type="submit" class="btn btn-fill">Ingresar</button>
+    <div class="login-error" id="loginError"></div>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="sidebar">
+    <div class="brand">Comunidades V2</div>
+    <div class="brand-sub">CRM interno · Taquión</div>
+    <nav class="navlist" id="nav"></nav>
+    <div class="sidebar-foot">
+      <span id="sessionEmail">—</span>
+      <button id="btnLogout" type="button">Cerrar sesión</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="main-head">
+      <h2 id="hTitle">—</h2>
+      <div class="sub" id="hSub">—</div>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const cfg = window.CRM_COMUNIDADES_V2_CONFIG || {};
+const supabase = (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY)
+  ? createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { db: { schema: 'crm_comunidades_v2' } })
+  : null;
+
+/* ---------- auth ---------- */
+const loginScreen = document.getElementById('loginScreen');
+const appEl = document.getElementById('app');
+const loginForm = document.getElementById('loginForm');
+const loginError = document.getElementById('loginError');
+
+function showLoginScreen(){ appEl.hidden = true; loginScreen.hidden = false; }
+function showApp(){ loginScreen.hidden = true; appEl.hidden = false; }
+
+if (!supabase) {
+  loginError.textContent = 'Config no disponible — falta SUPABASE_URL/SUPABASE_ANON_KEY (variables de entorno de Vercel).';
+  loginForm.querySelector('button').disabled = true;
+} else {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) loginError.textContent = error.message === 'Invalid login credentials' ? 'Email o contraseña incorrectos.' : error.message;
+  });
+
+  document.getElementById('btnLogout').addEventListener('click', async () => { await supabase.auth.signOut(); });
+
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session) { document.getElementById('sessionEmail').textContent = session.user.email; enterApp(); }
+    else showLoginScreen();
+  });
+
+  supabase.auth.getSession().then(({ data }) => {
+    if (data.session) { document.getElementById('sessionEmail').textContent = data.session.user.email; enterApp(); }
+    else showLoginScreen();
+  });
+}
+
+/* ---------- estado + navegación ---------- */
+const TABS = [
+  { key:'overview', label:'Overview' },
+  { key:'control', label:'Control_Comunidades' },
+  { key:'base_limpia', label:'Base_Limpia' },
+  { key:'dedup', label:'Data_Deduplicada' },
+  { key:'crudo', label:'Data_Cruda' },
+];
+const TAB_SUB = {
+  overview:'Panel ejecutivo macro — KPIs globales y distribución por comunidad',
+  control:'Métricas de performance por plataforma (Meta Ads · ManyChat · WhatsApp)',
+  base_limpia:'Gestor de usuarios nominados — vista de cliente',
+  dedup:'Log técnico de atribución — primer evento por teléfono',
+  crudo:'Log de eventos en vivo — historial completo, incluye duplicados',
+};
+let state = { tab:'overview', entered:false };
+
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = TABS.map(t => `<button class="nav-item ${state.tab===t.key?'active':''}" data-t="${t.key}">${t.label}</button>`).join('');
+  nav.querySelectorAll('.nav-item').forEach(btn => btn.onclick = () => { state.tab = btn.dataset.t; renderAll(); });
+}
+
+function enterApp(){
+  showApp();
+  if (!state.entered) { state.entered = true; renderAll(); }
+}
+
+/* ---------- helpers ---------- */
+const fmtMoney = v => v==null ? '—' : '$' + Number(v).toLocaleString('es-AR', { maximumFractionDigits:2 });
+const fmtInt = v => v==null ? '—' : Number(v).toLocaleString('es-AR');
+const fmtPct = v => v==null ? '—' : Math.round(v*10)/10 + '%';
+const fmtFecha = v => v ? new Date(v).toLocaleString('es-AR') : '—';
+const naCell = (nota) => `<span class="na" title="${nota}">— sin fuente</span>`;
+
+function kpiGrid(items){
+  return '<div class="kpi-grid">' + items.map(([v,l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('') + '</div>';
+}
+
+/* ---------- loaders ---------- */
+async function loadKpisMacro(){
+  const { data, error } = await supabase.from('kpis_macro').select('*').maybeSingle();
+  if (error) throw error;
+  return data;
+}
+async function loadComunidadesPerformance(){
+  const { data, error } = await supabase.from('comunidad_performance').select('*').order('nombre');
+  if (error) throw error;
+  return data || [];
+}
+async function loadComunidades(){
+  const { data, error } = await supabase.from('comunidad').select('*').order('nombre');
+  if (error) throw error;
+  return data || [];
+}
+async function crearComunidad(payload){
+  const { error } = await supabase.from('comunidad').insert(payload);
+  if (error) throw error;
+}
+async function actualizarComunidad(id, payload){
+  const { error } = await supabase.from('comunidad').update(payload).eq('id', id);
+  if (error) throw error;
+}
+async function loadMetaAdsMetrica(){
+  const { data, error } = await supabase.from('meta_ads_metrica').select('*').order('fecha', { ascending:false });
+  if (error) throw error;
+  return data || [];
+}
+async function loadBaseLimpia(){
+  const { data, error } = await supabase.from('base_limpia').select('*').order('fecha_primer_contacto', { ascending:false });
+  if (error) throw error;
+  return data || [];
+}
+async function loadEventoDeduplicado(){
+  const { data, error } = await supabase.from('evento_deduplicado').select('*').order('fecha_primer_contacto', { ascending:false });
+  if (error) throw error;
+  return data || [];
+}
+async function loadEventoCrudo(){
+  const { data, error } = await supabase.from('evento_crudo').select('*').order('recibido_en', { ascending:false }).limit(200);
+  if (error) throw error;
+  return data || [];
+}
+
+/* ================= TAB 1: Overview ================= */
+function renderOverview(kpis, comunidades){
+  const k = kpis || {};
+  const kpiCards = kpiGrid([
+    [fmtMoney(k.inversion_total), 'Inversión total Meta'],
+    [fmtInt(k.conversaciones_totales), 'Conversaciones totales (Meta)'],
+    [fmtMoney(k.cpl_global), 'CPL global'],
+    [fmtInt(k.clics_unicos_totales), 'Clics únicos totales a comunidad'],
+    [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales'],
+    [fmtMoney(k.cpme_global), 'CPME global'],
+    [fmtPct(k.tasa_fuga_global_pct), 'Tasa de fuga global'],
+  ]);
+
+  const totalMf = comunidades.reduce((s,c) => s + (c.miembros_finales||0), 0);
+  const rows = comunidades.length
+    ? comunidades.map(c => {
+        const pct = totalMf ? (c.miembros_finales/totalMf*100) : 0;
+        return `<tr>
+          <td>${c.nombre}</td>
+          <td class="mono">${fmtInt(c.miembros_iniciales)}</td>
+          <td class="mono">${fmtInt(c.clics_unicos)}</td>
+          <td class="mono">${fmtInt(c.bajas_estimadas)}</td>
+          <td class="mono">${fmtInt(c.miembros_finales)}</td>
+          <td class="mono">${fmtPct(pct)}</td>
+        </tr>`;
+      }).join('') + `<tr class="totales">
+          <td>Totales</td>
+          <td class="mono">${fmtInt(comunidades.reduce((s,c)=>s+(c.miembros_iniciales||0),0))}</td>
+          <td class="mono">${fmtInt(comunidades.reduce((s,c)=>s+(c.clics_unicos||0),0))}</td>
+          <td class="mono">${fmtInt(comunidades.reduce((s,c)=>s+(c.bajas_estimadas||0),0))}</td>
+          <td class="mono">${fmtInt(totalMf)}</td>
+          <td class="mono">100%</td>
+        </tr>`
+    : `<tr class="empty-row"><td colspan="6">Sin comunidades cargadas todavía — agregá una abajo.</td></tr>`;
+
+  return kpiCards +
+    `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; clics únicos y bajas estimadas se calculan solos (First-Contact Attribution).</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Clics únicos (CRM)</th><th>Bajas est. (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>` +
+    renderComunidadesForm(comunidades);
+}
+
+function renderComunidadesForm(comunidades){
+  const rows = comunidades.map(c => `<tr>
+      <td>${c.nombre}</td>
+      <td class="mono">${c.adset_name || '—'}</td>
+      <td><input type="number" class="mi-input" data-id="${c.id}" data-field="miembros_iniciales" value="${c.miembros_iniciales}" style="width:80px; background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; padding:5px 7px; border-radius:var(--r-in)"></td>
+      <td><input type="number" class="mi-input" data-id="${c.id}" data-field="miembros_finales" value="${c.miembros_finales}" style="width:80px; background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; padding:5px 7px; border-radius:var(--r-in)"></td>
+      <td><button class="btn btn-guardar-comunidad" data-id="${c.id}" style="padding:5px 10px; font-size:11px">Guardar</button></td>
+    </tr>`).join('');
+
+  return `<div class="card" id="comunidadesFormWrap"><h3>Comunidades</h3><div class="sub">Alta de comunidad + carga manual de miembros iniciales/finales (Mi/Mf) y el adset_name para el mapeo de Windsor.ai.</div>
+    <div class="tbl-wrap" style="margin-bottom:14px"><table><thead><tr><th>Nombre</th><th>adset_name</th><th>Mi</th><th>Mf</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="5">Ninguna todavía</td></tr>'}</tbody></table></div>
+    <form id="formNuevaComunidad" class="form-row">
+      <label>Nombre<input type="text" name="nombre" required placeholder="San Luis"></label>
+      <label>adset_name<input type="text" name="adset_name" placeholder="AdSet — San Luis"></label>
+      <label>Miembros iniciales<input type="number" name="miembros_iniciales" value="0" style="width:110px"></label>
+      <label>Miembros finales<input type="number" name="miembros_finales" value="0" style="width:110px"></label>
+      <button type="submit" class="btn" style="background:var(--accent); border-color:var(--accent); color:#fff">+ Agregar comunidad</button>
+    </form>
+    <div id="comunidadResultado" style="margin-top:10px; font-size:12px"></div>
+  </div>`;
+}
+
+function wireComunidadesForm(){
+  const wrap = document.getElementById('comunidadesFormWrap');
+  if (!wrap) return;
+  const resultado = document.getElementById('comunidadResultado');
+
+  wrap.querySelectorAll('.btn-guardar-comunidad').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      const fila = btn.closest('tr');
+      const payload = {};
+      fila.querySelectorAll('.mi-input').forEach(inp => { payload[inp.dataset.field] = Number(inp.value); });
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try { await actualizarComunidad(id, payload); await refrescarOverview(); }
+      catch (err) { resultado.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`; }
+    };
+  });
+
+  const form = document.getElementById('formNuevaComunidad');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    try {
+      await crearComunidad({
+        nombre: fd.get('nombre'),
+        adset_name: fd.get('adset_name') || null,
+        miembros_iniciales: Number(fd.get('miembros_iniciales')) || 0,
+        miembros_finales: Number(fd.get('miembros_finales')) || 0,
+      });
+      form.reset();
+      await refrescarOverview();
+    } catch (err) {
+      resultado.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+    }
+  };
+}
+
+async function refrescarOverview(){
+  const [kpis, comunidades] = await Promise.all([loadKpisMacro(), loadComunidadesPerformance()]);
+  document.getElementById('content').innerHTML = renderOverview(kpis, comunidades);
+  wireComunidadesForm();
+}
+
+/* ================= TAB 2: Control_Comunidades ================= */
+function renderControl(comunidades, metrica, filtroComunidad){
+  const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${c.nombre}</option>`).join('');
+  const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
+
+  const rows = porComunidad.length
+    ? porComunidad.map(c => `<tr>
+        <td>${c.nombre}</td>
+        <td class="mono">${fmtMoney(c.inversion)}</td>
+        <td class="mono">${fmtInt(c.conversaciones_meta)}</td>
+        <td class="mono">${fmtMoney(c.cpl)}</td>
+        <td>${naCell('CTR de anuncio requiere clicks a nivel de anuncio — Windsor.ai solo trae spend/impresiones/conversaciones en esta integración')}</td>
+        <td>${naCell('ManyChat no reporta "trigger entregados" en el payload del webhook (solo phone/community_id/timestamp)')}</td>
+        <td class="mono">${fmtInt(c.clics_unicos)}</td>
+        <td>${naCell('"Envíos de enlace efectivos" no viene en el payload del webhook actual')}</td>
+        <td class="mono">${fmtPct(c.clics_unicos && c.conversaciones_meta ? (c.clics_unicos/c.conversaciones_meta*100) : null)}</td>
+        <td class="mono">${fmtInt(c.miembros_iniciales)}</td>
+        <td class="mono">${fmtInt(c.miembros_finales)}</td>
+        <td class="mono">${fmtInt(c.crecimiento_neto)}</td>
+        <td class="mono">${fmtInt(c.bajas_estimadas)}</td>
+        <td class="mono">${fmtMoney(c.cpcu)}</td>
+        <td class="mono">${fmtMoney(c.cpmn)}</td>
+        <td class="mono">${fmtPct(c.tasa_fuga_pct)}</td>
+      </tr>`).join('')
+    : `<tr class="empty-row"><td colspan="15">Sin datos todavía.</td></tr>`;
+
+  return `<div class="filters">
+      <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
+      <button class="btn" id="btnWindsorSync" type="button">Sincronizar Windsor.ai</button>
+      <div id="windsorResultado" style="margin-left:6px; font-size:12px; align-self:center"></div>
+    </div>
+    <div class="card"><h3>Matriz de atribución multi-plataforma</h3>
+      <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican.</div>
+      <div class="tbl-wrap"><table><thead><tr>
+        <th colspan="4" style="color:var(--accent)">Meta Ads</th><th colspan="3" style="color:var(--warn)">ManyChat Bot</th><th colspan="2">CRM / Conversión</th><th colspan="4">WhatsApp &amp; Salud</th><th colspan="2">Financiera</th>
+      </tr><tr>
+        <th>Comunidad</th><th>Inversión</th><th>Conversaciones</th><th>CPL</th><th>CTR anuncio</th>
+        <th>Trigger entregados</th><th>Envíos de enlace</th>
+        <th>Clics únicos</th><th>Tasa clic a grupo</th>
+        <th>Mi</th><th>Mf</th><th>Crecimiento neto</th><th>Bajas est.</th>
+        <th>CPCU</th><th>CPMN / Tasa fuga</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+}
+
+function wireControl(){
+  const sel = document.getElementById('selFiltroComunidad');
+  if (sel) sel.onchange = () => { state.filtroComunidad = sel.value || null; renderAll(); };
+  const btn = document.getElementById('btnWindsorSync');
+  if (btn) btn.onclick = async () => {
+    const resultado = document.getElementById('windsorResultado');
+    btn.disabled = true; btn.textContent = 'Sincronizando…';
+    try {
+      const { data, error } = await supabase.functions.invoke('windsor-sync', { body: {} });
+      if (error) throw error;
+      resultado.textContent = data?.error ? data.error : `Insertadas: ${data?.data?.insertadas ?? 0}. ${data?.aviso || ''}`;
+      await renderAll();
+    } catch (err) {
+      resultado.innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sincronizar Windsor.ai';
+    }
+  };
+}
+
+/* ================= TAB 3: Base_Limpia ================= */
+function renderBaseLimpia(usuarios, comunidades, filtro){
+  const opciones = `<option value="">Todas</option>` + comunidades.map(c => `<option value="${c.id}" ${filtro.comunidad===c.id?'selected':''}>${c.nombre}</option>`).join('');
+
+  const stockCards = kpiGrid(comunidades.map(c => [fmtInt(c.miembros_finales), c.nombre + ' — miembros reales']));
+
+  let filtrados = usuarios;
+  if (filtro.comunidad) filtrados = filtrados.filter(u => u.comunidad_atribuida_id === filtro.comunidad);
+  if (filtro.busqueda) {
+    const q = filtro.busqueda.toLowerCase();
+    filtrados = filtrados.filter(u => (u.nombre||'').toLowerCase().includes(q) || (u.phone_id||'').includes(q));
+  }
+
+  const porPagina = 20;
+  const pagina = filtro.pagina || 1;
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+  const pageRows = filtrados.slice((pagina-1)*porPagina, pagina*porPagina);
+
+  const rows = pageRows.length
+    ? pageRows.map(u => `<tr>
+        <td class="mono">${u.phone_id}</td>
+        <td>${u.nombre}</td>
+        <td>${u.email}</td>
+        <td>${u.comunidad_atribuida || '—'}</td>
+        <td class="mono">${fmtFecha(u.fecha_primer_contacto)}</td>
+        <td>${(u.etiquetas||[]).map(t=>`<span class="pill">${t}</span>`).join(' ') || '—'}</td>
+        <td><span class="pill">${u.estado}</span></td>
+      </tr>`).join('')
+    : `<tr class="empty-row"><td colspan="7">Sin usuarios todavía.</td></tr>`;
+
+  return stockCards +
+    `<div class="card">
+      <h3>Usuarios nominados</h3>
+      <div class="sub">Nombre/email se completan al correr "Sincronizar nombres" (requiere MANYCHAT_API_KEY configurada del lado del backend).</div>
+      <div class="filters">
+        <label>Buscar<input type="text" id="inpBuscarBaseLimpia" placeholder="Nombre o teléfono" value="${filtro.busqueda||''}"></label>
+        <label>Comunidad<select id="selFiltroComunidadBL">${opciones}</select></label>
+        <button class="btn" id="btnNominacionSync" type="button">Sincronizar nombres</button>
+        <div id="nominacionResultado" style="font-size:12px; align-self:center"></div>
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th>Teléfono (ID)</th><th>Nombre</th><th>Email</th><th>Comunidad atribuida</th><th>Fecha 1º contacto</th><th>Etiquetas</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; color:var(--text-muted)">
+        <span>${filtrados.length} usuario(s) — página ${pagina} de ${totalPaginas}</span>
+        <div style="display:flex; gap:6px">
+          <button class="btn" id="btnPagPrev" ${pagina<=1?'disabled':''} style="padding:5px 10px">←</button>
+          <button class="btn" id="btnPagNext" ${pagina>=totalPaginas?'disabled':''} style="padding:5px 10px">→</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function wireBaseLimpia(){
+  const inp = document.getElementById('inpBuscarBaseLimpia');
+  if (inp) inp.oninput = () => { state.baseLimpiaFiltro.busqueda = inp.value; state.baseLimpiaFiltro.pagina = 1; renderAll(); };
+  const sel = document.getElementById('selFiltroComunidadBL');
+  if (sel) sel.onchange = () => { state.baseLimpiaFiltro.comunidad = sel.value || null; state.baseLimpiaFiltro.pagina = 1; renderAll(); };
+  const prev = document.getElementById('btnPagPrev');
+  if (prev) prev.onclick = () => { state.baseLimpiaFiltro.pagina = Math.max(1, (state.baseLimpiaFiltro.pagina||1)-1); renderAll(); };
+  const next = document.getElementById('btnPagNext');
+  if (next) next.onclick = () => { state.baseLimpiaFiltro.pagina = (state.baseLimpiaFiltro.pagina||1)+1; renderAll(); };
+  const btn = document.getElementById('btnNominacionSync');
+  if (btn) btn.onclick = async () => {
+    const resultado = document.getElementById('nominacionResultado');
+    btn.disabled = true; btn.textContent = 'Sincronizando…';
+    try {
+      const { data, error } = await supabase.functions.invoke('nominacion-sync', { body: {} });
+      if (error) throw error;
+      resultado.textContent = data?.error ? data.error : `Actualizados: ${data?.data?.actualizados ?? 0}, sin match: ${data?.data?.sin_match ?? 0}`;
+      await renderAll();
+    } catch (err) {
+      resultado.innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sincronizar nombres';
+    }
+  };
+}
+
+/* ================= TAB 4: Data_Deduplicada ================= */
+function renderDedup(eventos, comunidadesById){
+  const rows = eventos.length
+    ? eventos.map(e => `<tr>
+        <td class="mono">${e.telefono_id}</td>
+        <td>${comunidadesById.get(e.comunidad_atribuida_id) || '—'}</td>
+        <td class="mono">${fmtFecha(e.fecha_primer_contacto)}</td>
+      </tr>`).join('')
+    : `<tr class="empty-row"><td colspan="3">Sin eventos todavía.</td></tr>`;
+  return `<div class="card"><h3>Primer evento por teléfono</h3>
+    <div class="sub">Vista técnica/auditable — permite verificar qué comunidad "ganó" la atribución cuando un usuario intentó unirse a varias.</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Teléfono (ID)</th><th>Comunidad atribuida</th><th>Fecha de primer contacto</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+/* ================= TAB 5: Data_Cruda ================= */
+function renderCrudo(eventos, comunidadesById){
+  const rows = eventos.length
+    ? eventos.map(e => `<tr>
+        <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}</td>
+        <td class="mono">${e.telefono_id}</td>
+        <td>${comunidadesById.get(e.comunidad_id) || '—'}</td>
+        <td><span class="pill">${e.tipo}</span></td>
+        <td class="codeblock">${JSON.stringify(e.payload)}</td>
+      </tr>`).join('')
+    : `<tr class="empty-row"><td colspan="5">Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).</td></tr>`;
+  return `<div class="card"><h3>Feed de eventos en vivo</h3>
+    <div class="sub">Incluye duplicados y reintentos tal cual llegan — últimos 200. Nunca se edita ni se borra una fila acá.</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Teléfono</th><th>Comunidad</th><th>Tipo</th><th>Payload</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+/* ---------- render principal ---------- */
+async function renderAll(){
+  renderNav();
+  document.getElementById('hTitle').textContent = TABS.find(t => t.key===state.tab).label;
+  document.getElementById('hSub').textContent = TAB_SUB[state.tab];
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="card"><h3>Cargando…</h3></div>';
+
+  try {
+    if (state.tab === 'overview') {
+      const [kpis, comunidades] = await Promise.all([loadKpisMacro(), loadComunidadesPerformance()]);
+      content.innerHTML = renderOverview(kpis, comunidades);
+      wireComunidadesForm();
+
+    } else if (state.tab === 'control') {
+      const [comunidades, metrica] = await Promise.all([loadComunidadesPerformance(), loadMetaAdsMetrica()]);
+      content.innerHTML = renderControl(comunidades, metrica, state.filtroComunidad || null);
+      wireControl();
+
+    } else if (state.tab === 'base_limpia') {
+      state.baseLimpiaFiltro = state.baseLimpiaFiltro || { comunidad:null, busqueda:'', pagina:1 };
+      const [usuarios, comunidades] = await Promise.all([loadBaseLimpia(), loadComunidadesPerformance()]);
+      content.innerHTML = renderBaseLimpia(usuarios, comunidades, state.baseLimpiaFiltro);
+      wireBaseLimpia();
+
+    } else if (state.tab === 'dedup') {
+      const [eventos, comunidades] = await Promise.all([loadEventoDeduplicado(), loadComunidades()]);
+      const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
+      content.innerHTML = renderDedup(eventos, byId);
+
+    } else if (state.tab === 'crudo') {
+      const [eventos, comunidades] = await Promise.all([loadEventoCrudo(), loadComunidades()]);
+      const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
+      content.innerHTML = renderCrudo(eventos, byId);
+    }
+  } catch (err) {
+    content.innerHTML = `<div class="card"><h3>Error consultando Supabase</h3><div class="sub" style="color:var(--danger)">${err.message}</div></div>`;
+  }
+}
+</script>
+</body>
+</html>
