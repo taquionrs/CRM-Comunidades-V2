@@ -118,7 +118,7 @@ const TAB_SUB = {
   control:'Métricas de performance por plataforma (Meta Ads · ManyChat · WhatsApp)',
   base_limpia:'Gestor de usuarios nominados — vista de cliente',
   dedup:'Log técnico de atribución — primer evento por teléfono',
-  crudo:'Log de eventos en vivo — historial completo, incluye duplicados',
+  crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
 };
 let state = { tab:'overview', entered:false, clienteId:null, clientes:[] };
 
@@ -494,24 +494,52 @@ function renderDedup(eventos, comunidadesById){
 }
 
 /* ================= TAB 5: Data_Cruda ================= */
+function haceCuanto(v){
+  const s = Math.max(0, Math.round((Date.now() - new Date(v).getTime()) / 1000));
+  if (s < 60) return 'hace ' + s + ' s';
+  if (s < 3600) return 'hace ' + Math.floor(s/60) + ' min';
+  if (s < 86400) return 'hace ' + Math.floor(s/3600) + ' h';
+  return 'hace ' + Math.floor(s/86400) + ' d';
+}
 function renderCrudo(eventos, comunidadesById){
   const rows = eventos.length
-    ? eventos.map(e => `<tr>
-        <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}</td>
-        <td class="mono">${esc(e.telefono_id)}</td>
-        <td>${esc(comunidadesById.get(e.comunidad_id) || '—')}</td>
-        <td><span class="pill">${esc(e.tipo)}</span></td>
-        <td class="codeblock">${esc(JSON.stringify(e.payload))}</td>
-      </tr>`).join('')
-    : `<tr class="empty-row"><td colspan="5">Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).</td></tr>`;
-  return `<div class="card"><h3>Feed de eventos en vivo</h3>
-    <div class="sub">Incluye duplicados y reintentos tal cual llegan — últimos 200. Nunca se edita ni se borra una fila acá.</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Teléfono</th><th>Comunidad</th><th>Tipo</th><th>Payload</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ? eventos.map(e => {
+        const p = e.payload || {};
+        const c = p.contact || {};
+        const nombre = c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
+        const comunidad = comunidadesById.get(e.comunidad_id);
+        return `<tr>
+          <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}<div class="sub" style="margin:0">${haceCuanto(e.recibido_en)}</div></td>
+          <td class="mono">${esc(e.telefono_id)}</td>
+          <td>${esc(nombre)}</td>
+          <td>${comunidad ? esc(comunidad) : '<span class="pill badge-warn">Sin comunidad</span>'}</td>
+          <td class="codeblock">${esc(p.community_id ?? '—')}</td>
+          <td><details><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details></td>
+        </tr>`;
+      }).join('')
+    : `<tr class="empty-row"><td colspan="6">Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).</td></tr>`;
+  return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
+    <div class="sub">Cada vez que un flow dispara el POST y el CRM lo acepta, aparece una fila. Incluye duplicados y reintentos — últimos 200. Nunca se edita ni se borra una fila acá. Los intentos rechazados (secreto incorrecto, sin teléfono) no quedan guardados.</div>
+    <div style="display:flex; gap:14px; align-items:center; margin:10px 0 12px; flex-wrap:wrap">
+      <button class="btn" id="crudoRefresh" type="button">Actualizar</button>
+      <label style="font-size:12px; color:var(--text-muted); display:flex; gap:6px; align-items:center"><input type="checkbox" id="crudoAuto"> Actualizar cada 30 s</label>
+      <span class="sub" style="margin:0">${eventos.length} evento${eventos.length===1?'':'s'} · cargado ${fmtFecha(new Date())}</span>
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Teléfono</th><th>Nombre</th><th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
+}
+let crudoTimer = null;
+function wireCrudo(){
+  document.getElementById('crudoRefresh').onclick = () => renderAll();
+  const auto = document.getElementById('crudoAuto');
+  auto.checked = !!state.crudoAuto;
+  auto.onchange = () => { state.crudoAuto = auto.checked; if (auto.checked) crudoTimer = setInterval(renderAll, 30000); else clearInterval(crudoTimer); };
+  if (state.crudoAuto) crudoTimer = setInterval(renderAll, 30000);
 }
 
 /* ---------- render principal ---------- */
 async function renderAll(){
+  clearInterval(crudoTimer);
   renderNav();
   document.getElementById('hTitle').textContent = TABS.find(t => t.key===state.tab).label;
   document.getElementById('hSub').textContent = TAB_SUB[state.tab];
@@ -549,6 +577,7 @@ async function renderAll(){
       const [eventos, comunidades] = await Promise.all([loadEventoCrudo(), loadComunidades()]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
       content.innerHTML = renderCrudo(eventos, byId);
+      wireCrudo();
     }
   } catch (err) {
     content.innerHTML = `<div class="card"><h3>Error consultando Supabase</h3><div class="sub" style="color:var(--danger)">${esc(err.message)}</div></div>`;

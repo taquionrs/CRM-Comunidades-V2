@@ -368,3 +368,10 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 | ~~12~~ | ~~¿"Me sumo" es un botón de URL o de respuesta?~~ **Resuelto (2026-09-29): es la respuesta a una encuesta de ManyChat.** | Taquion | El evento es observable; la entrada real al grupo no |
 | 13 | ¿Cuáles son los estadios de la persona después de "clic_en_grupo"? (en el grupo, abanderado, otros) y qué dispara cada cambio | Taquion / Jaz | Hoy solo existe `clic_en_grupo`; el resto está marcado "por definir" en el modelo y el diagrama |
 | 14 | ¿Un usuario del panel puede tener acceso a más de un cliente y quién asigna los accesos (`usuario_cliente`)? | Taquion | Define qué clientes aparecen en el selector |
+
+## 3 septies. Opción A aplicada en el flow real de Todo un País (2026-09-30)
+
+- Flow "Comunidades TUP" (LIVE, cuenta `fb5616672`): el nodo final "Acciones #8" tiene ahora dos acciones: Google Sheets Insert Row (respaldo) y Solicitud externa (POST al webhook del CRM, headers `x-cliente: todo-un-pais` y `x-webhook-secret`, cuerpo `{"community_id": <Localidad_Sanluis>, "contact": <Full Contact Data>}`). Publicado por el usuario.
+- Planilla `TODO_UN_PAÍS_COMUNIDADES` / Hoja 1, mapeo: Nombre ← Nombre completo, Teléfono ← WhatsApp ID, Localidad ← `Localidad_Sanluis`, Estado ← `Estado_Comunidad`, Etiqueta San Luis / Quines / La Toma ← las etiquetas homónimas. Fecha queda sin mapear (ManyChat no ofrece campo de fecha).
+- Valores de `Localidad_Sanluis` en las ramas: `La Toma`, `San Luis Capital`, `Quines`. Las tres existen como comunidades del cliente `todo-un-pais` en el CRM (se crearon `La Toma` y `San Luis Capital`).
+- Pendiente: prueba de punta a punta con un contacto real (la planilla estaba vacía al publicar); rotar el secreto del webhook antes de tráfico real.
