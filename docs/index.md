@@ -16,6 +16,7 @@ Organizada según [Diátaxis](https://diataxis.fr/): agrupa por lo que necesitá
 ## Guías prácticas
 
 - [Desplegar](how-to/desplegar.md)
+- [Agregar un cliente](how-to/agregar-un-cliente.md)
 - [Configurar Windsor.ai](how-to/configurar-windsor-ai.md)
 - [Configurar el webhook y la nominación de ManyChat](how-to/configurar-webhook-manychat.md)
 
@@ -29,6 +30,7 @@ Organizada según [Diátaxis](https://diataxis.fr/): agrupa por lo que necesitá
 
 - [Arquitectura](explanation/arquitectura.md)
 - [Modelo First-Contact Attribution](explanation/modelo-first-contact.md)
+- [Flujo de información: de la campaña al panel](explanation/flujo-de-informacion.md)
 
 ---
 

@@ -41,6 +41,10 @@ Réplica literal de la Sección 4.C del documento de Jaz ("Conexión a Claude Ar
 }
 ```
 
+## Parámetro obligatorio: cliente
+
+El CRM es multi-cliente y cada respuesta es de un solo cliente. Se indica con `?cliente=<slug o uuid>` (GET) o `{"cliente": "<slug o uuid>"}` en el body (POST). Sin él responde `400`; si no existe, `404`. La respuesta trae un objeto extra `cliente: { id, nombre, slug }` al nivel raíz.
+
 ## Notas de implementación
 
 - `nombre` se agregó a cada objeto de `comunidades_performance` (no está en el ejemplo original del documento, pero `id_comunidad` es un uuid interno — sin el nombre, el JSON no es usable para render directo).

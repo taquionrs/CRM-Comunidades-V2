@@ -3,4 +3,6 @@ Thumbs.db
 node_modules/
 .env
 .env.local
-config.js
+public/config.js
+supabase/.temp/
+SECRETO-*.txt

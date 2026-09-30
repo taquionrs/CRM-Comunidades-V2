@@ -70,6 +70,8 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
 .badge-warn{color:var(--warn); border-color:rgba(255,157,61,.4); background:rgba(255,157,61,.08)}
 .codeblock{font-family:ui-monospace,monospace; font-size:11px; color:var(--text-muted); white-space:pre-wrap; word-break:break-all; max-width:360px}
+.cliente-sel{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:18px}
+.cliente-sel select{background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:13px; padding:8px 9px; border-radius:var(--r-in); text-transform:none; letter-spacing:0; width:100%}
 </style>
 </head>
 <body>
@@ -78,6 +80,7 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
   <aside class="sidebar">
     <div class="brand">Comunidades V2</div>
     <div class="brand-sub">CRM interno · Taquión</div>
+    <label class="cliente-sel">Cliente<select id="selCliente" aria-label="Cliente"></select></label>
     <nav class="navlist" id="nav"></nav>
     <div class="sidebar-foot">
       <span style="color:var(--warn)">Sin login (temporal)</span>
@@ -117,7 +120,31 @@ const TAB_SUB = {
   dedup:'Log técnico de atribución — primer evento por teléfono',
   crudo:'Log de eventos en vivo — historial completo, incluye duplicados',
 };
-let state = { tab:'overview', entered:false };
+let state = { tab:'overview', entered:false, clienteId:null, clientes:[] };
+
+/* ---------- selector de cliente ---------- */
+function leerClienteGuardado(){
+  try { return localStorage.getItem('crm_v2_cliente'); } catch { return null; }
+}
+function guardarCliente(id){
+  try { localStorage.setItem('crm_v2_cliente', id || ''); } catch { /* sin storage: no pasa nada */ }
+}
+function renderSelectorCliente(){
+  const sel = document.getElementById('selCliente');
+  sel.innerHTML = state.clientes.length
+    ? state.clientes.map(c => `<option value="${c.id}" ${c.id===state.clienteId?'selected':''}>${esc(c.nombre)}</option>`).join('')
+    : '<option value="">Sin clientes</option>';
+  sel.disabled = state.clientes.length < 1;
+  sel.onchange = () => {
+    state.clienteId = sel.value || null;
+    guardarCliente(state.clienteId);
+    state.filtroComunidad = null;
+    state.baseLimpiaFiltro = null;
+    state.fechaDesde = null;
+    state.fechaHasta = null;
+    renderAll();
+  };
+}
 
 function renderNav(){
   const nav = document.getElementById('nav');
@@ -134,7 +161,8 @@ const fmtMoney = v => v==null ? '—' : '$' + Number(v).toLocaleString('es-AR', 
 const fmtInt = v => v==null ? '—' : Number(v).toLocaleString('es-AR');
 const fmtPct = v => v==null ? '—' : Math.round(v*10)/10 + '%';
 const fmtFecha = v => v ? new Date(v).toLocaleString('es-AR') : '—';
-const naCell = (nota) => `<span class="na" title="${nota}">— sin fuente</span>`;
+const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+const naCell = (nota) => `<span class="na" title="${esc(nota)}">— sin fuente</span>`;
 
 function kpiGrid(items){
   return '<div class="kpi-grid">' + items.map(([v,l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('') + '</div>';
@@ -142,22 +170,30 @@ function kpiGrid(items){
 
 /* ---------- loaders ---------- */
 async function loadKpisMacro(){
-  const { data, error } = await supabase.from('kpis_macro').select('*').maybeSingle();
+  const { data, error } = await supabase.from('kpis_macro').select('*').eq('cliente_id', state.clienteId).maybeSingle();
   if (error) throw error;
   return data;
 }
 async function loadComunidadesPerformance(){
-  const { data, error } = await supabase.from('comunidad_performance').select('*').order('nombre');
+  const { data, error } = await supabase.from('comunidad_performance').select('*').eq('cliente_id', state.clienteId).order('nombre');
+  if (error) throw error;
+  return data || [];
+}
+// Matriz de Control_Comunidades filtrable por fechas (db/006). desde/hasta nulos = todo el histórico.
+async function loadComunidadesRango(desde, hasta){
+  const { data, error } = await supabase.rpc('comunidad_performance_rango', {
+    p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta,
+  });
   if (error) throw error;
   return data || [];
 }
 async function loadComunidades(){
-  const { data, error } = await supabase.from('comunidad').select('*').order('nombre');
+  const { data, error } = await supabase.from('comunidad').select('*').eq('cliente_id', state.clienteId).order('nombre');
   if (error) throw error;
   return data || [];
 }
 async function crearComunidad(payload){
-  const { error } = await supabase.from('comunidad').insert(payload);
+  const { error } = await supabase.from('comunidad').insert({ ...payload, cliente_id: state.clienteId });
   if (error) throw error;
 }
 async function actualizarComunidad(id, payload){
@@ -165,22 +201,22 @@ async function actualizarComunidad(id, payload){
   if (error) throw error;
 }
 async function loadMetaAdsMetrica(){
-  const { data, error } = await supabase.from('meta_ads_metrica').select('*').order('fecha', { ascending:false });
+  const { data, error } = await supabase.from('meta_ads_metrica').select('*').eq('cliente_id', state.clienteId).order('fecha', { ascending:false });
   if (error) throw error;
   return data || [];
 }
 async function loadBaseLimpia(){
-  const { data, error } = await supabase.from('base_limpia').select('*').order('fecha_primer_contacto', { ascending:false });
+  const { data, error } = await supabase.from('base_limpia').select('*').eq('cliente_id', state.clienteId).order('fecha_primer_contacto', { ascending:false });
   if (error) throw error;
   return data || [];
 }
 async function loadEventoDeduplicado(){
-  const { data, error } = await supabase.from('evento_deduplicado').select('*').order('fecha_primer_contacto', { ascending:false });
+  const { data, error } = await supabase.from('evento_deduplicado').select('*').eq('cliente_id', state.clienteId).order('fecha_primer_contacto', { ascending:false });
   if (error) throw error;
   return data || [];
 }
 async function loadEventoCrudo(){
-  const { data, error } = await supabase.from('evento_crudo').select('*').order('recibido_en', { ascending:false }).limit(200);
+  const { data, error } = await supabase.from('evento_crudo').select('*').eq('cliente_id', state.clienteId).order('recibido_en', { ascending:false }).limit(200);
   if (error) throw error;
   return data || [];
 }
@@ -203,7 +239,7 @@ function renderOverview(kpis, comunidades){
     ? comunidades.map(c => {
         const pct = totalMf ? (c.miembros_finales/totalMf*100) : 0;
         return `<tr>
-          <td>${c.nombre}</td>
+          <td>${esc(c.nombre)}</td>
           <td class="mono">${fmtInt(c.miembros_iniciales)}</td>
           <td class="mono">${fmtInt(c.clics_unicos)}</td>
           <td class="mono">${fmtInt(c.bajas_estimadas)}</td>
@@ -229,8 +265,8 @@ function renderOverview(kpis, comunidades){
 
 function renderComunidadesForm(comunidades){
   const rows = comunidades.map(c => `<tr>
-      <td>${c.nombre}</td>
-      <td class="mono">${c.adset_name || '—'}</td>
+      <td>${esc(c.nombre)}</td>
+      <td class="mono">${esc(c.adset_name || '—')}</td>
       <td><input type="number" class="mi-input" data-id="${c.id}" data-field="miembros_iniciales" value="${c.miembros_iniciales}" style="width:80px; background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; padding:5px 7px; border-radius:var(--r-in)"></td>
       <td><input type="number" class="mi-input" data-id="${c.id}" data-field="miembros_finales" value="${c.miembros_finales}" style="width:80px; background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; padding:5px 7px; border-radius:var(--r-in)"></td>
       <td><button class="btn btn-guardar-comunidad" data-id="${c.id}" style="padding:5px 10px; font-size:11px">Guardar</button></td>
@@ -262,7 +298,7 @@ function wireComunidadesForm(){
       fila.querySelectorAll('.mi-input').forEach(inp => { payload[inp.dataset.field] = Number(inp.value); });
       btn.disabled = true; btn.textContent = 'Guardando…';
       try { await actualizarComunidad(id, payload); await refrescarOverview(); }
-      catch (err) { resultado.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`; }
+      catch (err) { resultado.innerHTML = `<span style="color:var(--danger)">Error: ${esc(err.message)}</span>`; }
     };
   });
 
@@ -280,7 +316,7 @@ function wireComunidadesForm(){
       form.reset();
       await refrescarOverview();
     } catch (err) {
-      resultado.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+      resultado.innerHTML = `<span style="color:var(--danger)">Error: ${esc(err.message)}</span>`;
     }
   };
 }
@@ -292,18 +328,18 @@ async function refrescarOverview(){
 }
 
 /* ================= TAB 2: Control_Comunidades ================= */
-function renderControl(comunidades, metrica, filtroComunidad){
-  const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${c.nombre}</option>`).join('');
+function renderControl(comunidades, filtroComunidad, desde, hasta){
+  const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
   const rows = porComunidad.length
     ? porComunidad.map(c => `<tr>
-        <td>${c.nombre}</td>
+        <td>${esc(c.nombre)}</td>
         <td class="mono">${fmtMoney(c.inversion)}</td>
         <td class="mono">${fmtInt(c.conversaciones_meta)}</td>
         <td class="mono">${fmtMoney(c.cpl)}</td>
-        <td>${naCell('CTR de anuncio requiere clicks a nivel de anuncio — Windsor.ai solo trae spend/impresiones/conversaciones en esta integración')}</td>
-        <td>${naCell('ManyChat no reporta "trigger entregados" en el payload del webhook (solo phone/community_id/timestamp)')}</td>
+        <td class="mono">${fmtPct(c.ctr_anuncio_pct)}</td>
+        <td>${naCell('ManyChat no reporta "trigger entregados": el webhook solo se dispara cuando la persona responde "Me sumo"')}</td>
         <td class="mono">${fmtInt(c.clics_unicos)}</td>
         <td>${naCell('"Envíos de enlace efectivos" no viene en el payload del webhook actual')}</td>
         <td class="mono">${fmtPct(c.clics_unicos && c.conversaciones_meta ? (c.clics_unicos/c.conversaciones_meta*100) : null)}</td>
@@ -319,6 +355,9 @@ function renderControl(comunidades, metrica, filtroComunidad){
 
   return `<div class="filters">
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
+      <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
+      <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
+      <button class="btn" id="btnFechasLimpiar" type="button">Todo el histórico</button>
       <button class="btn" id="btnWindsorSync" type="button">Sincronizar Windsor.ai</button>
       <div id="windsorResultado" style="margin-left:6px; font-size:12px; align-self:center"></div>
     </div>
@@ -339,17 +378,23 @@ function renderControl(comunidades, metrica, filtroComunidad){
 function wireControl(){
   const sel = document.getElementById('selFiltroComunidad');
   if (sel) sel.onchange = () => { state.filtroComunidad = sel.value || null; renderAll(); };
+  const desde = document.getElementById('inpFechaDesde');
+  const hasta = document.getElementById('inpFechaHasta');
+  if (desde) desde.onchange = () => { state.fechaDesde = desde.value || null; renderAll(); };
+  if (hasta) hasta.onchange = () => { state.fechaHasta = hasta.value || null; renderAll(); };
+  const limpiar = document.getElementById('btnFechasLimpiar');
+  if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   const btn = document.getElementById('btnWindsorSync');
   if (btn) btn.onclick = async () => {
     const resultado = document.getElementById('windsorResultado');
     btn.disabled = true; btn.textContent = 'Sincronizando…';
     try {
-      const { data, error } = await supabase.functions.invoke('windsor-sync', { body: {} });
+      const { data, error } = await supabase.functions.invoke('windsor-sync', { body: { cliente_id: state.clienteId, ...(state.fechaDesde ? { desde: state.fechaDesde } : {}), ...(state.fechaHasta ? { hasta: state.fechaHasta } : {}) } });
       if (error) throw error;
       resultado.textContent = data?.error ? data.error : `Insertadas: ${data?.data?.insertadas ?? 0}. ${data?.aviso || ''}`;
       await renderAll();
     } catch (err) {
-      resultado.innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
+      resultado.innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
     } finally {
       btn.disabled = false; btn.textContent = 'Sincronizar Windsor.ai';
     }
@@ -358,9 +403,9 @@ function wireControl(){
 
 /* ================= TAB 3: Base_Limpia ================= */
 function renderBaseLimpia(usuarios, comunidades, filtro){
-  const opciones = `<option value="">Todas</option>` + comunidades.map(c => `<option value="${c.id}" ${filtro.comunidad===c.id?'selected':''}>${c.nombre}</option>`).join('');
+  const opciones = `<option value="">Todas</option>` + comunidades.map(c => `<option value="${c.id}" ${filtro.comunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
 
-  const stockCards = kpiGrid(comunidades.map(c => [fmtInt(c.miembros_finales), c.nombre + ' — miembros reales']));
+  const stockCards = kpiGrid(comunidades.map(c => [fmtInt(c.miembros_finales), esc(c.nombre) + ' — miembros reales']));
 
   let filtrados = usuarios;
   if (filtro.comunidad) filtrados = filtrados.filter(u => u.comunidad_atribuida_id === filtro.comunidad);
@@ -376,13 +421,13 @@ function renderBaseLimpia(usuarios, comunidades, filtro){
 
   const rows = pageRows.length
     ? pageRows.map(u => `<tr>
-        <td class="mono">${u.phone_id}</td>
-        <td>${u.nombre}</td>
-        <td>${u.email}</td>
-        <td>${u.comunidad_atribuida || '—'}</td>
+        <td class="mono">${esc(u.phone_id)}</td>
+        <td>${esc(u.nombre)}</td>
+        <td>${esc(u.email)}</td>
+        <td>${esc(u.comunidad_atribuida || '—')}</td>
         <td class="mono">${fmtFecha(u.fecha_primer_contacto)}</td>
-        <td>${(u.etiquetas||[]).map(t=>`<span class="pill">${t}</span>`).join(' ') || '—'}</td>
-        <td><span class="pill">${u.estado}</span></td>
+        <td>${(u.etiquetas||[]).map(t=>`<span class="pill">${esc(t)}</span>`).join(' ') || '—'}</td>
+        <td><span class="pill">${esc(u.estado)}</span></td>
       </tr>`).join('')
     : `<tr class="empty-row"><td colspan="7">Sin usuarios todavía.</td></tr>`;
 
@@ -391,7 +436,7 @@ function renderBaseLimpia(usuarios, comunidades, filtro){
       <h3>Usuarios nominados</h3>
       <div class="sub">Nombre/email se completan al correr "Sincronizar nombres" (requiere MANYCHAT_API_KEY configurada del lado del backend).</div>
       <div class="filters">
-        <label>Buscar<input type="text" id="inpBuscarBaseLimpia" placeholder="Nombre o teléfono" value="${filtro.busqueda||''}"></label>
+        <label>Buscar<input type="text" id="inpBuscarBaseLimpia" placeholder="Nombre o teléfono" value="${esc(filtro.busqueda||'')}"></label>
         <label>Comunidad<select id="selFiltroComunidadBL">${opciones}</select></label>
         <button class="btn" id="btnNominacionSync" type="button">Sincronizar nombres</button>
         <div id="nominacionResultado" style="font-size:12px; align-self:center"></div>
@@ -421,12 +466,12 @@ function wireBaseLimpia(){
     const resultado = document.getElementById('nominacionResultado');
     btn.disabled = true; btn.textContent = 'Sincronizando…';
     try {
-      const { data, error } = await supabase.functions.invoke('nominacion-sync', { body: {} });
+      const { data, error } = await supabase.functions.invoke('nominacion-sync', { body: { cliente_id: state.clienteId } });
       if (error) throw error;
       resultado.textContent = data?.error ? data.error : `Actualizados: ${data?.data?.actualizados ?? 0}, sin match: ${data?.data?.sin_match ?? 0}`;
       await renderAll();
     } catch (err) {
-      resultado.innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
+      resultado.innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
     } finally {
       btn.disabled = false; btn.textContent = 'Sincronizar nombres';
     }
@@ -437,8 +482,8 @@ function wireBaseLimpia(){
 function renderDedup(eventos, comunidadesById){
   const rows = eventos.length
     ? eventos.map(e => `<tr>
-        <td class="mono">${e.telefono_id}</td>
-        <td>${comunidadesById.get(e.comunidad_atribuida_id) || '—'}</td>
+        <td class="mono">${esc(e.telefono_id)}</td>
+        <td>${esc(comunidadesById.get(e.comunidad_atribuida_id) || '—')}</td>
         <td class="mono">${fmtFecha(e.fecha_primer_contacto)}</td>
       </tr>`).join('')
     : `<tr class="empty-row"><td colspan="3">Sin eventos todavía.</td></tr>`;
@@ -453,10 +498,10 @@ function renderCrudo(eventos, comunidadesById){
   const rows = eventos.length
     ? eventos.map(e => `<tr>
         <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}</td>
-        <td class="mono">${e.telefono_id}</td>
-        <td>${comunidadesById.get(e.comunidad_id) || '—'}</td>
-        <td><span class="pill">${e.tipo}</span></td>
-        <td class="codeblock">${JSON.stringify(e.payload)}</td>
+        <td class="mono">${esc(e.telefono_id)}</td>
+        <td>${esc(comunidadesById.get(e.comunidad_id) || '—')}</td>
+        <td><span class="pill">${esc(e.tipo)}</span></td>
+        <td class="codeblock">${esc(JSON.stringify(e.payload))}</td>
       </tr>`).join('')
     : `<tr class="empty-row"><td colspan="5">Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).</td></tr>`;
   return `<div class="card"><h3>Feed de eventos en vivo</h3>
@@ -473,6 +518,11 @@ async function renderAll(){
   const content = document.getElementById('content');
   content.innerHTML = '<div class="card"><h3>Cargando…</h3></div>';
 
+  if (!state.clienteId) {
+    content.innerHTML = '<div class="card"><h3>Sin clientes cargados</h3><div class="sub">Dar de alta al menos un cliente en crm_comunidades_v2.cliente — ver docs/how-to/agregar-un-cliente.md.</div></div>';
+    return;
+  }
+
   try {
     if (state.tab === 'overview') {
       const [kpis, comunidades] = await Promise.all([loadKpisMacro(), loadComunidadesPerformance()]);
@@ -480,8 +530,8 @@ async function renderAll(){
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
-      const [comunidades, metrica] = await Promise.all([loadComunidadesPerformance(), loadMetaAdsMetrica()]);
-      content.innerHTML = renderControl(comunidades, metrica, state.filtroComunidad || null);
+      const comunidades = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '');
       wireControl();
 
     } else if (state.tab === 'base_limpia') {
@@ -501,7 +551,7 @@ async function renderAll(){
       content.innerHTML = renderCrudo(eventos, byId);
     }
   } catch (err) {
-    content.innerHTML = `<div class="card"><h3>Error consultando Supabase</h3><div class="sub" style="color:var(--danger)">${err.message}</div></div>`;
+    content.innerHTML = `<div class="card"><h3>Error consultando Supabase</h3><div class="sub" style="color:var(--danger)">${esc(err.message)}</div></div>`;
   }
 }
 
@@ -511,6 +561,22 @@ if (!supabase) {
   configError.style.display = 'block';
   configError.innerHTML = '<h3 style="color:var(--danger)">Config no disponible</h3><div class="sub">Falta SUPABASE_URL/SUPABASE_ANON_KEY (variables de entorno de Vercel).</div>';
 } else {
+  iniciar();
+}
+
+async function iniciar(){
+  try {
+    const { data, error } = await supabase.from('cliente').select('id, nombre, slug').eq('activo', true).order('nombre');
+    if (error) throw error;
+    state.clientes = data || [];
+  } catch (err) {
+    configError.style.display = 'block';
+    configError.innerHTML = `<h3 style="color:var(--danger)">No se pudo cargar la lista de clientes</h3><div class="sub" style="color:var(--danger)">${esc(err.message)}</div>`;
+    return;
+  }
+  const guardado = leerClienteGuardado();
+  state.clienteId = (state.clientes.find(c => c.id === guardado) || state.clientes[0] || {}).id || null;
+  renderSelectorCliente();
   enterApp();
 }
 </script>

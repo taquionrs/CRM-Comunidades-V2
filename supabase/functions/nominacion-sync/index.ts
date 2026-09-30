@@ -5,7 +5,9 @@
 // match por el número de teléfono y reemplaza los nombres anonimizados por
 // los nombres y correos reales guardados por ManyChat").
 //
-// Invocación: botón "Sincronizar nombres" en la tab Base_Limpia. Recorre
+// Invocación: botón "Sincronizar nombres" en la tab Base_Limpia, para el cliente elegido
+// en el selector (body {cliente_id}, obligatorio). Con el webhook ya copiando el nombre de
+// ManyChat, esta función es opcional (decisión 4 del spec). Recorre
 // usuario_curado donde nombre is null, busca el perfil en ManyChat por
 // teléfono y actualiza nombre/email.
 //
@@ -59,10 +61,17 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
   });
 
+  // cliente_id obligatorio: usuario_curado es por (cliente, teléfono) y una misma persona puede estar en
+  // más de un cliente. Nunca se completan datos de un cliente con una consulta hecha para otro.
+  const body = await req.json().catch(() => ({}));
+  const clienteId: string | undefined = body?.cliente_id;
+  if (!clienteId) return json({ error: "Falta cliente_id en el body" }, 400);
+
   const { data: pendientes, error: errPendientes } = await admin
     .schema("crm_comunidades_v2")
     .from("usuario_curado")
     .select("telefono_id")
+    .eq("cliente_id", clienteId)
     .is("nombre", null);
   if (errPendientes) return json({ error: errPendientes.message }, 500);
 
@@ -94,6 +103,7 @@ Deno.serve(async (req) => {
         .schema("crm_comunidades_v2")
         .from("usuario_curado")
         .update({ nombre, email })
+        .eq("cliente_id", clienteId)
         .eq("telefono_id", telefono_id);
       if (errUpdate) throw errUpdate;
       actualizados++;

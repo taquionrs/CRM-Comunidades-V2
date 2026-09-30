@@ -36,10 +36,26 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
   });
 
+  // El CRM es multi-cliente: el JSON siempre es de UN cliente, indicado con
+  // ?cliente=<slug o uuid> (GET) o {"cliente": "..."} en el body (POST).
+  const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  const ref: string | null = new URL(req.url).searchParams.get("cliente") ?? body?.cliente ?? null;
+  if (!ref) return json({ error: "Falta el parámetro cliente (slug o uuid)" }, 400);
+
+  const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
+  const { data: cliente, error: errCliente } = await admin
+    .schema("crm_comunidades_v2")
+    .from("cliente")
+    .select("id, nombre, slug")
+    .eq(esUuid ? "id" : "slug", ref)
+    .maybeSingle();
+  if (errCliente) return json({ error: errCliente.message }, 500);
+  if (!cliente) return json({ error: `Cliente no encontrado: ${ref}` }, 404);
+
   const [kpisRes, comunidadesRes, baseLimpiaRes] = await Promise.all([
-    admin.schema("crm_comunidades_v2").from("kpis_macro").select("*").maybeSingle(),
-    admin.schema("crm_comunidades_v2").from("comunidad_performance").select("*"),
-    admin.schema("crm_comunidades_v2").from("base_limpia").select("*").order("fecha_primer_contacto", { ascending: false }),
+    admin.schema("crm_comunidades_v2").from("kpis_macro").select("*").eq("cliente_id", cliente.id).maybeSingle(),
+    admin.schema("crm_comunidades_v2").from("comunidad_performance").select("*").eq("cliente_id", cliente.id),
+    admin.schema("crm_comunidades_v2").from("base_limpia").select("*").eq("cliente_id", cliente.id).order("fecha_primer_contacto", { ascending: false }),
   ]);
 
   if (kpisRes.error) return json({ error: kpisRes.error.message }, 500);
@@ -58,6 +74,7 @@ Deno.serve(async (req) => {
 
   return json({
     timestamp_update: new Date().toISOString(),
+    cliente: { id: cliente.id, nombre: cliente.nombre, slug: cliente.slug },
     kpis_macro: {
       inversion_total: k.inversion_total,
       conversaciones_totales: k.conversaciones_totales,

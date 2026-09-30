@@ -22,6 +22,6 @@ window.CRM_COMUNIDADES_V2_CONFIG = {
 };
 `;
 
-const outPath = path.join(__dirname, '..', 'config.js');
+const outPath = path.join(__dirname, '..', 'public', 'config.js');
 fs.writeFileSync(outPath, out);
-console.log('[generate-config] config.js generado (' + (url ? 'con' : 'SIN') + ' credenciales).');
+console.log('[generate-config] public/config.js generado (' + (url ? 'con' : 'SIN') + ' credenciales).');
