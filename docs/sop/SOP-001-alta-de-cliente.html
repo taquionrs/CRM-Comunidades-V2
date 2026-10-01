@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>SOP-001 · Alta de un cliente en el CRM de Comunidades V2</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm;
+    @bottom-left { content: "SOP-001 · Alta de cliente en el CRM de Comunidades V2"; font: 8pt 'Segoe UI', Arial, sans-serif; color: #7a8594; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 8pt 'Segoe UI', Arial, sans-serif; color: #7a8594; } }
+  :root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee5; --brand:#0b6b63; --brand-soft:#e6f3f1; --warn:#9a5b00; --warn-soft:#fff4e0; --bad:#a32b2b; --bad-soft:#fdeaea; --code:#f3f5f8; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; line-height: 1.45; color: var(--ink); margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 4px; color: var(--brand); line-height: 1.15; }
+  h2 { font-size: 13pt; margin: 20px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--brand); color: var(--ink); break-after: avoid; }
+  h2 .n { display: inline-block; background: var(--brand); color: #fff; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-size: 10.5pt; margin-right: 8px; }
+  h3 { font-size: 10.5pt; margin: 12px 0 4px; color: var(--brand); break-after: avoid; }
+  p { margin: 5px 0; }
+  .meta { color: var(--muted); font-size: 9pt; margin-bottom: 10px; }
+  .meta b { color: var(--ink); }
+  ul, ol { margin: 4px 0 6px 20px; padding: 0; }
+  li { margin: 2px 0; }
+  .check { list-style: none; margin-left: 4px; }
+  .check li::before { content: "☐"; margin-right: 7px; color: var(--brand); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 8px; font-size: 9pt; break-inside: auto; }
+  th { background: var(--brand-soft); text-align: left; padding: 5px 7px; border: 1px solid var(--line); }
+  td { padding: 5px 7px; border: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 8.8pt; background: var(--code); padding: 1px 4px; border-radius: 3px; }
+  pre { font-family: Consolas, 'Courier New', monospace; font-size: 8.6pt; background: var(--code); border: 1px solid var(--line); border-left: 3px solid var(--brand); padding: 8px 10px; margin: 6px 0 8px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  .box { border-radius: 5px; padding: 7px 10px; margin: 8px 0; font-size: 9.5pt; break-inside: avoid; }
+  .tip { background: var(--brand-soft); border-left: 4px solid var(--brand); }
+  .warn { background: var(--warn-soft); border-left: 4px solid var(--warn); }
+  .stop { background: var(--bad-soft); border-left: 4px solid var(--bad); }
+  .box b.t { display: block; margin-bottom: 2px; }
+  .flow { display: flex; align-items: stretch; gap: 4px; margin: 8px 0 4px; font-size: 8.5pt; }
+  .flow div { flex: 1; background: var(--brand-soft); border: 1px solid #b9dcd7; border-radius: 5px; padding: 6px 4px; text-align: center; }
+  .flow span { align-self: center; color: var(--brand); font-weight: 700; }
+  .who { display: inline-block; font-size: 8pt; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: #e8ebf0; color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .ok { color: #1c7a3d; font-weight: 700; }
+  .page-break { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>SOP-001 · Alta de un cliente en el CRM de Comunidades V2</h1>
+<div class="meta"><b>Versión:</b> 1.0 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
+
+<div class="box tip"><b class="t">Para qué sirve este procedimiento</b>
+Cada cliente de Taquion que tenga una comunidad entra al mismo CRM. Este SOP explica cómo darlo de alta, cómo dejar su flow de ManyChat listo para enviar los datos al CRM, y cómo comprobar con una prueba real que todo llega a la pestaña <b>Data_Cruda</b>. Tiempo estimado: 45 a 60 minutos.</div>
+
+<div class="flow">
+  <div><b>Persona</b><br>escribe por WhatsApp</div><span>›</span>
+  <div><b>Flow de ManyChat</b><br>bienvenida + “Me sumo”</div><span>›</span>
+  <div><b>POST con secreto</b><br>nodo final del flow</div><span>›</span>
+  <div><b>CRM (Supabase)</b><br>valida y guarda</div><span>›</span>
+  <div><b>Data_Cruda</b><br>se ve el evento</div>
+</div>
+
+<h2><span class="n">0</span>Antes de empezar</h2>
+<ul class="check">
+  <li>La cuenta de ManyChat del cliente tiene <b>WhatsApp conectado</b> (Configuración → WhatsApp → “Estado del número: Conectado”) y <b>saldo en el monedero</b> (si no, los mensajes no salen).</li>
+  <li>Tenés permiso de <b>editor de automatizaciones</b> en esa cuenta y acceso al proyecto <b>crm-comunidades</b> de Supabase (SQL Editor).</li>
+  <li>Tenés un <b>gestor de contraseñas</b> para guardar el secreto del cliente.</li>
+  <li>Tenés un <b>teléfono con WhatsApp para la prueba</b> (el tuyo, no el de un cliente o de un seguidor).</li>
+  <li>El cliente ya tiene su flow de comunidad armado en ManyChat (disparadores por palabra, mensaje con botón “Me sumo”). Si no, armarlo primero.</li>
+</ul>
+
+<h2><span class="n">1</span>Reunir los datos del cliente</h2>
+<table>
+  <tr><th style="width:26%">Dato</th><th style="width:34%">Cómo se obtiene / regla</th><th>Ejemplo (Cortado en Jarrito)</th></tr>
+  <tr><td><b>Nombre</b></td><td>Como se quiere ver en el selector del panel.</td><td>Cortado en Jarrito</td></tr>
+  <tr><td><b>Slug</b></td><td>Identificador corto: solo minúsculas, números y guiones. No se cambia después.</td><td><code>cortado-en-jarrito</code></td></tr>
+  <tr><td><b>ID de cuenta de ManyChat</b></td><td>Es lo que aparece en la dirección web al estar dentro de la cuenta: <code>app.manychat.com/<b>fb…</b>/…</code></td><td><code>fb5616665</code></td></tr>
+  <tr><td><b>Comunidades</b></td><td>Una por rama del flow. Se escriben <b>exactamente</b> como las va a escribir el flow en el campo de localidad: mismas mayúsculas y tildes, sin emojis ni espacios sobrantes.</td><td>Boedo · Palermo · Villa Devoto</td></tr>
+  <tr><td><b>Campo de localidad</b></td><td>El campo personalizado de ManyChat que cada rama completa con el nombre de la comunidad.</td><td><code>Localidad_CABA</code></td></tr>
+  <tr><td><b>Número de WhatsApp del cliente</b></td><td>Configuración → WhatsApp → “Número conectado”.</td><td>+54 9 11 2753-5622</td></tr>
+</table>
+
+<h2><span class="n">2</span>Crear el secreto del webhook <span class="who">Quien da el alta</span></h2>
+<p>El secreto es la “llave” que prueba que un POST viene del flow del cliente. Cada cliente tiene el suyo. Generalo en PowerShell:</p>
+<pre>$b = New-Object byte[] 32
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+-join ($b | ForEach-Object { $_.ToString('x2') })</pre>
+<p>Copiá el resultado (64 caracteres) y <b>guardalo en el gestor de contraseñas</b> con el nombre “CRM · secreto webhook · &lt;cliente&gt;”.</p>
+<div class="box stop"><b class="t">Reglas del secreto</b>
+Nunca lo pegues en un chat, un mail, un documento compartido ni una captura de pantalla. El CRM no lo guarda: solo guarda una “huella” (hash) que sirve para comprobarlo. Si se filtra, hay que rotarlo (ver el cierre).</div>
+
+<h2><span class="n">3</span>Dar de alta el cliente y sus comunidades en Supabase <span class="who">Quien da el alta</span></h2>
+<ol>
+  <li>Abrí el <b>SQL Editor</b> del proyecto: <code>supabase.com/dashboard/project/zyyxsammrryhfrgfwlxr/sql/new</code></li>
+  <li>Pegá este bloque, reemplazando los textos en MAYÚSCULAS, y apretá <b>Run</b>:</li>
+</ol>
+<pre>insert into crm_comunidades_v2.cliente
+  (nombre, slug, manychat_account_id, webhook_secret_hash)
+values ('NOMBRE DEL CLIENTE', 'slug-del-cliente', 'fbXXXXXXXXX',
+        encode(sha256('PEGAR-AQUI-EL-SECRETO'::bytea), 'hex'));
+
+insert into crm_comunidades_v2.comunidad (cliente_id, nombre)
+select c.id, n
+from crm_comunidades_v2.cliente c,
+     unnest(array['Comunidad 1', 'Comunidad 2']) as n
+where c.slug = 'slug-del-cliente';
+
+select c.slug, m.nombre
+from crm_comunidades_v2.comunidad m
+join crm_comunidades_v2.cliente c on c.id = m.cliente_id
+where c.slug = 'slug-del-cliente';</pre>
+<ol start="3">
+  <li>El resultado final tiene que listar una fila por comunidad.</li>
+  <li><b>Borrá el snippet guardado:</b> Supabase conserva las consultas en su historial y esa consulta contiene el secreto. En el panel izquierdo del SQL Editor, eliminá el snippet.</li>
+  <li>Abrí el panel <b>crm-comunidades-v2.vercel.app</b>: el cliente nuevo tiene que aparecer en el selector de cliente.</li>
+</ol>
+
+<h2><span class="n">4</span>Preparar el flow en ManyChat <span class="who">Operador de ManyChat</span></h2>
+<p>Trabajá siempre sobre el flow de comunidad del cliente. Los cambios quedan en borrador hasta que se apriete <b>Actualizar</b>.</p>
+
+<h3>4.1 Cambios que tiene que tener el flow</h3>
+<table>
+  <tr><th style="width:24%">Parte del flow</th><th style="width:44%">Cómo tiene que quedar</th><th>Por qué</th></tr>
+  <tr><td><b>Disparadores</b></td><td>Uno por comunidad: “El usuario envía un mensaje · <b>el mensaje contiene</b> &lt;palabra del barrio&gt;”.</td><td>Así se activa aunque la persona escriba la frase distinta.</td></tr>
+  <tr><td><b>Condiciones</b></td><td>Comparar el campo de localidad con el operador <b>“Contiene”</b> y <b>solo la palabra</b> (por ejemplo <code>Boedo</code>).</td><td>Con “Es” y la frase completa (sobre todo si termina en un emoji, como ☕) cualquier mensaje escrito a mano no coincide y cae en la última rama.</td></tr>
+  <tr><td><b>Cada rama</b></td><td>Mensaje de bienvenida con botón “Me sumo” (enlace al grupo) → acciones: añadir la etiqueta del barrio, <b>establecer el campo de localidad con el nombre exacto de la comunidad</b> (igual al del paso 1) y establecer <code>Estado_Comunidad</code> = “Clic en grupo”.</td><td>El POST usa ese campo como comunidad. Si no coincide con el CRM, el CRM lo rechaza.</td></tr>
+  <tr><td><b>Nodo final</b></td><td>Todas las ramas convergen en un único nodo de acciones. Ahí van, en este orden: (a) planilla de Google (respaldo), (b) <b>Solicitud externa (POST al CRM)</b>, (c) evento a la API de conversiones de Meta, si existe, con canal <b>WhatsApp</b>.</td><td>El POST tiene que salir <b>después</b> de las acciones de rama, que son las que dejan la localidad limpia.</td></tr>
+  <tr><td><b>Disparador por etiqueta</b></td><td><b>No usar</b> “Se produce un evento de contactos: etiqueta aplicada”.</td><td>El flow aplica etiquetas: se dispara a sí mismo en bucle.</td></tr>
+</table>
+
+<h3>4.2 Configurar la “Solicitud externa” (POST)</h3>
+<p>En el nodo final: <b>+ Acción → Automatización → Realizar solicitud externa</b>, y abrirla.</p>
+<table>
+  <tr><th style="width:22%">Campo</th><th>Valor</th></tr>
+  <tr><td>Tipo de solicitud</td><td><code>POST</code></td></tr>
+  <tr><td>URL</td><td><code>https://zyyxsammrryhfrgfwlxr.supabase.co/functions/v1/manychat-webhook</code> (sin espacios al final)</td></tr>
+  <tr><td>Encabezado 1</td><td>Key <code>x-cliente</code> · Value: el <b>slug</b> del cliente</td></tr>
+  <tr><td>Encabezado 2</td><td>Key <code>x-webhook-secret</code> · Value: el <b>secreto</b> del paso 2 (pegarlo desde el gestor)</td></tr>
+  <tr><td>Cuerpo</td><td><code>{"community_id": "[chip del campo de localidad]", "contact": [chip Full Contact Data]}</code></td></tr>
+</table>
+<ul>
+  <li>Los dos valores del cuerpo se insertan como <b>chips</b> con los botones “{+} Añadir un Campo” (elegir el campo de localidad del cliente) y “+ Añadir Full Contact Data”. No se escriben como texto.</li>
+  <li>El chip de Full Contact Data va <b>sin comillas</b>, y el cuerpo termina con <code>}</code>.</li>
+  <li>Es normal que la vista previa diga “JSON no válido / Las variables no están definidas” si no hay un contacto de prueba elegido.</li>
+  <li>Apretá <b>Guardar</b> en la solicitud y después en el nodo.</li>
+</ul>
+
+<h3>4.3 Planilla de Google (respaldo)</h3>
+<p>En la acción de Google Sheets, el mapeo recomendado es: Nombre ← <i>Nombre completo</i>, Teléfono ← <i>WhatsApp ID</i>, Localidad ← el campo de localidad, Estado ← <code>Estado_Comunidad</code>, y una columna por etiqueta ← la etiqueta del mismo nombre. No existe un campo de fecha en ManyChat para mapear: la fecha del CRM es la hora en que llega el POST.</p>
+
+<h3>4.4 Publicar</h3>
+<p>Apretá <b>Actualizar</b> (arriba a la derecha). Se publicó cuando el botón queda gris y desaparece el punto naranja junto a la etiqueta <span class="ok">LIVE</span>. Hasta entonces el flow en vivo sigue siendo el anterior.</p>
+
+<h2><span class="n">5</span>Prueba final y verificación en Data_Cruda <span class="who">Operador + quien da el alta</span></h2>
+<div class="box warn"><b class="t">Antes de probar</b>
+Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer contacto</b>: si tu número ya se usó antes en ese cliente, la prueba no cambia su comunidad. En ese caso, limpiá la prueba anterior (paso 7).</div>
+
+<ol>
+  <li>Desde el celular de prueba, escribile al <b>número de WhatsApp del cliente</b> una frase que contenga la palabra de una comunidad. Ejemplo: <code>Hola, quiero unirme a la comunidad de Cortado en Jarrito Boedo</code></li>
+  <li>Tiene que llegar el <b>mensaje de bienvenida con el botón “Me sumo”</b>. Tocalo: se abre el enlace del grupo y llega el mensaje de términos y condiciones. Ahí corrió el nodo final.</li>
+  <li>Abrí <b>crm-comunidades-v2.vercel.app</b>, elegí el cliente en el selector y entrá a la pestaña <b>Data_Cruda</b>. Tocá <b>Actualizar</b> (o marcá “Actualizar cada 30 s”).</li>
+  <li>Tiene que aparecer una fila nueva. Comprobá cada columna:</li>
+</ol>
+<table>
+  <tr><th style="width:22%">Columna</th><th style="width:40%">Qué tiene que decir</th><th>Si no coincide</th></tr>
+  <tr><td>Recibido</td><td>La hora de la prueba, con “hace unos segundos”.</td><td>No llegó: ver el paso 6.</td></tr>
+  <tr><td>Teléfono</td><td>Tu número con código de país, <b>solo dígitos</b> (sin “+”).</td><td>Si falta, el contacto no es de WhatsApp.</td></tr>
+  <tr><td>Nombre</td><td>El nombre de usuario de WhatsApp de la persona, tal como lo envía ManyChat. Puede ser un alias, un emoji o un punto (<b>no es un dato verificado</b>).</td><td>Un punto o vacío no es un error del CRM.</td></tr>
+  <tr><td>Comunidad asignada</td><td>La comunidad que escribiste en la prueba.</td><td>Otra comunidad: la condición del flow usa “Es” (paso 4.1).</td></tr>
+  <tr><td>Texto recibido</td><td>El nombre limpio de la comunidad (por ejemplo <code>Boedo</code>), no la frase completa.</td><td>Si llega la frase, el POST está antes de las acciones de rama.</td></tr>
+  <tr><td>Detalle → Ver JSON</td><td>El contenido completo que envió ManyChat.</td><td>—</td></tr>
+</table>
+<p>Como verificación extra, en <b>Overview</b> la comunidad tiene que sumar <b>1 clic único</b>.</p>
+<div class="box tip"><b class="t">La prueba pasó si…</b> aparece la fila en Data_Cruda con el teléfono, la comunidad correcta y el texto recibido limpio. Después, repetí con una segunda comunidad para confirmar que cada rama funciona (con otro número, o limpiando antes el anterior).</div>
+
+<h2><span class="n">6</span>Si algo falla</h2>
+<table>
+  <tr><th style="width:27%">Síntoma</th><th style="width:36%">Causa probable</th><th>Qué hacer</th></tr>
+  <tr><td>No llega el mensaje de bienvenida</td><td>El texto no contiene ninguna palabra de disparador; el flow no está publicado; el monedero no tiene saldo.</td><td>Revisar los disparadores; confirmar que no hay punto naranja junto a LIVE; ver Configuración → Registros (“insufficient funds in your Wallet”) y recargar el monedero.</td></tr>
+  <tr><td>Llegó la bienvenida pero no hay fila en Data_Cruda</td><td>La persona no tocó “Me sumo” (el nodo final no corrió), o el POST fue rechazado.</td><td>Tocar “Me sumo”. Si ya lo tocó, buscar el error en Supabase: Edge Functions → <code>manychat-webhook</code> → Logs, y comparar con los códigos de abajo.</td></tr>
+  <tr><td>Código <b>401</b></td><td>Secreto o slug incorrectos (o cliente inactivo).</td><td>Volver a pegar el secreto desde el gestor, sin espacios; revisar que <code>x-cliente</code> sea el slug exacto.</td></tr>
+  <tr><td>Código <b>404</b> “Comunidad no encontrada”</td><td>El nombre que llega en <code>community_id</code> no existe en ese cliente.</td><td>Igualar el nombre del flow con el del CRM (mayúsculas, tildes, espacios).</td></tr>
+  <tr><td>Código <b>400</b></td><td>No llegó un teléfono (contacto de Instagram, sin WhatsApp) o falta <code>community_id</code>.</td><td>El POST solo funciona con contactos de WhatsApp. Revisar que el chip del cuerpo no esté vacío.</td></tr>
+  <tr><td>Código <b>501</b></td><td>El cliente no tiene secreto cargado.</td><td>Repetir el paso 3.</td></tr>
+  <tr><td>Aparece en la comunidad equivocada (siempre la última)</td><td>Condiciones con “Es” y frase exacta (o con emoji).</td><td>Cambiar a “Contiene” con la palabra sola (paso 4.1).</td></tr>
+  <tr><td>Hay fila en la planilla pero no en el CRM</td><td>El POST no está en el nodo final, o los cambios no se publicaron.</td><td>Revisar el nodo final y apretar Actualizar.</td></tr>
+  <tr><td>La segunda prueba no cambia la comunidad</td><td>Atribución al primer contacto del mismo número.</td><td>Limpiar la prueba anterior (paso 7).</td></tr>
+</table>
+<div class="box warn"><b class="t">Límite del registro</b> Data_Cruda muestra solo los eventos que el CRM <b>aceptó</b>. Los intentos rechazados (401, 400, 404, 501) no se guardan: para verlos hay que mirar los Logs de la función en Supabase.</div>
+
+<h2><span class="n">7</span>Limpiar los datos de prueba <span class="who">Quien da el alta</span></h2>
+<p>Solo con tu teléfono de prueba, en el SQL Editor (reemplazá el slug y el número, sin “+”). <b>Revisá dos veces el número antes de apretar Run: borra definitivamente.</b></p>
+<pre>delete from crm_comunidades_v2.evento_crudo
+ where telefono_id = 'NUMERO-DE-PRUEBA'
+   and cliente_id = (select id from crm_comunidades_v2.cliente where slug = 'slug-del-cliente');
+delete from crm_comunidades_v2.usuario_estado_historial
+ where telefono_id = 'NUMERO-DE-PRUEBA'
+   and cliente_id = (select id from crm_comunidades_v2.cliente where slug = 'slug-del-cliente');
+delete from crm_comunidades_v2.usuario_curado
+ where telefono_id = 'NUMERO-DE-PRUEBA'
+   and cliente_id = (select id from crm_comunidades_v2.cliente where slug = 'slug-del-cliente');</pre>
+<p>Las filas de prueba de la planilla de Google se borran a mano.</p>
+
+<h2><span class="n">8</span>Cierre: checklist final</h2>
+<ul class="check">
+  <li>Cliente visible en el selector del panel, con todas sus comunidades.</li>
+  <li>Secreto guardado en el gestor de contraseñas y snippet de Supabase borrado.</li>
+  <li>Flow con disparadores por palabra, condiciones “Contiene”, y la localidad de cada rama igual al nombre en el CRM.</li>
+  <li>POST en el nodo final, con los dos encabezados y el cuerpo con chips, y flow <b>publicado</b> (sin punto naranja).</li>
+  <li>Evento a la API de conversiones (si existe) con canal WhatsApp.</li>
+  <li>Prueba real hecha: la fila apareció en Data_Cruda con comunidad y texto correctos.</li>
+  <li>Datos de prueba limpiados en el CRM y en la planilla.</li>
+</ul>
+
+<h3>Cosas a tener presentes</h3>
+<ul>
+  <li><b>El panel todavía no tiene login.</b> Quien tenga la dirección puede ver teléfonos y nombres: no compartirla fuera del equipo, y no abrir el flow al público hasta que el login esté activo.</li>
+  <li><b>Rotar el secreto</b> si se filtró, o antes de abrir el flow al público: generar uno nuevo (paso 2), actualizar el hash del cliente (<code>update crm_comunidades_v2.cliente set webhook_secret_hash = encode(sha256('NUEVO'::bytea),'hex') where slug = '…'</code>) y cambiar el valor del encabezado <code>x-webhook-secret</code> en ManyChat.</li>
+  <li><b>Datos de Meta Ads</b> (inversión, clics, conversaciones) se conectan aparte con Windsor.ai. No forman parte de este SOP.</li>
+</ul>
+
+</body>
+</html>
