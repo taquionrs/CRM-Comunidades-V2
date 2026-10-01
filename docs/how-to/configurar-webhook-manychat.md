@@ -38,3 +38,16 @@ Para probarlo, una vez deployada la función y dado de alta el cliente `todo-un-
 El flow no tiene disparador ni mensajes: cuando el POST esté probado, se copia esta acción al final del flow real de comunidades (después de las acciones de cada rama).
 
 **URL real de la función** (proyecto `crm-comunidades`, ref `zyyxsammrryhfrgfwlxr`): `https://zyyxsammrryhfrgfwlxr.supabase.co/functions/v1/manychat-webhook`. Es la que va en lugar del marcador `REEMPLAZAR-POR-TU-PROYECTO`. Solo funciona una vez deployada la función: al 2026-09-29 el proyecto no tiene ninguna Edge Function deployada.
+
+## Cliente en producción: Cortado en Jarrito (2026-10-01)
+
+- **Cliente:** `cortado-en-jarrito`, cuenta de ManyChat `fb5616665`. Comunidades: `Boedo`, `Palermo`, `Villa Devoto`. El secreto del webhook está en un archivo local ignorado por Git (`SECRETO-cortado-en-jarrito.txt`); en la base solo se guarda su hash.
+- **Flow:** "Test Comunidades Cortado en Jarrito", con la acción "Solicitud externa" en el nodo final ("Acciones #8"), junto a Google Sheets y el evento a la API de conversiones de Meta (canal WhatsApp).
+- **Número de WhatsApp del cliente:** +54 9 11 2753-5622 (Configuración → WhatsApp de la cuenta).
+- **Probado de punta a punta** el 2026-10-01: mensaje por WhatsApp → "Me sumo" → evento en Data_Cruda, asignado a Boedo.
+
+### Cuidado con las condiciones por texto
+
+Los flows de comunidades comparan `Localidad_<zona>` con una frase exacta. Si la condición usa el operador **"es"** y la frase termina con un emoji (en Cortado, ☕), cualquier texto escrito a mano sin ese emoji no coincide con ninguna rama y el flow cae en la última salida (Villa Devoto). Eso ensució la planilla anterior y el primer evento del CRM. Corrección aplicada en Cortado: condiciones de **"es" a "contiene"** con la palabra del barrio (`Boedo`, `Palermo`). Al armar flows nuevos, usar siempre "contiene".
+
+Además, el POST tiene que salir **después** de las acciones de rama (nodo final), porque cada rama reescribe `Localidad_<zona>` con el nombre limpio de la comunidad; el cuerpo usa ese valor como `community_id`.

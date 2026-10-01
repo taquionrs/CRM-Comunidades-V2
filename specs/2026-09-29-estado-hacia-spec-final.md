@@ -375,3 +375,13 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - Planilla `TODO_UN_PAÍS_COMUNIDADES` / Hoja 1, mapeo: Nombre ← Nombre completo, Teléfono ← WhatsApp ID, Localidad ← `Localidad_Sanluis`, Estado ← `Estado_Comunidad`, Etiqueta San Luis / Quines / La Toma ← las etiquetas homónimas. Fecha queda sin mapear (ManyChat no ofrece campo de fecha).
 - Valores de `Localidad_Sanluis` en las ramas: `La Toma`, `San Luis Capital`, `Quines`. Las tres existen como comunidades del cliente `todo-un-pais` en el CRM (se crearon `La Toma` y `San Luis Capital`).
 - Pendiente: prueba de punta a punta con un contacto real (la planilla estaba vacía al publicar); rotar el secreto del webhook antes de tráfico real.
+
+## 3 octies. Cortado en Jarrito dado de alta (2026-10-01)
+
+- **Decisión del equipo (2026-10-01):** Todo un País queda en pausa (su número de WhatsApp no está activo). Todos los clientes de Taquion con una comunidad van a este mismo CRM. Se hizo el procedimiento completo con Cortado en Jarrito, que sí tiene WhatsApp activo (+54 9 11 2753-5622).
+- **Base de datos:** cliente `cortado-en-jarrito` (cuenta `fb5616665`) con secreto propio (archivo local ignorado por Git, hash en la base). Comunidades `Boedo`, `Palermo`, `Villa Devoto`.
+- **ManyChat:** acción "Solicitud externa" agregada al nodo final del flow "Test Comunidades Cortado en Jarrito", con `x-cliente`, `x-webhook-secret` y cuerpo `{community_id: Localidad_CABA, contact: Full Contact Data}`. El evento a la API de conversiones de Meta pasó del canal Instagram a WhatsApp.
+- **Hallazgo:** las condiciones del flow comparaban con "es" una frase que termina en ☕; los mensajes escritos a mano caían todos en Villa Devoto. Se cambiaron a "contiene". Probado: "…Cortado en Jarrito Boedo" → Boedo.
+- **Otros hallazgos:** el monedero de WhatsApp de Cortado figuraba sin saldo en los registros (4 avisos críticos); el disparador de etiqueta no sirve para probar porque el flow aplica etiquetas (riesgo de bucle); el chat de la bandeja de entrada está bloqueado por permisos del usuario actual.
+- **Panel:** la pestaña Data_Cruda pasó a ser un registro legible (nombre, comunidad, texto recibido, JSON plegable, botón y refresco automático). Los intentos rechazados no quedan guardados.
+- **Pendiente:** ignorar nombres de solo puntuación (el perfil de prueba se llama "."); rotar secretos antes de tráfico real; login, migración 005 y `panel-data` al final.
