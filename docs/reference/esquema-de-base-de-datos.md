@@ -1,6 +1,6 @@
 # Referencia: esquema de base de datos
 
-Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql) y [`006`](../../db/006_rango_fechas_y_clics.sql).
+Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql), [`006`](../../db/006_rango_fechas_y_clics.sql) y [`007`](../../db/007_webhook_intento.sql).
 
 > Estado: `004` (clientes) y `006` (fechas, clics y teléfono) están **aplicadas** desde el 2026-09-30. `005` (acceso por usuario) está escrita y **sin aplicar**; se aplica al final, junto con el login.
 
@@ -62,6 +62,21 @@ No guarda comunidad atribuida ni fecha de primer contacto — eso vive en `event
 
 ### `usuario_estado_historial` (004)
 Una fila por cada cambio de estadio de una persona: `cliente_id`, `telefono_id`, `estado_anterior`, `estado_nuevo`, `origen` (`sistema` / `webhook` / `manual`), `creado_en`. Lo escribe un trigger de `usuario_curado` (función `security definer`).
+
+### `webhook_intento` (007)
+Intentos que el webhook de ManyChat **rechazó**, de un cliente identificado. Se muestran en Data_Cruda con el filtro "Rechazados".
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid, PK | |
+| `cliente_id` | uuid, FK → `cliente.id` | `on delete cascade` |
+| `estado` | int | Código HTTP de la respuesta: 400, 401, 404, 500 o 501 |
+| `motivo` | text | Causa en palabras ("Secreto incorrecto", "Comunidad no encontrada…") |
+| `comunidad_recibida` | text, nullable | Lo que llegó en `community_id`, si llegó |
+| `telefono_id` | text, nullable | Solo si se llegó a leer un teléfono |
+| `creado_en` | timestamptz | Hora del servidor |
+
+No guarda el secreto recibido ni el body. No registra los intentos sin cliente identificable (headers ausentes o `x-cliente` inexistente): no se pueden atribuir y serían ruido. Solo lo escribe la función `manychat-webhook`. No tiene política de retención todavía.
 
 ### `meta_ads_metrica`
 | Columna | Tipo | Notas |

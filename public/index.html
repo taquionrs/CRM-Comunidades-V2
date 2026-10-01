@@ -68,6 +68,9 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
 .pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
+.pill-ok{color:#3ddc97; border-color:rgba(61,220,151,.4); background:rgba(61,220,151,.08)}
+.pill-bad{color:var(--danger); border-color:rgba(255,92,122,.45); background:rgba(255,92,122,.1)}
+.btn-on{background:var(--accent-dim); border-color:var(--accent); color:#fff}
 .badge-warn{color:var(--warn); border-color:rgba(255,157,61,.4); background:rgba(255,157,61,.08)}
 .hint{cursor:help; color:var(--warn); font-weight:700; margin-left:4px; border-bottom:1px dotted var(--warn)}
 .nota-campo{font-size:11.5px; color:var(--warn); margin:8px 0 0}
@@ -224,6 +227,12 @@ async function loadEventoDeduplicado(){
 async function loadEventoCrudo(){
   const { data, error } = await supabase.from('evento_crudo').select('*').eq('cliente_id', state.clienteId).order('recibido_en', { ascending:false }).limit(200);
   if (error) throw error;
+  return data || [];
+}
+
+async function loadIntentosRechazados(){
+  const { data, error } = await supabase.from('webhook_intento').select('*').eq('cliente_id', state.clienteId).order('creado_en', { ascending:false }).limit(200);
+  if (error) return []; // si la tabla todavía no existe (db/007), Data_Cruda sigue mostrando los aceptados
   return data || [];
 }
 
@@ -508,36 +517,62 @@ function haceCuanto(v){
   if (s < 86400) return 'hace ' + Math.floor(s/3600) + ' h';
   return 'hace ' + Math.floor(s/86400) + ' d';
 }
-function renderCrudo(eventos, comunidadesById){
-  const rows = eventos.length
-    ? eventos.map(e => {
-        const p = e.payload || {};
-        const c = p.contact || {};
-        const nombre = c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
-        const comunidad = comunidadesById.get(e.comunidad_id);
-        return `<tr>
-          <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}<div class="sub" style="margin:0">${haceCuanto(e.recibido_en)}</div></td>
-          <td class="mono">${esc(e.telefono_id)}</td>
-          <td>${esc(nombre)}</td>
-          <td>${comunidad ? esc(comunidad) : '<span class="pill badge-warn">Sin comunidad</span>'}</td>
-          <td class="codeblock">${esc(p.community_id ?? '—')}</td>
-          <td><details><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details></td>
-        </tr>`;
-      }).join('')
-    : `<tr class="empty-row"><td colspan="6">Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).</td></tr>`;
+function filaAceptada(e, comunidadesById){
+  const p = e.payload || {};
+  const c = p.contact || {};
+  const nombre = c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
+  const comunidad = comunidadesById.get(e.comunidad_id);
+  return `<tr>
+    <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}<div class="sub" style="margin:0">${haceCuanto(e.recibido_en)}</div></td>
+    <td><span class="pill pill-ok">Aceptado</span></td>
+    <td class="mono">${esc(e.telefono_id)}</td>
+    <td>${esc(nombre)}</td>
+    <td>${comunidad ? esc(comunidad) : '<span class="pill badge-warn">Sin comunidad</span>'}</td>
+    <td class="codeblock">${esc(p.community_id ?? '—')}</td>
+    <td><details><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details></td>
+  </tr>`;
+}
+function filaRechazada(i){
+  return `<tr>
+    <td class="mono" style="white-space:nowrap">${fmtFecha(i.creado_en)}<div class="sub" style="margin:0">${haceCuanto(i.creado_en)}</div></td>
+    <td><span class="pill pill-bad">Rechazado ${esc(i.estado)}</span></td>
+    <td class="mono">${esc(i.telefono_id || '—')}</td>
+    <td>—</td>
+    <td>—</td>
+    <td class="codeblock">${esc(i.comunidad_recibida ?? '—')}</td>
+    <td style="font-size:12px; color:var(--danger); max-width:280px">${esc(i.motivo)}</td>
+  </tr>`;
+}
+const FILTROS_CRUDO = [['todos','Todos'], ['aceptados','Aceptados'], ['rechazados','Rechazados']];
+function renderCrudo(eventos, intentos, comunidadesById, filtro){
+  const items = [
+    ...(filtro !== 'rechazados' ? eventos.map(e => ({ t: new Date(e.recibido_en).getTime(), html: filaAceptada(e, comunidadesById) })) : []),
+    ...(filtro !== 'aceptados' ? intentos.map(i => ({ t: new Date(i.creado_en).getTime(), html: filaRechazada(i) })) : []),
+  ].sort((a, b) => b.t - a.t);
+  const vacio = filtro === 'rechazados'
+    ? 'Sin intentos rechazados — es lo esperado si todo funciona.'
+    : 'Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).';
+  const rows = items.length ? items.map(x => x.html).join('') : `<tr class="empty-row"><td colspan="7">${vacio}</td></tr>`;
+  const conteo = { todos: eventos.length + intentos.length, aceptados: eventos.length, rechazados: intentos.length };
+  const chips = FILTROS_CRUDO.map(([k, label]) =>
+    `<button class="btn${filtro === k ? ' btn-on' : ''}" type="button" data-crudo-filtro="${k}">${label} (${conteo[k]})</button>`).join('');
   return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
-    <div class="sub">Cada vez que un flow dispara el POST y el CRM lo acepta, aparece una fila. Incluye duplicados y reintentos — últimos 200. Nunca se edita ni se borra una fila acá. Los intentos rechazados (secreto incorrecto, sin teléfono) no quedan guardados.</div>
+    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — últimos 200 de cada tipo. Nunca se edita ni se borra una fila acá. No se registran los intentos que no identifican a un cliente (headers ausentes o cliente inexistente).</div>
     ${notaNombre}
+    <div style="display:flex; gap:8px; margin:12px 0 0; flex-wrap:wrap">${chips}</div>
     <div style="display:flex; gap:14px; align-items:center; margin:10px 0 12px; flex-wrap:wrap">
       <button class="btn" id="crudoRefresh" type="button">Actualizar</button>
       <label style="font-size:12px; color:var(--text-muted); display:flex; gap:6px; align-items:center"><input type="checkbox" id="crudoAuto"> Actualizar cada 30 s</label>
-      <span class="sub" style="margin:0">${eventos.length} evento${eventos.length===1?'':'s'} · cargado ${fmtFecha(new Date())}</span>
+      <span class="sub" style="margin:0">cargado ${fmtFecha(new Date())}</span>
     </div>
-    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Teléfono</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Teléfono</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
 let crudoTimer = null;
 function wireCrudo(){
+  document.querySelectorAll('[data-crudo-filtro]').forEach(b => {
+    b.onclick = () => { state.crudoFiltro = b.dataset.crudoFiltro; renderAll(); };
+  });
   document.getElementById('crudoRefresh').onclick = () => renderAll();
   const auto = document.getElementById('crudoAuto');
   auto.checked = !!state.crudoAuto;
@@ -582,9 +617,9 @@ async function renderAll(){
       content.innerHTML = renderDedup(eventos, byId);
 
     } else if (state.tab === 'crudo') {
-      const [eventos, comunidades] = await Promise.all([loadEventoCrudo(), loadComunidades()]);
+      const [eventos, intentos, comunidades] = await Promise.all([loadEventoCrudo(), loadIntentosRechazados(), loadComunidades()]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
-      content.innerHTML = renderCrudo(eventos, byId);
+      content.innerHTML = renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos');
       wireCrudo();
     }
   } catch (err) {
