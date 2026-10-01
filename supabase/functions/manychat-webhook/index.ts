@@ -41,6 +41,11 @@
 // community_id acepta el uuid real de la comunidad, o el nombre exacto de la
 // comunidad DENTRO de ese cliente. Una comunidad de otro cliente nunca matchea.
 //
+// Rechazos (PR #2): si el cliente está identificado (slug existente) y el POST se rechaza, la
+// causa queda en crm_comunidades_v2.webhook_intento (db/007) y se muestra en Data_Cruda con el
+// filtro "Rechazados". La respuesta HTTP no cambia. No se anotan los intentos sin cliente
+// identificable (headers ausentes o slug inexistente) ni se guarda nunca el secreto recibido.
+//
 // Deploy: `supabase functions deploy manychat-webhook`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -135,20 +140,45 @@ Deno.serve(async (req) => {
   if (errCliente) return json({ error: errCliente.message }, 500);
 
   // Mismo mensaje para "no existe" y "secreto incorrecto": no permite enumerar clientes.
-  if (!cliente || !cliente.activo) return json({ error: "Cliente o secret inválido" }, 401);
+  // Si el slug no corresponde a ningún cliente no se registra nada (no hay a quién atribuirlo).
+  if (!cliente) return json({ error: "Cliente o secret inválido" }, 401);
+
+  // Rechazo de un cliente conocido: se anota en webhook_intento (para el filtro "Rechazados" de
+  // Data_Cruda) y se responde igual que antes. Nunca se guarda el secreto ni el body completo, y un
+  // fallo al anotar no cambia la respuesta.
+  const rechazar = async (
+    status: number,
+    error: string,
+    motivo: string,
+    ctx: { comunidad?: string | null; telefono?: string | null } = {},
+  ) => {
+    try {
+      await admin.schema("crm_comunidades_v2").from("webhook_intento").insert({
+        cliente_id: cliente.id,
+        estado: status,
+        motivo: motivo.slice(0, 300),
+        comunidad_recibida: ctx.comunidad ? ctx.comunidad.slice(0, 200) : null,
+        telefono_id: ctx.telefono ?? null,
+      });
+    } catch (_) { /* el registro es secundario */ }
+    return json({ error }, status);
+  };
+
+  if (!cliente.activo) return await rechazar(401, "Cliente o secret inválido", "Cliente inactivo");
   if (!cliente.webhook_secret_hash) {
-    return json(
-      { error: "El cliente no tiene webhook_secret_hash configurado — ver docs/how-to/configurar-webhook-manychat.md" },
+    return await rechazar(
       501,
+      "El cliente no tiene webhook_secret_hash configurado — ver docs/how-to/configurar-webhook-manychat.md",
+      "El cliente no tiene secreto cargado",
     );
   }
   if (!iguales(await sha256Hex(secretRecibido), cliente.webhook_secret_hash)) {
-    return json({ error: "Cliente o secret inválido" }, 401);
+    return await rechazar(401, "Cliente o secret inválido", "Secreto incorrecto");
   }
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {
-    return json({ error: "El body tiene que ser un objeto JSON" }, 400);
+    return await rechazar(400, "El body tiene que ser un objeto JSON", "El body no es un objeto JSON");
   }
 
   // Forma nueva: { community_id, contact: <Full Contact Data> }. Forma plana anterior: { phone, community_id }.
@@ -158,18 +188,22 @@ Deno.serve(async (req) => {
   const telefono = normalizarTelefono(contact?.whatsapp_phone) ??
     normalizarTelefono(contact?.phone) ??
     normalizarTelefono(body.phone);
+  const communityId: string | null = textoLimpio(body.community_id) ?? comunidadDesdeCamposPersonalizados(contact);
   if (!telefono) {
-    return json(
-      { error: "No llegó un teléfono usable: se esperaba contact.whatsapp_phone (o phone en el formato plano)" },
+    return await rechazar(
       400,
+      "No llegó un teléfono usable: se esperaba contact.whatsapp_phone (o phone en el formato plano)",
+      "No llegó un teléfono usable (el contacto no es de WhatsApp o el campo vino vacío)",
+      { comunidad: communityId },
     );
   }
 
-  const communityId: string | null = textoLimpio(body.community_id) ?? comunidadDesdeCamposPersonalizados(contact);
   if (!communityId) {
-    return json(
-      { error: "Falta la comunidad: mandar community_id, o un campo personalizado Localidad* con valor en contact.custom_fields" },
+    return await rechazar(
       400,
+      "Falta la comunidad: mandar community_id, o un campo personalizado Localidad* con valor en contact.custom_fields",
+      "Falta la comunidad: community_id llegó vacío",
+      { telefono },
     );
   }
 
@@ -181,8 +215,15 @@ Deno.serve(async (req) => {
     .eq("cliente_id", cliente.id)
     .eq(esUuid ? "id" : "nombre", communityId)
     .maybeSingle();
-  if (errComunidad) return json({ error: errComunidad.message }, 500);
-  if (!comunidad) return json({ error: `Comunidad no encontrada en este cliente: ${communityId}` }, 404);
+  if (errComunidad) return await rechazar(500, errComunidad.message, `Error al buscar la comunidad: ${errComunidad.message}`, { comunidad: communityId, telefono });
+  if (!comunidad) {
+    return await rechazar(
+      404,
+      `Comunidad no encontrada en este cliente: ${communityId}`,
+      "Comunidad no encontrada: el nombre que llegó no existe en este cliente",
+      { comunidad: communityId, telefono },
+    );
+  }
 
   // recibido_en: hora del servidor (default de la tabla). El payload completo queda tal cual llegó.
   const { data: evento, error: errEvento } = await admin
@@ -197,7 +238,7 @@ Deno.serve(async (req) => {
     })
     .select()
     .maybeSingle();
-  if (errEvento) return json({ error: errEvento.message }, 500);
+  if (errEvento) return await rechazar(500, errEvento.message, `Error al guardar el evento: ${errEvento.message}`, { comunidad: communityId, telefono });
 
   // Enriquecimiento: el trigger de evento_crudo ya creó la fila de usuario_curado. Solo se completan
   // los datos que todavía están vacíos — nunca se pisa un nombre/email que ya estaba cargado.

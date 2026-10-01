@@ -43,7 +43,7 @@
 <body>
 
 <h1>SOP-001 · Alta de un cliente en el CRM de Comunidades V2</h1>
-<div class="meta"><b>Versión:</b> 1.0 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
+<div class="meta"><b>Versión:</b> 1.1 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
 
 <div class="box tip"><b class="t">Para qué sirve este procedimiento</b>
 Cada cliente de Taquion que tenga una comunidad entra al mismo CRM. Este SOP explica cómo darlo de alta, cómo dejar su flow de ManyChat listo para enviar los datos al CRM, y cómo comprobar con una prueba real que todo llega a la pestaña <b>Data_Cruda</b>. Tiempo estimado: 45 a 60 minutos.</div>
@@ -173,7 +173,7 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
 <table>
   <tr><th style="width:27%">Síntoma</th><th style="width:36%">Causa probable</th><th>Qué hacer</th></tr>
   <tr><td>No llega el mensaje de bienvenida</td><td>El texto no contiene ninguna palabra de disparador; el flow no está publicado; el monedero no tiene saldo.</td><td>Revisar los disparadores; confirmar que no hay punto naranja junto a LIVE; ver Configuración → Registros (“insufficient funds in your Wallet”) y recargar el monedero.</td></tr>
-  <tr><td>Llegó la bienvenida pero no hay fila en Data_Cruda</td><td>La persona no tocó “Me sumo” (el nodo final no corrió), o el POST fue rechazado.</td><td>Tocar “Me sumo”. Si ya lo tocó, buscar el error en Supabase: Edge Functions → <code>manychat-webhook</code> → Logs, y comparar con los códigos de abajo.</td></tr>
+  <tr><td>Llegó la bienvenida pero no hay fila en Data_Cruda</td><td>La persona no tocó “Me sumo” (el nodo final no corrió), o el POST fue rechazado.</td><td>Tocar “Me sumo”. Si ya lo tocó, abrir Data_Cruda → filtro <b>Rechazados</b>: ahí aparece el código y el motivo. Compararlos con los códigos de abajo.</td></tr>
   <tr><td>Código <b>401</b></td><td>Secreto o slug incorrectos (o cliente inactivo).</td><td>Volver a pegar el secreto desde el gestor, sin espacios; revisar que <code>x-cliente</code> sea el slug exacto.</td></tr>
   <tr><td>Código <b>404</b> “Comunidad no encontrada”</td><td>El nombre que llega en <code>community_id</code> no existe en ese cliente.</td><td>Igualar el nombre del flow con el del CRM (mayúsculas, tildes, espacios).</td></tr>
   <tr><td>Código <b>400</b></td><td>No llegó un teléfono (contacto de Instagram, sin WhatsApp) o falta <code>community_id</code>.</td><td>El POST solo funciona con contactos de WhatsApp. Revisar que el chip del cuerpo no esté vacío.</td></tr>
@@ -182,7 +182,7 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
   <tr><td>Hay fila en la planilla pero no en el CRM</td><td>El POST no está en el nodo final, o los cambios no se publicaron.</td><td>Revisar el nodo final y apretar Actualizar.</td></tr>
   <tr><td>La segunda prueba no cambia la comunidad</td><td>Atribución al primer contacto del mismo número.</td><td>Limpiar la prueba anterior (paso 7).</td></tr>
 </table>
-<div class="box warn"><b class="t">Límite del registro</b> Data_Cruda muestra solo los eventos que el CRM <b>aceptó</b>. Los intentos rechazados (401, 400, 404, 501) no se guardan: para verlos hay que mirar los Logs de la función en Supabase.</div>
+<div class="box tip"><b class="t">Ver los rechazos en Data_Cruda</b> En Data_Cruda, el filtro <b>Rechazados</b> lista cada POST que el CRM rechazó, con el código (401, 400, 404, 501) y el motivo en palabras: es la forma más rápida de diagnosticar. <b>Límite:</b> no se registran los intentos que no identifican a un cliente (encabezados ausentes o <code>x-cliente</code> con un slug que no existe). Para esos, mirar los Logs de la función en Supabase.</div>
 
 <h2><span class="n">7</span>Limpiar los datos de prueba <span class="who">Quien da el alta</span></h2>
 <p>Solo con tu teléfono de prueba, en el SQL Editor (reemplazá el slug y el número, sin “+”). <b>Revisá dos veces el número antes de apretar Run: borra definitivamente.</b></p>

@@ -385,3 +385,12 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Otros hallazgos:** el monedero de WhatsApp de Cortado figuraba sin saldo en los registros (4 avisos críticos); el disparador de etiqueta no sirve para probar porque el flow aplica etiquetas (riesgo de bucle); el chat de la bandeja de entrada está bloqueado por permisos del usuario actual.
 - **Panel:** la pestaña Data_Cruda pasó a ser un registro legible (nombre, comunidad, texto recibido, JSON plegable, botón y refresco automático). Los intentos rechazados no quedan guardados.
 - **Pendiente:** ignorar nombres de solo puntuación (el perfil de prueba se llama "."); rotar secretos antes de tráfico real; login, migración 005 y `panel-data` al final.
+
+## 3 nonies. PR #2 — Intentos rechazados del webhook visibles en Data_Cruda (2026-10-01)
+
+- **Qué:** nueva tabla `webhook_intento` (migración `db/007`, aplicada) donde la función `manychat-webhook` anota cada POST rechazado de un cliente identificado: código (400/401/404/500/501), motivo en palabras, comunidad recibida y teléfono si se leyó. Nunca guarda el secreto ni el body. No registra intentos sin cliente identificable (headers ausentes o slug inexistente).
+- **Panel:** Data_Cruda tiene un filtro **Todos · Aceptados · Rechazados** con conteos, una columna Resultado (Aceptado / Rechazado + código) y el motivo en la columna Detalle.
+- **Respuestas HTTP:** sin cambios (mismos códigos y mensajes que antes).
+- **Probado** con un cliente temporal (ya eliminado): secreto incorrecto → 401, comunidad inexistente → 404, sin teléfono → 400, cliente inexistente y sin headers → 401 sin registro, caso válido → 200.
+- **Con el login:** `db/005` ya incluye la tabla (solo lectura por cliente). Orden de aplicación: 007 antes que 005.
+- **Pendiente:** política de retención de `webhook_intento` si el volumen crece.
