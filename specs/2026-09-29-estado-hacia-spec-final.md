@@ -394,3 +394,10 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Probado** con un cliente temporal (ya eliminado): secreto incorrecto → 401, comunidad inexistente → 404, sin teléfono → 400, cliente inexistente y sin headers → 401 sin registro, caso válido → 200.
 - **Con el login:** `db/005` ya incluye la tabla (solo lectura por cliente). Orden de aplicación: 007 antes que 005.
 - **Pendiente:** política de retención de `webhook_intento` si el volumen crece.
+
+## 3 decies. PR #3 — Limpieza de datos de prueba de Cortado en Jarrito (2026-10-01)
+
+- **Qué:** se borraron de producción los datos de las pruebas del equipo hechas ese día en el cliente `cortado-en-jarrito`: 14 eventos de `evento_crudo`, 7 personas de `usuario_curado` y sus 7 registros de `usuario_estado_historial`. Alcance acotado a lo recibido hasta las 11:32:33 (hora de Argentina); se verificó antes que no había eventos posteriores.
+- **Cómo:** consulta SQL con verificación previa del alcance y conteo posterior. Estado final: `cortado-en-jarrito` y `todo-un-pais` con sus 3 comunidades cada uno y 0 eventos, 0 personas y 0 rechazos.
+- **Sin cambios de código:** esta PR solo deja el registro del borrado. No toca el panel, la función ni el esquema.
+- **Queda para después (no incluido):** las condiciones del flow de Cortado siguen comparando contra la frase completa, y un mensaje de Palermo con otra redacción cae en Villa Devoto. La carga manual de miembros (Mf) sigue en 0 hasta que se cargue.
