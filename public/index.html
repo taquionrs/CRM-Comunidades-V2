@@ -176,7 +176,7 @@ const idVisible = (id, payload) => {
   return esInstagram(id) && user ? '@' + user : id;
 };
 /* Aviso de dónde viene el campo "Nombre": ⓘ en el encabezado (hover) + nota visible bajo el título */
-const NOMBRE_ORIGEN = 'Nombre: user name de WhatsApp de la persona. Lo envía ManyChat tal cual lo tiene el perfil; puede ser un alias, un emoji o un punto, y no es un dato verificado.';
+const NOMBRE_ORIGEN = 'Nombre: user name de WhatsApp o Instagram de la persona (según el canal). Lo envía ManyChat tal cual lo tiene el perfil; puede ser un alias, un emoji o un punto, y no es un dato verificado.';
 const thNombre = `<th>Nombre <span class="hint" title="${esc(NOMBRE_ORIGEN)}">ⓘ</span></th>`;
 const notaNombre = `<div class="nota-campo">ⓘ ${esc(NOMBRE_ORIGEN)}</div>`;
 const naCell = (nota) => `<span class="na" title="${esc(nota)}">— sin fuente</span>`;
