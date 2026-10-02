@@ -41,6 +41,10 @@
 // community_id acepta el uuid real de la comunidad, o el nombre exacto de la
 // comunidad DENTRO de ese cliente. Una comunidad de otro cliente nunca matchea.
 //
+// Instagram (PR #4, db/008): un contacto sin teléfono se identifica por contact.ig_id y se guarda como
+// "ig:<id>" en la misma columna telefono_id; el canal se deduce del prefijo. Si llega teléfono, manda el
+// teléfono. La respuesta incluye `canal` ("whatsapp" | "instagram").
+//
 // Rechazos (PR #2): si el cliente está identificado (slug existente) y el POST se rechaza, la
 // causa queda en crm_comunidades_v2.webhook_intento (db/007) y se muestra en Data_Cruda con el
 // filtro "Rechazados". La respuesta HTTP no cambia. No se anotan los intentos sin cliente
@@ -82,6 +86,20 @@ export function normalizarTelefono(valor: unknown): string | null {
   if (typeof valor !== "string" && typeof valor !== "number") return null;
   const digitos = String(valor).replace(/\D/g, "");
   return digitos.length >= 8 ? digitos : null;
+}
+
+// ig_id exacto tomado del texto del body, sea número ("ig_id": 178…) o texto ("ig_id": "178…"), sin pasar
+// por el redondeo de JSON.parse. Devuelve null si no está o tiene menos de 5 dígitos.
+export function igIdDesdeTexto(texto: string): string | null {
+  const m = /"ig_id"\s*:\s*"?(\d{5,})"?/.exec(texto);
+  return m ? m[1] : null;
+}
+
+// Identificador de Instagram de ManyChat → solo dígitos (mínimo 5), o null si no sirve.
+export function idInstagram(valor: unknown): string | null {
+  if (typeof valor !== "string" && typeof valor !== "number") return null;
+  const digitos = String(valor).replace(/\D/g, "");
+  return digitos.length >= 5 ? digitos : null;
 }
 
 function textoLimpio(valor: unknown): string | null {
@@ -176,7 +194,10 @@ Deno.serve(async (req) => {
     return await rechazar(401, "Cliente o secret inválido", "Secreto incorrecto");
   }
 
-  const body = await req.json().catch(() => null);
+  // Se lee el texto crudo además del JSON: los ig_id de Instagram tienen 17 dígitos y, si llegan como
+  // número JSON, JSON.parse los redondea (…123 → …124). El id exacto se saca del texto original.
+  const textoCrudo = await req.text().catch(() => "");
+  const body = (() => { try { return JSON.parse(textoCrudo); } catch { return null; } })();
   if (!body || typeof body !== "object") {
     return await rechazar(400, "El body tiene que ser un objeto JSON", "El body no es un objeto JSON");
   }
@@ -189,11 +210,21 @@ Deno.serve(async (req) => {
     normalizarTelefono(contact?.phone) ??
     normalizarTelefono(body.phone);
   const communityId: string | null = textoLimpio(body.community_id) ?? comunidadDesdeCamposPersonalizados(contact);
-  if (!telefono) {
+  // Instagram (db/008): un contacto sin teléfono se identifica por contact.ig_id como "ig:<id>".
+  // El teléfono, si llega, tiene prioridad (la persona es de WhatsApp).
+  const igId = igIdDesdeTexto(textoCrudo) ?? idInstagram(contact?.ig_id);
+  const identificador: string | null = telefono ?? (igId ? `ig:${igId}` : null);
+  const canal = telefono ? "whatsapp" : "instagram";
+  if (!identificador) {
+    // Solo los NOMBRES de los campos con valor (nunca los valores), para poder diagnosticar qué manda ManyChat.
+    const camposConValor = Object.entries(contact ?? {})
+      .filter(([, v]) => v !== null && v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0))
+      .map(([k]) => k)
+      .join(", ");
     return await rechazar(
       400,
-      "No llegó un teléfono usable: se esperaba contact.whatsapp_phone (o phone en el formato plano)",
-      "No llegó un teléfono usable (el contacto no es de WhatsApp o el campo vino vacío)",
+      "No llegó un identificador usable: se esperaba contact.whatsapp_phone (WhatsApp) o contact.ig_id (Instagram)",
+      `No llegó teléfono ni ig_id usable. Campos del contacto con valor: ${camposConValor || "ninguno"}`,
       { comunidad: communityId },
     );
   }
@@ -203,7 +234,7 @@ Deno.serve(async (req) => {
       400,
       "Falta la comunidad: mandar community_id, o un campo personalizado Localidad* con valor en contact.custom_fields",
       "Falta la comunidad: community_id llegó vacío",
-      { telefono },
+      { telefono: identificador },
     );
   }
 
@@ -215,13 +246,13 @@ Deno.serve(async (req) => {
     .eq("cliente_id", cliente.id)
     .eq(esUuid ? "id" : "nombre", communityId)
     .maybeSingle();
-  if (errComunidad) return await rechazar(500, errComunidad.message, `Error al buscar la comunidad: ${errComunidad.message}`, { comunidad: communityId, telefono });
+  if (errComunidad) return await rechazar(500, errComunidad.message, `Error al buscar la comunidad: ${errComunidad.message}`, { comunidad: communityId, telefono: identificador });
   if (!comunidad) {
     return await rechazar(
       404,
       `Comunidad no encontrada en este cliente: ${communityId}`,
       "Comunidad no encontrada: el nombre que llegó no existe en este cliente",
-      { comunidad: communityId, telefono },
+      { comunidad: communityId, telefono: identificador },
     );
   }
 
@@ -232,13 +263,13 @@ Deno.serve(async (req) => {
     .insert({
       cliente_id: cliente.id,
       comunidad_id: comunidad.id,
-      telefono_id: telefono,
+      telefono_id: identificador,
       tipo: "webhook_manychat",
       payload: body,
     })
     .select()
     .maybeSingle();
-  if (errEvento) return await rechazar(500, errEvento.message, `Error al guardar el evento: ${errEvento.message}`, { comunidad: communityId, telefono });
+  if (errEvento) return await rechazar(500, errEvento.message, `Error al guardar el evento: ${errEvento.message}`, { comunidad: communityId, telefono: identificador });
 
   // Enriquecimiento: el trigger de evento_crudo ya creó la fila de usuario_curado. Solo se completan
   // los datos que todavía están vacíos — nunca se pisa un nombre/email que ya estaba cargado.
@@ -251,7 +282,7 @@ Deno.serve(async (req) => {
       .from("usuario_curado")
       .update({ nombre })
       .eq("cliente_id", cliente.id)
-      .eq("telefono_id", telefono)
+      .eq("telefono_id", identificador)
       .is("nombre", null);
     if (error) avisos.push(`No se pudo guardar el nombre: ${error.message}`);
   }
@@ -261,10 +292,10 @@ Deno.serve(async (req) => {
       .from("usuario_curado")
       .update({ email })
       .eq("cliente_id", cliente.id)
-      .eq("telefono_id", telefono)
+      .eq("telefono_id", identificador)
       .is("email", null);
     if (error) avisos.push(`No se pudo guardar el email: ${error.message}`);
   }
 
-  return json({ data: evento, telefono_normalizado: telefono, aviso: avisos.length ? avisos.join(" · ") : undefined });
+  return json({ data: evento, telefono_normalizado: identificador, canal, aviso: avisos.length ? avisos.join(" · ") : undefined });
 });

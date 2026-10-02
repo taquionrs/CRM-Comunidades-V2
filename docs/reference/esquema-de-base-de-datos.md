@@ -1,6 +1,6 @@
 # Referencia: esquema de base de datos
 
-Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql), [`006`](../../db/006_rango_fechas_y_clics.sql) y [`007`](../../db/007_webhook_intento.sql).
+Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql), [`006`](../../db/006_rango_fechas_y_clics.sql) y [`007`](../../db/007_webhook_intento.sql) y [`008`](../../db/008_identificador_instagram.sql).
 
 > Estado: `004` (clientes) y `006` (fechas, clics y teléfono) están **aplicadas** desde el 2026-09-30. `005` (acceso por usuario) está escrita y **sin aplicar**; se aplica al final, junto con el login.
 
@@ -38,7 +38,7 @@ Un **cliente** es una cuenta de ManyChat con sus propias comunidades. El teléfo
 | `id` | uuid, PK | |
 | `cliente_id` | uuid, not null | (004) Denormalizado a propósito |
 | `comunidad_id` | uuid | FK compuesta con `cliente_id` |
-| `telefono_id` | text, not null | Solo dígitos, mínimo 8 (006) |
+| `telefono_id` | text, not null | Identificador de la persona: teléfono (solo dígitos, mínimo 8) o `ig:<id numérico>` si es de Instagram (008) |
 | `tipo` | text, default `webhook_manychat` | |
 | `payload` | jsonb | El body completo que mandó ManyChat |
 | `recibido_en` | timestamptz, default now() | Hora del servidor. No depende del emisor |
@@ -51,7 +51,7 @@ PK `(cliente_id, telefono_id)` desde 004.
 | Columna | Tipo | Notas |
 |---|---|---|
 | `cliente_id` | uuid | |
-| `telefono_id` | text | Solo dígitos, mínimo 8 (006) |
+| `telefono_id` | text | Igual que en `evento_crudo`: teléfono o `ig:<id>` (008) |
 | `nombre` | text, nullable | Lo completa el webhook con el nombre de ManyChat si no es solo dígitos; o `nominacion-sync` |
 | `email` | text, nullable | ManyChat no lo entrega en WhatsApp |
 | `etiquetas` | text[], default `{}` | |
