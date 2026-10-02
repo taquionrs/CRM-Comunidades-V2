@@ -401,3 +401,13 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Cómo:** consulta SQL con verificación previa del alcance y conteo posterior. Estado final: `cortado-en-jarrito` y `todo-un-pais` con sus 3 comunidades cada uno y 0 eventos, 0 personas y 0 rechazos.
 - **Sin cambios de código:** esta PR solo deja el registro del borrado. No toca el panel, la función ni el esquema.
 - **Queda para después (no incluido):** las condiciones del flow de Cortado siguen comparando contra la frase completa, y un mensaje de Palermo con otra redacción cae en Villa Devoto. La carga manual de miembros (Mf) sigue en 0 hasta que se cargue.
+
+## 3 undecies. PR #4 — Contactos de Instagram (2026-10-02)
+
+- **Problema:** el flow de Instagram de Cortado ("Test Comunidades Cortado en Jarr IG") enviaba el POST pero el CRM lo rechazaba con 400: la persona se identificaba solo por teléfono y un contacto de Instagram no tiene.
+- **Qué:** migración `db/008` — la columna `telefono_id` (se conserva el nombre) acepta también `ig:<id numérico>`. El webhook usa `contact.whatsapp_phone` si llega; si no, `contact.ig_id`. El canal se deduce del prefijo (no hay columna nueva). La respuesta del webhook incluye `canal`.
+- **Precisión del ig_id:** los identificadores de Instagram tienen 17 dígitos y `JSON.parse` los redondea si llegan como número (…123 → …124). El webhook toma el id exacto del texto del body. Atención: el `payload` guardado en `evento_crudo` sí pasó por `JSON.parse`, así que su `ig_id` puede verse redondeado; la clave real de la persona es `telefono_id`.
+- **Rechazos más claros:** si no llega ni teléfono ni `ig_id`, el motivo (visible en Data_Cruda → Rechazados) lista los nombres de los campos del contacto que sí llegaron (nunca los valores).
+- **Panel:** etiqueta de canal (WhatsApp / Instagram) en Data_Cruda, Base_Limpia y Data_Deduplicada; en Data_Cruda un contacto de Instagram se muestra como @usuario si ManyChat lo envía. Las columnas "Teléfono" pasaron a "Contacto".
+- **Probado** con un cliente temporal (eliminado): Instagram con `ig_id` numérico y como texto, WhatsApp, ambos a la vez (gana WhatsApp), repetido sin duplicar persona, sin identificador y `ig_id` corto (400).
+- **Limitación conocida:** la misma persona en WhatsApp e Instagram cuenta como dos. Pendiente: confirmar con una ejecución real de Instagram qué campos manda ManyChat (en especial `ig_id` e `ig_username`).

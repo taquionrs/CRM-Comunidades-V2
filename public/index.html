@@ -68,6 +68,7 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
 .pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
+.pill-ig{color:#e879b9; border-color:rgba(232,121,185,.45); background:rgba(232,121,185,.1)}
 .pill-ok{color:#3ddc97; border-color:rgba(61,220,151,.4); background:rgba(61,220,151,.08)}
 .pill-bad{color:var(--danger); border-color:rgba(255,92,122,.45); background:rgba(255,92,122,.1)}
 .btn-on{background:var(--accent-dim); border-color:var(--accent); color:#fff}
@@ -167,8 +168,15 @@ const fmtInt = v => v==null ? '—' : Number(v).toLocaleString('es-AR');
 const fmtPct = v => v==null ? '—' : Math.round(v*10)/10 + '%';
 const fmtFecha = v => v ? new Date(v).toLocaleString('es-AR') : '—';
 const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+/* Canal de la persona: el identificador es un teléfono (WhatsApp) o "ig:<id>" (Instagram), ver db/008 */
+const esInstagram = id => String(id ?? '').startsWith('ig:');
+const canalPill = id => esInstagram(id) ? '<span class="pill pill-ig">Instagram</span>' : '<span class="pill">WhatsApp</span>';
+const idVisible = (id, payload) => {
+  const user = payload && payload.contact && payload.contact.ig_username;
+  return esInstagram(id) && user ? '@' + user : id;
+};
 /* Aviso de dónde viene el campo "Nombre": ⓘ en el encabezado (hover) + nota visible bajo el título */
-const NOMBRE_ORIGEN = 'Nombre: user name de WhatsApp de la persona. Lo envía ManyChat tal cual lo tiene el perfil; puede ser un alias, un emoji o un punto, y no es un dato verificado.';
+const NOMBRE_ORIGEN = 'Nombre: user name de WhatsApp o Instagram de la persona (según el canal). Lo envía ManyChat tal cual lo tiene el perfil; puede ser un alias, un emoji o un punto, y no es un dato verificado.';
 const thNombre = `<th>Nombre <span class="hint" title="${esc(NOMBRE_ORIGEN)}">ⓘ</span></th>`;
 const notaNombre = `<div class="nota-campo">ⓘ ${esc(NOMBRE_ORIGEN)}</div>`;
 const naCell = (nota) => `<span class="na" title="${esc(nota)}">— sin fuente</span>`;
@@ -436,7 +444,7 @@ function renderBaseLimpia(usuarios, comunidades, filtro){
 
   const rows = pageRows.length
     ? pageRows.map(u => `<tr>
-        <td class="mono">${esc(u.phone_id)}</td>
+        <td class="mono">${canalPill(u.phone_id)} ${esc(u.phone_id)}</td>
         <td>${esc(u.nombre)}</td>
         <td>${esc(u.email)}</td>
         <td>${esc(u.comunidad_atribuida || '—')}</td>
@@ -457,7 +465,7 @@ function renderBaseLimpia(usuarios, comunidades, filtro){
         <button class="btn" id="btnNominacionSync" type="button">Sincronizar nombres</button>
         <div id="nominacionResultado" style="font-size:12px; align-self:center"></div>
       </div>
-      <div class="tbl-wrap"><table><thead><tr><th>Teléfono (ID)</th>${thNombre}<th>Email</th><th>Comunidad atribuida</th><th>Fecha 1º contacto</th><th>Etiquetas</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Contacto (ID)</th>${thNombre}<th>Email</th><th>Comunidad atribuida</th><th>Fecha 1º contacto</th><th>Etiquetas</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; color:var(--text-muted)">
         <span>${filtrados.length} usuario(s) — página ${pagina} de ${totalPaginas}</span>
         <div style="display:flex; gap:6px">
@@ -498,14 +506,14 @@ function wireBaseLimpia(){
 function renderDedup(eventos, comunidadesById){
   const rows = eventos.length
     ? eventos.map(e => `<tr>
-        <td class="mono">${esc(e.telefono_id)}</td>
+        <td class="mono">${canalPill(e.telefono_id)} ${esc(e.telefono_id)}</td>
         <td>${esc(comunidadesById.get(e.comunidad_atribuida_id) || '—')}</td>
         <td class="mono">${fmtFecha(e.fecha_primer_contacto)}</td>
       </tr>`).join('')
     : `<tr class="empty-row"><td colspan="3">Sin eventos todavía.</td></tr>`;
   return `<div class="card"><h3>Primer evento por teléfono</h3>
     <div class="sub">Vista técnica/auditable — permite verificar qué comunidad "ganó" la atribución cuando un usuario intentó unirse a varias.</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Teléfono (ID)</th><th>Comunidad atribuida</th><th>Fecha de primer contacto</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Contacto (ID)</th><th>Comunidad atribuida</th><th>Fecha de primer contacto</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
 
@@ -525,7 +533,7 @@ function filaAceptada(e, comunidadesById){
   return `<tr>
     <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}<div class="sub" style="margin:0">${haceCuanto(e.recibido_en)}</div></td>
     <td><span class="pill pill-ok">Aceptado</span></td>
-    <td class="mono">${esc(e.telefono_id)}</td>
+    <td class="mono">${canalPill(e.telefono_id)} ${esc(idVisible(e.telefono_id, p))}</td>
     <td>${esc(nombre)}</td>
     <td>${comunidad ? esc(comunidad) : '<span class="pill badge-warn">Sin comunidad</span>'}</td>
     <td class="codeblock">${esc(p.community_id ?? '—')}</td>
@@ -536,7 +544,7 @@ function filaRechazada(i){
   return `<tr>
     <td class="mono" style="white-space:nowrap">${fmtFecha(i.creado_en)}<div class="sub" style="margin:0">${haceCuanto(i.creado_en)}</div></td>
     <td><span class="pill pill-bad">Rechazado ${esc(i.estado)}</span></td>
-    <td class="mono">${esc(i.telefono_id || '—')}</td>
+    <td class="mono">${i.telefono_id ? canalPill(i.telefono_id) + " " + esc(i.telefono_id) : "—"}</td>
     <td>—</td>
     <td>—</td>
     <td class="codeblock">${esc(i.comunidad_recibida ?? '—')}</td>
@@ -565,7 +573,7 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro){
       <label style="font-size:12px; color:var(--text-muted); display:flex; gap:6px; align-items:center"><input type="checkbox" id="crudoAuto"> Actualizar cada 30 s</label>
       <span class="sub" style="margin:0">cargado ${fmtFecha(new Date())}</span>
     </div>
-    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Teléfono</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Contacto</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
 let crudoTimer = null;

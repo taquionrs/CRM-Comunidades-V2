@@ -43,7 +43,7 @@
 <body>
 
 <h1>SOP-001 · Alta de un cliente en el CRM de Comunidades V2</h1>
-<div class="meta"><b>Versión:</b> 1.1 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
+<div class="meta"><b>Versión:</b> 1.2 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
 
 <div class="box tip"><b class="t">Para qué sirve este procedimiento</b>
 Cada cliente de Taquion que tenga una comunidad entra al mismo CRM. Este SOP explica cómo darlo de alta, cómo dejar su flow de ManyChat listo para enviar los datos al CRM, y cómo comprobar con una prueba real que todo llega a la pestaña <b>Data_Cruda</b>. Tiempo estimado: 45 a 60 minutos.</div>
@@ -141,6 +141,9 @@ where c.slug = 'slug-del-cliente';</pre>
   <li>Apretá <b>Guardar</b> en la solicitud y después en el nodo.</li>
 </ul>
 
+<div class="box tip"><b class="t">Flows de Instagram</b>
+El mismo POST sirve para Instagram: se arma igual (mismos encabezados y mismo cuerpo, con el chip de Full Contact Data). Un contacto de Instagram no tiene teléfono: el CRM lo identifica por su identificador de Instagram y lo guarda como <code>ig:…</code>. En el panel se distingue con la etiqueta <b>Instagram</b>. La misma persona en WhatsApp y en Instagram cuenta como dos.</div>
+
 <h3>4.3 Planilla de Google (respaldo)</h3>
 <p>En la acción de Google Sheets, el mapeo recomendado es: Nombre ← <i>Nombre completo</i>, Teléfono ← <i>WhatsApp ID</i>, Localidad ← el campo de localidad, Estado ← <code>Estado_Comunidad</code>, y una columna por etiqueta ← la etiqueta del mismo nombre. No existe un campo de fecha en ManyChat para mapear: la fecha del CRM es la hora en que llega el POST.</p>
 
@@ -160,7 +163,7 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
 <table>
   <tr><th style="width:22%">Columna</th><th style="width:40%">Qué tiene que decir</th><th>Si no coincide</th></tr>
   <tr><td>Recibido</td><td>La hora de la prueba, con “hace unos segundos”.</td><td>No llegó: ver el paso 6.</td></tr>
-  <tr><td>Teléfono</td><td>Tu número con código de país, <b>solo dígitos</b> (sin “+”).</td><td>Si falta, el contacto no es de WhatsApp.</td></tr>
+  <tr><td>Contacto</td><td>El teléfono con código de país, <b>solo dígitos</b> (sin “+”), y la etiqueta <b>WhatsApp</b>. Si la prueba fue por Instagram: la etiqueta <b>Instagram</b> y el identificador <code>ig:…</code> (o el @usuario).</td><td>Si falta, el contacto no trae teléfono ni identificador de Instagram.</td></tr>
   <tr><td>Nombre</td><td>El nombre de usuario de WhatsApp de la persona, tal como lo envía ManyChat. Puede ser un alias, un emoji o un punto (<b>no es un dato verificado</b>).</td><td>Un punto o vacío no es un error del CRM.</td></tr>
   <tr><td>Comunidad asignada</td><td>La comunidad que escribiste en la prueba.</td><td>Otra comunidad: la condición del flow usa “Es” (paso 4.1).</td></tr>
   <tr><td>Texto recibido</td><td>El nombre limpio de la comunidad (por ejemplo <code>Boedo</code>), no la frase completa.</td><td>Si llega la frase, el POST está antes de las acciones de rama.</td></tr>
@@ -176,7 +179,7 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
   <tr><td>Llegó la bienvenida pero no hay fila en Data_Cruda</td><td>La persona no tocó “Me sumo” (el nodo final no corrió), o el POST fue rechazado.</td><td>Tocar “Me sumo”. Si ya lo tocó, abrir Data_Cruda → filtro <b>Rechazados</b>: ahí aparece el código y el motivo. Compararlos con los códigos de abajo.</td></tr>
   <tr><td>Código <b>401</b></td><td>Secreto o slug incorrectos (o cliente inactivo).</td><td>Volver a pegar el secreto desde el gestor, sin espacios; revisar que <code>x-cliente</code> sea el slug exacto.</td></tr>
   <tr><td>Código <b>404</b> “Comunidad no encontrada”</td><td>El nombre que llega en <code>community_id</code> no existe en ese cliente.</td><td>Igualar el nombre del flow con el del CRM (mayúsculas, tildes, espacios).</td></tr>
-  <tr><td>Código <b>400</b></td><td>No llegó un teléfono (contacto de Instagram, sin WhatsApp) o falta <code>community_id</code>.</td><td>El POST solo funciona con contactos de WhatsApp. Revisar que el chip del cuerpo no esté vacío.</td></tr>
+  <tr><td>Código <b>400</b></td><td>No llegó ni teléfono (WhatsApp) ni <code>ig_id</code> (Instagram), o falta <code>community_id</code>.</td><td>El motivo en Data_Cruda lista los campos del contacto que sí llegaron. Revisar que el chip del cuerpo no esté vacío.</td></tr>
   <tr><td>Código <b>501</b></td><td>El cliente no tiene secreto cargado.</td><td>Repetir el paso 3.</td></tr>
   <tr><td>Aparece en la comunidad equivocada (siempre la última)</td><td>Condiciones con “Es” y frase exacta (o con emoji).</td><td>Cambiar a “Contiene” con la palabra sola (paso 4.1).</td></tr>
   <tr><td>Hay fila en la planilla pero no en el CRM</td><td>El POST no está en el nodo final, o los cambios no se publicaron.</td><td>Revisar el nodo final y apretar Actualizar.</td></tr>
