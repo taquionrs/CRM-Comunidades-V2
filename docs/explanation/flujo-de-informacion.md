@@ -82,7 +82,7 @@ El estadio vive en `usuario_curado.estado`, por cliente. Cada cambio se registra
 
 ## Reglas del modelo
 
-- El teléfono identifica a la persona; la atribución es por cliente. La misma persona en dos clientes son dos filas, cada una con su comunidad de origen.
+- La persona se identifica por su teléfono (WhatsApp) o su ID de Instagram (`ig:<id>`); la atribución es por cliente. La misma persona en dos clientes son dos filas, cada una con su comunidad de origen.
 - Una comunidad, un evento y una métrica siempre pertenecen al mismo cliente (FK compuesta).
 - El gasto de Meta se asigna a una comunidad por el nombre exacto del adset dentro de ese cliente.
 - El selector solo mostrará los clientes habilitados para el usuario (`usuario_cliente`) cuando se active el login (diferido).

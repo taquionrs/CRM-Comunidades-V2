@@ -37,7 +37,7 @@ Para probarlo, una vez deployada la función y dado de alta el cliente `todo-un-
 
 El flow no tiene disparador ni mensajes: cuando el POST esté probado, se copia esta acción al final del flow real de comunidades (después de las acciones de cada rama).
 
-**URL real de la función** (proyecto `crm-comunidades`, ref `zyyxsammrryhfrgfwlxr`): `https://zyyxsammrryhfrgfwlxr.supabase.co/functions/v1/manychat-webhook`. Es la que va en lugar del marcador `REEMPLAZAR-POR-TU-PROYECTO`. Solo funciona una vez deployada la función: al 2026-09-29 el proyecto no tiene ninguna Edge Function deployada.
+**URL real de la función** (proyecto `crm-comunidades`, ref `zyyxsammrryhfrgfwlxr`): `https://zyyxsammrryhfrgfwlxr.supabase.co/functions/v1/manychat-webhook`. Es la que va en lugar del marcador `REEMPLAZAR-POR-TU-PROYECTO`. La función está deployada desde el 2026-09-30 (la versión actual, con soporte de Instagram y registro de rechazos, desde el 2026-10-02).
 
 ## Cliente en producción: Cortado en Jarrito (2026-10-01)
 

@@ -6,7 +6,7 @@ Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Su
 
 ## Modelo de cliente
 
-Un **cliente** es una cuenta de ManyChat con sus propias comunidades. El teléfono identifica a la persona, pero la atribución First-Contact, las métricas y las vistas se calculan **dentro de cada cliente**: la misma persona en dos clientes son dos filas independientes. Los hijos de `comunidad` guardan también `cliente_id`, con una FK compuesta `(comunidad_id, cliente_id)` que impide apuntar a una comunidad de otro cliente.
+Un **cliente** es una cuenta de ManyChat con sus propias comunidades. La persona se identifica por su teléfono (WhatsApp) o por su ID de Instagram (`ig:<id>`), pero la atribución First-Contact, las métricas y las vistas se calculan **dentro de cada cliente**: la misma persona en dos clientes son dos filas independientes. Los hijos de `comunidad` guardan también `cliente_id`, con una FK compuesta `(comunidad_id, cliente_id)` que impide apuntar a una comunidad de otro cliente.
 
 ## Tablas
 

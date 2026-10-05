@@ -19,6 +19,7 @@ Organizada según [Diátaxis](https://diataxis.fr/): agrupa por lo que necesitá
 - [Agregar un cliente](how-to/agregar-un-cliente.md)
 - [Configurar Windsor.ai](how-to/configurar-windsor-ai.md)
 - [Configurar el webhook y la nominación de ManyChat](how-to/configurar-webhook-manychat.md)
+- [SOP-001: alta de un cliente en el CRM (PDF)](sop/SOP-001-alta-de-cliente.pdf), con la prueba final en Data_Cruda
 
 ## Referencia
 
