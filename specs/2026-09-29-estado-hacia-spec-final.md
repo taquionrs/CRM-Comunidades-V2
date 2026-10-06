@@ -1,14 +1,16 @@
 ---
 id: crm-v2-estado-2026-09-29
 título: CRM de Comunidades V2 — recapitulación de estado hacia el spec final
-estado: borrador — para revisión
-última actualización: 2026-09-29
+estado: vigente — fotografía del 2026-09-29 con actualizaciones fechadas; el estado actual está en la sección 3 terdecies
+última actualización: 2026-10-05
 fuente(s): carpeta local SDD-TAQUION, repo MarketingTaquion/CRM-Comunidades-V2, cuenta de ManyChat (workspace fb5616665), documento de Jaz (2026-09-24)
 ---
 
 # CRM de Comunidades V2 — dónde estamos y qué falta para el spec final
 
 Este documento no reemplaza a [`2026-09-25-v2-desde-cero.md`](2026-09-25-v2-desde-cero.md) (spec fundacional). Es una fotografía del 2026-09-29 que cruza tres fuentes: el código y las specs locales, el repo en GitHub y la cuenta de ManyChat. Termina con lo que hay que resolver para poder cerrar el spec final.
+
+> **Nota (2026-10-05):** las secciones 0 a 5 describen cómo estaba el proyecto el 2026-09-29 y se conservan como registro. Lo que cambió después está en las secciones 3 ter en adelante, fechadas. **El estado vigente y el backlog están en la sección 3 terdecies, al final.**
 
 ## 0. Cómo se revisó y qué no se pudo verificar
 
@@ -410,4 +412,39 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Rechazos más claros:** si no llega ni teléfono ni `ig_id`, el motivo (visible en Data_Cruda → Rechazados) lista los nombres de los campos del contacto que sí llegaron (nunca los valores).
 - **Panel:** etiqueta de canal (WhatsApp / Instagram) en Data_Cruda, Base_Limpia y Data_Deduplicada; en Data_Cruda un contacto de Instagram se muestra como @usuario si ManyChat lo envía. Las columnas "Teléfono" pasaron a "Contacto".
 - **Probado** con un cliente temporal (eliminado): Instagram con `ig_id` numérico y como texto, WhatsApp, ambos a la vez (gana WhatsApp), repetido sin duplicar persona, sin identificador y `ig_id` corto (400).
-- **Limitación conocida:** la misma persona en WhatsApp e Instagram cuenta como dos. Pendiente: confirmar con una ejecución real de Instagram qué campos manda ManyChat (en especial `ig_id` e `ig_username`).
+- **Limitación conocida:** la misma persona en WhatsApp e Instagram cuenta como dos. La confirmación con una ejecución real de Instagram quedó **resuelta el 2026-10-05**, ver la sección 3 duodecies.
+
+## 3 duodecies. Instagram confirmado con un caso real (2026-10-05)
+
+- **Qué se probó:** primera ejecución real del flow de Instagram de Cortado ("Test Comunidades Cortado en Jarr IG") después de la PR #4. El CRM la aceptó y apareció en Data_Cruda con la etiqueta Instagram.
+- **Qué mandó ManyChat:** `contact.ig_id` llegó como **número JSON** de 16 dígitos (por eso fue necesaria la lectura del id desde el texto crudo: con 17 dígitos `JSON.parse` lo redondea), `contact.ig_username` y `contact.name` con valor, y el resto del contacto igual que en WhatsApp (`whatsapp_phone` y `phone` sin valor).
+- **Resultado en el CRM:** clave `ig:<16 dígitos>`, persona creada en `usuario_curado`, comunidad enviada por el flow (`Villa Devoto`) asignada correctamente, estado `clic_en_grupo`.
+- **Queda cerrado** el pendiente de la PR #4 (confirmar los campos que manda ManyChat desde Instagram).
+- **Sigue abierto:** la misma persona en WhatsApp e Instagram cuenta como dos.
+
+## 3 terdecies. Estado vigente y backlog (2026-10-05)
+
+**En producción**
+- Panel en `crm-comunidades-v2.vercel.app` (Vercel, despliegue automático desde `master`): 5 pestañas, selector de cliente, filtros de fecha, Data_Cruda como registro con filtro Aceptados / Rechazados, etiqueta de canal (WhatsApp / Instagram) y aviso del origen del campo Nombre.
+- Base de datos (Supabase `crm-comunidades`): migraciones `001` a `004`, `006`, `007` y `008` aplicadas. `005` (login) escrita, sin aplicar.
+- Edge Functions deployadas: `manychat-webhook`, `windsor-sync` (sin API key cargada) y `nominacion-sync` (sin `MANYCHAT_API_KEY`). `panel-data` **no** está deployada: espera al login.
+- Clientes: **Cortado en Jarrito** (probado de punta a punta por WhatsApp e Instagram) y **Todo un País** (configurado con POST publicado; sin tráfico porque su WhatsApp no está activo).
+- SOP-001 (`docs/sop/`) con el procedimiento de alta de un cliente.
+
+**Backlog**
+
+| Prioridad | Ítem |
+|---|---|
+| P1 | Rotar los secretos del webhook (el de Todo un País quedó visible en una captura) |
+| P1 | Login, migración `005` y `panel-data` (hoy el panel muestra teléfonos y nombres a quien tenga la URL) |
+| P1 | Corregir las condiciones de los flows (usar "Contiene" con la palabra sola, no "Es" con la frase completa): Cortado WhatsApp, Cortado Instagram y Todo un País |
+| P2 | Activar Todo un País y probarlo con un contacto real |
+| P2 | Dar de alta Growing Ideas (cuenta `fb5347078`) |
+| P2 | Recargar el monedero de WhatsApp de Cortado |
+| P2 | Datos de Meta Ads: cargar la API key de Windsor.ai y confirmar el campo de conversaciones |
+| P2 | Carga manual de miembros iniciales y finales (MI / MF) |
+| P2 | Panel: aclarar los cuadros "miembros reales" de Base_Limpia y avisar cuando MF está sin cargar |
+| P2 | Política de retención de `webhook_intento` |
+| P3 | Decisiones con Jaz: estadios posteriores a `clic_en_grupo`, fechas para MI / MF, eventos intermedios del bot, nominación por API o por POST, unificar personas entre WhatsApp e Instagram |
+| P3 | Migrar de la clave `service_role` a las nuevas claves de Supabase; evaluar el plan pago (el Free pausa proyectos inactivos) |
+| P3 | Evento a la API de conversiones de Meta en los clientes que lo necesiten (hoy solo Cortado) |
