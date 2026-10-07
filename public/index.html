@@ -540,15 +540,21 @@ function filaAceptada(e, comunidadesById){
     <td><details><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details></td>
   </tr>`;
 }
+// Nombre del contacto dentro de un payload de ManyChat (aceptado o rechazado).
+function nombreDePayload(p){
+  const c = (p && p.contact) || {};
+  return c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '';
+}
 function filaRechazada(i){
+  const p = i.payload || null; // los rechazos anteriores a db/009 no guardaron el contenido
   return `<tr>
     <td class="mono" style="white-space:nowrap">${fmtFecha(i.creado_en)}<div class="sub" style="margin:0">${haceCuanto(i.creado_en)}</div></td>
     <td><span class="pill pill-bad">Rechazado ${esc(i.estado)}</span></td>
-    <td class="mono">${i.telefono_id ? canalPill(i.telefono_id) + " " + esc(i.telefono_id) : "—"}</td>
-    <td>—</td>
+    <td class="mono">${i.telefono_id ? canalPill(i.telefono_id) + " " + esc(idVisible(i.telefono_id, p)) : "—"}</td>
+    <td>${esc(nombreDePayload(p) || '—')}</td>
     <td>—</td>
     <td class="codeblock">${esc(i.comunidad_recibida ?? '—')}</td>
-    <td style="font-size:12px; color:var(--danger); max-width:280px">${esc(i.motivo)}</td>
+    <td style="font-size:12px; max-width:300px"><div style="color:var(--danger)">${esc(i.motivo)}</div>${p ? `<details style="margin-top:6px"><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details>` : ''}</td>
   </tr>`;
 }
 const FILTROS_CRUDO = [['todos','Todos'], ['aceptados','Aceptados'], ['rechazados','Rechazados']];
@@ -565,7 +571,7 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro){
   const chips = FILTROS_CRUDO.map(([k, label]) =>
     `<button class="btn${filtro === k ? ' btn-on' : ''}" type="button" data-crudo-filtro="${k}">${label} (${conteo[k]})</button>`).join('');
   return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
-    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido. Nunca se edita ni se borra una fila acá. No se registran los intentos que no identifican a un cliente (headers ausentes o cliente inexistente).</div>
+    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido. Nunca se edita ni se borra una fila acá. Los rechazos guardan el contenido completo del POST (botón Ver JSON). Los que no identifican a un cliente (encabezados ausentes o cliente inexistente) se guardan aparte y no se ven acá.</div>
     ${notaNombre}
     <div style="display:flex; gap:8px; margin:12px 0 0; flex-wrap:wrap">${chips}</div>
     <div style="display:flex; gap:14px; align-items:center; margin:10px 0 12px; flex-wrap:wrap">
@@ -609,11 +615,15 @@ function construirCsv(eventos, intentos, comunidadesById, sep){
         celdaCsv(c.last_input_text), celdaCsv(''), celdaCsv(JSON.stringify(p)),
       ] };
     }),
-    ...intentos.map(i => ({ t: new Date(i.creado_en).getTime(), celdas: [
-      celdaCsv(fechaAr(i.creado_en)), celdaCsv(i.creado_en), celdaCsv('Rechazado'), celdaCsv(i.estado),
-      celdaCsv(i.telefono_id ? (esInstagram(i.telefono_id) ? 'Instagram' : 'WhatsApp') : ''), celdaContacto(i.telefono_id), celdaCsv(''),
-      celdaCsv(''), celdaCsv(''), celdaCsv(i.comunidad_recibida), celdaCsv(''), celdaCsv(i.motivo), celdaCsv(''),
-    ] })),
+    ...intentos.map(i => {
+      const p = i.payload || null, c = (p && p.contact) || {};
+      return { t: new Date(i.creado_en).getTime(), celdas: [
+        celdaCsv(fechaAr(i.creado_en)), celdaCsv(i.creado_en), celdaCsv('Rechazado'), celdaCsv(i.estado),
+        celdaCsv(i.telefono_id ? (esInstagram(i.telefono_id) ? 'Instagram' : 'WhatsApp') : ''), celdaContacto(i.telefono_id), celdaCsv(c.ig_username),
+        celdaCsv(nombreDePayload(p)), celdaCsv(''), celdaCsv(i.comunidad_recibida), celdaCsv(c.last_input_text), celdaCsv(i.motivo),
+        celdaCsv(p ? JSON.stringify(p) : ''),
+      ] };
+    }),
   ].sort((a, b) => b.t - a.t);
   return [COLUMNAS_CSV.map(celdaCsv).join(sep), ...items.map(x => x.celdas.join(sep))].join('\r\n') + '\r\n';
 }

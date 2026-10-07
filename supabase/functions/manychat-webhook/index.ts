@@ -45,10 +45,12 @@
 // "ig:<id>" en la misma columna telefono_id; el canal se deduce del prefijo. Si llega teléfono, manda el
 // teléfono. La respuesta incluye `canal` ("whatsapp" | "instagram").
 //
-// Rechazos (PR #2): si el cliente está identificado (slug existente) y el POST se rechaza, la
-// causa queda en crm_comunidades_v2.webhook_intento (db/007) y se muestra en Data_Cruda con el
-// filtro "Rechazados". La respuesta HTTP no cambia. No se anotan los intentos sin cliente
-// identificable (headers ausentes o slug inexistente) ni se guarda nunca el secreto recibido.
+// Rechazos (PR #2 y PR #7): si el POST se rechaza, el contenido COMPLETO queda guardado para poder
+// recuperarlo. Con cliente identificado (slug existente) va a crm_comunidades_v2.webhook_intento (db/007,
+// columna payload en db/009) y se muestra en Data_Cruda con el filtro "Rechazados". Sin cliente identificable
+// (headers ausentes o slug inexistente) va a webhook_intento_sin_cliente, que el panel no lee. La respuesta
+// HTTP no cambia. Nunca se guarda el secreto: viaja en un header, no en el body. Hay topes de tamaño y de
+// cantidad (ver las constantes) para que el ruido de internet no llene la base.
 //
 // Deploy: `supabase functions deploy manychat-webhook`.
 
@@ -95,6 +97,26 @@ export function igIdDesdeTexto(texto: string): string | null {
   return m ? m[1] : null;
 }
 
+// Topes para que los rechazos no llenen la base (ver rechazar / rechazarSinCliente).
+const MAX_BODY_GUARDADO = 65536; // bytes; un contacto completo de ManyChat pesa ~2 KB
+const TOPE_SIN_CLIENTE_POR_HORA = 300;
+const TOPE_401_CADA_10_MIN = 200;
+
+// Contenido de un POST rechazado, listo para guardar como jsonb. Si es JSON válido se guarda tal cual
+// (más `_ig_id_exacto`, porque JSON.parse redondea los ids de Instagram de 17 dígitos). Si no es JSON o es
+// demasiado grande, se guarda el comienzo del texto con una marca. Nunca incluye headers ni el secreto.
+export function payloadDeRechazo(texto: string): unknown {
+  if (!texto) return null;
+  if (texto.length > MAX_BODY_GUARDADO) return { _truncado: true, _bytes: texto.length, _inicio: texto.slice(0, 4000) };
+  let parsed: unknown;
+  try { parsed = JSON.parse(texto); } catch { return { _no_es_json: true, _texto: texto.slice(0, 4000) }; }
+  const igExacto = igIdDesdeTexto(texto);
+  if (igExacto && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return { ...(parsed as Record<string, unknown>), _ig_id_exacto: igExacto };
+  }
+  return parsed;
+}
+
 // Identificador de Instagram de ManyChat → solo dígitos (mínimo 5), o null si no sirve.
 export function idInstagram(valor: unknown): string | null {
   if (typeof valor !== "string" && typeof valor !== "number") return null;
@@ -139,15 +161,45 @@ Deno.serve(async (req) => {
     return json({ error: "Método no soportado, usar POST" }, 405);
   }
 
+  // El texto del body se lee SIEMPRE y primero (PR #7): si el POST se rechaza por cualquier motivo, el
+  // contenido completo se guarda para poder recuperarlo. Un error de configuración (cliente, secreto o
+  // comunidad mal escritos) no tiene que hacer perder a las personas que entraron mientras tanto.
+  const textoCrudo = await req.text().catch(() => "");
+
   const slug = req.headers.get("x-cliente");
   const secretRecibido = req.headers.get("x-webhook-secret");
-  if (!slug || !secretRecibido) {
-    return json({ error: "Faltan los headers x-cliente y x-webhook-secret" }, 401);
-  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
+
+  // Rechazo SIN cliente identificable (headers ausentes o x-cliente que no existe): no se puede atribuir a
+  // ningún cliente, así que va a una tabla aparte que el panel no lee (solo se consulta por SQL). Tiene un
+  // tope por hora para que el ruido de internet no llene la base. La respuesta es la de siempre.
+  const rechazarSinCliente = async (status: number, error: string, motivo: string) => {
+    try {
+      const t = admin.schema("crm_comunidades_v2").from("webhook_intento_sin_cliente");
+      const { count } = await t.select("id", { count: "exact", head: true })
+        .gte("creado_en", new Date(Date.now() - 3600_000).toISOString());
+      if ((count ?? 0) < TOPE_SIN_CLIENTE_POR_HORA) {
+        await admin.schema("crm_comunidades_v2").from("webhook_intento_sin_cliente").insert({
+          slug_recibido: slug ? slug.slice(0, 80) : null,
+          estado: status,
+          motivo: motivo.slice(0, 300),
+          payload: payloadDeRechazo(textoCrudo),
+        });
+      }
+    } catch (_) { /* el registro es secundario */ }
+    return json({ error }, status);
+  };
+
+  if (!slug || !secretRecibido) {
+    return await rechazarSinCliente(
+      401,
+      "Faltan los headers x-cliente y x-webhook-secret",
+      "Faltan los encabezados x-cliente y/o x-webhook-secret",
+    );
+  }
 
   const { data: cliente, error: errCliente } = await admin
     .schema("crm_comunidades_v2")
@@ -158,12 +210,13 @@ Deno.serve(async (req) => {
   if (errCliente) return json({ error: errCliente.message }, 500);
 
   // Mismo mensaje para "no existe" y "secreto incorrecto": no permite enumerar clientes.
-  // Si el slug no corresponde a ningún cliente no se registra nada (no hay a quién atribuirlo).
-  if (!cliente) return json({ error: "Cliente o secret inválido" }, 401);
+  if (!cliente) {
+    return await rechazarSinCliente(401, "Cliente o secret inválido", `El cliente indicado en x-cliente no existe`);
+  }
 
   // Rechazo de un cliente conocido: se anota en webhook_intento (para el filtro "Rechazados" de
-  // Data_Cruda) y se responde igual que antes. Nunca se guarda el secreto ni el body completo, y un
-  // fallo al anotar no cambia la respuesta.
+  // Data_Cruda) con el contenido completo del POST, y se responde igual que antes. Nunca se guarda el
+  // secreto (viaja en un header, no en el body), y un fallo al anotar no cambia la respuesta.
   const rechazar = async (
     status: number,
     error: string,
@@ -171,13 +224,25 @@ Deno.serve(async (req) => {
     ctx: { comunidad?: string | null; telefono?: string | null } = {},
   ) => {
     try {
-      await admin.schema("crm_comunidades_v2").from("webhook_intento").insert({
-        cliente_id: cliente.id,
-        estado: status,
-        motivo: motivo.slice(0, 300),
-        comunidad_recibida: ctx.comunidad ? ctx.comunidad.slice(0, 200) : null,
-        telefono_id: ctx.telefono ?? null,
-      });
+      // Con secreto incorrecto cualquiera que conozca el slug puede mandar POST: se limita cuántos se anotan.
+      let anotar = true;
+      if (status === 401) {
+        const { count } = await admin.schema("crm_comunidades_v2").from("webhook_intento")
+          .select("id", { count: "exact", head: true })
+          .eq("cliente_id", cliente.id).eq("estado", 401)
+          .gte("creado_en", new Date(Date.now() - 600_000).toISOString());
+        anotar = (count ?? 0) < TOPE_401_CADA_10_MIN;
+      }
+      if (anotar) {
+        await admin.schema("crm_comunidades_v2").from("webhook_intento").insert({
+          cliente_id: cliente.id,
+          estado: status,
+          motivo: motivo.slice(0, 300),
+          comunidad_recibida: ctx.comunidad ? ctx.comunidad.slice(0, 200) : null,
+          telefono_id: ctx.telefono ?? null,
+          payload: payloadDeRechazo(textoCrudo),
+        });
+      }
     } catch (_) { /* el registro es secundario */ }
     return json({ error }, status);
   };
@@ -194,9 +259,8 @@ Deno.serve(async (req) => {
     return await rechazar(401, "Cliente o secret inválido", "Secreto incorrecto");
   }
 
-  // Se lee el texto crudo además del JSON: los ig_id de Instagram tienen 17 dígitos y, si llegan como
-  // número JSON, JSON.parse los redondea (…123 → …124). El id exacto se saca del texto original.
-  const textoCrudo = await req.text().catch(() => "");
+  // El texto crudo (leído al principio) se usa además del JSON: los ig_id de Instagram tienen 17 dígitos y,
+  // si llegan como número JSON, JSON.parse los redondea (…123 → …124). El id exacto se saca del texto original.
   const body = (() => { try { return JSON.parse(textoCrudo); } catch { return null; } })();
   if (!body || typeof body !== "object") {
     return await rechazar(400, "El body tiene que ser un objeto JSON", "El body no es un objeto JSON");

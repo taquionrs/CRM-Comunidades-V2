@@ -1,6 +1,6 @@
 # Referencia: esquema de base de datos
 
-Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql), [`006`](../../db/006_rango_fechas_y_clics.sql) y [`007`](../../db/007_webhook_intento.sql) y [`008`](../../db/008_identificador_instagram.sql).
+Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql), [`006`](../../db/006_rango_fechas_y_clics.sql), [`007`](../../db/007_webhook_intento.sql), [`008`](../../db/008_identificador_instagram.sql) y [`009`](../../db/009_rechazos_guardan_json.sql).
 
 > Estado: `004` (clientes) y `006` (fechas, clics y teléfono) están **aplicadas** desde el 2026-09-30. `005` (acceso por usuario) está escrita y **sin aplicar**; se aplica al final, junto con el login.
 
@@ -74,9 +74,24 @@ Intentos que el webhook de ManyChat **rechazó**, de un cliente identificado. Se
 | `motivo` | text | Causa en palabras ("Secreto incorrecto", "Comunidad no encontrada…") |
 | `comunidad_recibida` | text, nullable | Lo que llegó en `community_id`, si llegó |
 | `telefono_id` | text, nullable | Solo si se llegó a leer un teléfono |
+| `payload` | jsonb, nullable | (009) **Contenido completo del POST rechazado** (el JSON de ManyChat). Si no era JSON: `{_no_es_json, _texto}`; si pesaba más de 64 KB: `{_truncado, _bytes, _inicio}`. Incluye `_ig_id_exacto` cuando había `ig_id` (el JSON redondea los ids de 17 dígitos). Es `null` en los rechazos anteriores a 009 |
 | `creado_en` | timestamptz | Hora del servidor |
 
-No guarda el secreto recibido ni el body. No registra los intentos sin cliente identificable (headers ausentes o `x-cliente` inexistente): no se pueden atribuir y serían ruido. Solo lo escribe la función `manychat-webhook`. No tiene política de retención todavía.
+Nunca guarda el secreto: viaja en un header, no en el body. Solo lo escribe la función `manychat-webhook`. Con secreto incorrecto la función anota como máximo 200 intentos cada 10 minutos por cliente, para que quien conozca el slug no pueda llenar la tabla. No tiene política de retención todavía.
+
+### `webhook_intento_sin_cliente` (009)
+Rechazos donde **no se puede identificar al cliente** (encabezados ausentes, o `x-cliente` que no existe, por ejemplo un slug mal escrito en el flow). Guardan el contenido completo para poder recuperarlo por SQL. **El panel no la lee** (sin políticas ni permisos para `anon` / `authenticated`): se consulta con el SQL Editor.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid, PK | |
+| `slug_recibido` | text, nullable | Lo que llegó en `x-cliente` (recortado a 80 caracteres) |
+| `estado` | int | Código HTTP (siempre 401 por ahora) |
+| `motivo` | text | "Faltan los encabezados…" o "El cliente indicado en x-cliente no existe" |
+| `payload` | jsonb, nullable | Igual que en `webhook_intento` |
+| `creado_en` | timestamptz | Hora del servidor |
+
+Tope: 300 filas por hora, para que el ruido de internet no llene la base.
 
 ### `meta_ads_metrica`
 | Columna | Tipo | Notas |
