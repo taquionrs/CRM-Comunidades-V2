@@ -15,7 +15,7 @@ Hermano de [`crm-comunidades`](https://github.com/MarketingTaquion/CRM-Comunidad
 
 - **Producción**: el panel está en `crm-comunidades-v2.vercel.app` (Vercel, se despliega solo al fusionar en `master`).
 - **Clientes**: **Cortado en Jarrito**, probado de punta a punta por WhatsApp e Instagram, y **Todo un País**, configurado pero sin tráfico (su WhatsApp no está activo).
-- **Frontend**: `public/index.html` — HTML/CSS/JS estático, sin build ni framework. Selector de cliente, filtro por fechas en Control_Comunidades, Data_Cruda como registro de eventos con filtro Aceptados / Rechazados, etiqueta de canal (WhatsApp / Instagram) y todo el HTML dinámico escapado.
+- **Frontend**: `public/index.html` — HTML/CSS/JS estático, sin build ni framework. Selector de cliente, filtro por fechas en Control_Comunidades, Data_Cruda como registro de eventos con filtro Aceptados / Rechazados y exportación a CSV de toda la historia del cliente, etiqueta de canal (WhatsApp / Instagram) y todo el HTML dinámico escapado.
 - **Login**: **todavía no tiene**; se agrega al final del proyecto. Hasta entonces el panel lee con la lectura abierta de `db/003`: quien tenga la URL ve teléfonos y nombres. No compartirla fuera del equipo.
 - **Base de datos**: schema `crm_comunidades_v2`, en el **mismo proyecto Supabase que V1**. Migraciones `001` a `004`, `006`, `007` y `008` aplicadas; `005` (acceso por usuario, con el login) **escrita y sin aplicar**. Ver [`docs/reference/esquema-de-base-de-datos.md`](docs/reference/esquema-de-base-de-datos.md).
 - **Edge Functions**:

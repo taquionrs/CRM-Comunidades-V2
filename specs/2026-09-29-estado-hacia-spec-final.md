@@ -448,3 +448,12 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 | P3 | Decisiones con Jaz: estadios posteriores a `clic_en_grupo`, fechas para MI / MF, eventos intermedios del bot, nominación por API o por POST, unificar personas entre WhatsApp e Instagram |
 | P3 | Migrar de la clave `service_role` a las nuevas claves de Supabase; evaluar el plan pago (el Free pausa proyectos inactivos) |
 | P3 | Evento a la API de conversiones de Meta en los clientes que lo necesiten (hoy solo Cortado) |
+
+## 3 quaterdecies. PR #6 — Exportar Data_Cruda a CSV (2026-10-07)
+
+- **Qué:** botón **Exportar CSV (toda la base)** en Data_Cruda. Descarga **toda la historia del cliente elegido** (eventos aceptados y rechazados), no solo las 200 filas visibles: trae los datos de a 1000 por consulta hasta completar.
+- **Columnas:** fecha y hora (Argentina y UTC), resultado (Aceptado / Rechazado), código HTTP, canal, contacto, usuario de Instagram, nombre, comunidad asignada, comunidad enviada, mensaje de la persona (`last_input_text`), motivo del rechazo y el JSON completo del payload.
+- **Formato:** UTF-8 con BOM (acentos correctos en Excel), saltos de línea CRLF, todas las celdas entre comillas, separador a elección (`;` para Excel en español, `,` estándar). Más reciente primero. Archivo `data_cruda_<cliente>_<fecha>.csv`.
+- **Seguridad del archivo:** las celdas que empiezan con `=`, `+`, `-` o `@` se prefijan con `'` para que Excel no las ejecute como fórmula (los nombres de perfil los escribe cualquiera). Los teléfonos van como `="…"` para que Excel no los muestre como `5,49E+12`.
+- **Alcance:** un cliente por archivo (el elegido en el selector). Mientras exporta se pausa el refresco automático.
+- **Ojo:** el archivo contiene datos personales y el panel todavía no tiene login; quien tenga la URL puede exportarlo. No compartir ni dejar los archivos sueltos.

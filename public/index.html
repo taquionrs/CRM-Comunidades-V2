@@ -565,7 +565,7 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro){
   const chips = FILTROS_CRUDO.map(([k, label]) =>
     `<button class="btn${filtro === k ? ' btn-on' : ''}" type="button" data-crudo-filtro="${k}">${label} (${conteo[k]})</button>`).join('');
   return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
-    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — últimos 200 de cada tipo. Nunca se edita ni se borra una fila acá. No se registran los intentos que no identifican a un cliente (headers ausentes o cliente inexistente).</div>
+    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido. Nunca se edita ni se borra una fila acá. No se registran los intentos que no identifican a un cliente (headers ausentes o cliente inexistente).</div>
     ${notaNombre}
     <div style="display:flex; gap:8px; margin:12px 0 0; flex-wrap:wrap">${chips}</div>
     <div style="display:flex; gap:14px; align-items:center; margin:10px 0 12px; flex-wrap:wrap">
@@ -573,19 +573,110 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro){
       <label style="font-size:12px; color:var(--text-muted); display:flex; gap:6px; align-items:center"><input type="checkbox" id="crudoAuto"> Actualizar cada 30 s</label>
       <span class="sub" style="margin:0">cargado ${fmtFecha(new Date())}</span>
     </div>
+    <div style="display:flex; gap:14px; align-items:center; margin:0 0 12px; flex-wrap:wrap">
+      <button class="btn" id="crudoExport" type="button">Exportar CSV (toda la base)</button>
+      <label style="font-size:12px; color:var(--text-muted); display:flex; gap:6px; align-items:center">Separador
+        <select id="crudoSep" style="background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:6px 8px; border-radius:var(--r-in)">
+          <option value=";">; (Excel en español)</option>
+          <option value=",">, (estándar)</option>
+        </select></label>
+      <span class="sub" id="crudoExportEstado" style="margin:0"></span>
+    </div>
     <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Contacto</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
+/* ---------- Exportar CSV de Data_Cruda: toda la historia del cliente, no solo las 200 filas visibles ---------- */
+const COLUMNAS_CSV = ['fecha_hora_ar','fecha_hora_utc','resultado','codigo_http','canal','contacto','usuario_instagram','nombre','comunidad','comunidad_enviada','mensaje_de_la_persona','motivo_rechazo','payload_json'];
+const fechaAr = v => v ? new Date(v).toLocaleString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }) : '';
+// Toda celda va entre comillas. Si empieza con = + - @ (o tab/CR) se antepone ' para que Excel no la ejecute como fórmula
+// (los nombres de perfil los escribe cualquiera).
+function celdaCsv(v){
+  let s = v === null || v === undefined ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+// Un teléfono (solo dígitos) va como ="…" para que Excel lo muestre completo y no como 5,49E+12.
+const celdaContacto = id => /^\d{8,}$/.test(String(id ?? '')) ? '="' + id + '"' : celdaCsv(id);
+function construirCsv(eventos, intentos, comunidadesById, sep){
+  const items = [
+    ...eventos.map(e => {
+      const p = e.payload || {}, c = p.contact || {};
+      const nombre = c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '';
+      return { t: new Date(e.recibido_en).getTime(), celdas: [
+        celdaCsv(fechaAr(e.recibido_en)), celdaCsv(e.recibido_en), celdaCsv('Aceptado'), celdaCsv(200),
+        celdaCsv(esInstagram(e.telefono_id) ? 'Instagram' : 'WhatsApp'), celdaContacto(e.telefono_id), celdaCsv(c.ig_username),
+        celdaCsv(nombre), celdaCsv(comunidadesById.get(e.comunidad_id)), celdaCsv(p.community_id),
+        celdaCsv(c.last_input_text), celdaCsv(''), celdaCsv(JSON.stringify(p)),
+      ] };
+    }),
+    ...intentos.map(i => ({ t: new Date(i.creado_en).getTime(), celdas: [
+      celdaCsv(fechaAr(i.creado_en)), celdaCsv(i.creado_en), celdaCsv('Rechazado'), celdaCsv(i.estado),
+      celdaCsv(i.telefono_id ? (esInstagram(i.telefono_id) ? 'Instagram' : 'WhatsApp') : ''), celdaContacto(i.telefono_id), celdaCsv(''),
+      celdaCsv(''), celdaCsv(''), celdaCsv(i.comunidad_recibida), celdaCsv(''), celdaCsv(i.motivo), celdaCsv(''),
+    ] })),
+  ].sort((a, b) => b.t - a.t);
+  return [COLUMNAS_CSV.map(celdaCsv).join(sep), ...items.map(x => x.celdas.join(sep))].join('\r\n') + '\r\n';
+}
+// Trae todas las filas del cliente de a 1000 (el máximo por consulta). El orden secundario por id evita saltear o repetir filas entre páginas.
+async function traerTodo(tabla, columnaFecha){
+  const filas = [], PAG = 1000;
+  for (let desde = 0; desde < 200000; desde += PAG) {
+    const { data, error } = await supabase.from(tabla).select('*').eq('cliente_id', state.clienteId)
+      .order(columnaFecha, { ascending:false }).order('id', { ascending:false }).range(desde, desde + PAG - 1);
+    if (error) throw error;
+    filas.push(...(data || []));
+    if (!data || data.length < PAG) break;
+  }
+  return filas;
+}
+function estadoExport(texto){ const el = document.getElementById('crudoExportEstado'); if (el) el.textContent = texto; }
+async function exportarCsvCrudo(){
+  if (state.exportando) return;
+  state.exportando = true;
+  const btn = document.getElementById('crudoExport');
+  if (btn) btn.disabled = true;
+  estadoExport('Exportando…');
+  try {
+    const sep = state.crudoSep || ';';
+    const [eventos, intentos, comunidades] = await Promise.all([
+      traerTodo('evento_crudo', 'recibido_en'),
+      traerTodo('webhook_intento', 'creado_en').catch(() => []),
+      loadComunidades(),
+    ]);
+    const csv = construirCsv(eventos, intentos, new Map(comunidades.map(c => [c.id, c.nombre])), sep);
+    const cliente = state.clientes.find(c => c.id === state.clienteId);
+    const nombre = `data_cruda_${cliente ? cliente.slug : 'cliente'}_${fechaAr(new Date()).slice(0, 10)}.csv`;
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    estadoExport(`Listo: ${eventos.length + intentos.length} filas (${eventos.length} aceptados, ${intentos.length} rechazados) → ${nombre}`);
+  } catch (err) {
+    estadoExport('Error al exportar: ' + err.message);
+  } finally {
+    state.exportando = false;
+    const b = document.getElementById('crudoExport');
+    if (b) b.disabled = false;
+  }
+}
+
 let crudoTimer = null;
+// El refresco automático se salta mientras hay una exportación en curso.
+const refrescarCrudo = () => { if (!state.exportando) renderAll(); };
 function wireCrudo(){
   document.querySelectorAll('[data-crudo-filtro]').forEach(b => {
     b.onclick = () => { state.crudoFiltro = b.dataset.crudoFiltro; renderAll(); };
   });
   document.getElementById('crudoRefresh').onclick = () => renderAll();
+  document.getElementById('crudoExport').onclick = exportarCsvCrudo;
+  const sepSel = document.getElementById('crudoSep');
+  sepSel.value = state.crudoSep || ';';
+  sepSel.onchange = () => { state.crudoSep = sepSel.value; };
   const auto = document.getElementById('crudoAuto');
   auto.checked = !!state.crudoAuto;
-  auto.onchange = () => { state.crudoAuto = auto.checked; if (auto.checked) crudoTimer = setInterval(renderAll, 30000); else clearInterval(crudoTimer); };
-  if (state.crudoAuto) crudoTimer = setInterval(renderAll, 30000);
+  auto.onchange = () => { state.crudoAuto = auto.checked; if (auto.checked) crudoTimer = setInterval(refrescarCrudo, 30000); else clearInterval(crudoTimer); };
+  if (state.crudoAuto) crudoTimer = setInterval(refrescarCrudo, 30000);
 }
 
 /* ---------- render principal ---------- */
