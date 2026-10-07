@@ -457,3 +457,12 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Seguridad del archivo:** las celdas que empiezan con `=`, `+`, `-` o `@` se prefijan con `'` para que Excel no las ejecute como fórmula (los nombres de perfil los escribe cualquiera). Los teléfonos van como `="…"` para que Excel no los muestre como `5,49E+12`.
 - **Alcance:** un cliente por archivo (el elegido en el selector). Mientras exporta se pausa el refresco automático.
 - **Ojo:** el archivo contiene datos personales y el panel todavía no tiene login; quien tenga la URL puede exportarlo. No compartir ni dejar los archivos sueltos.
+
+## 3 quindecies. PR #7 — Los rechazos guardan el JSON completo (2026-10-07)
+
+- **Por qué:** el 6 de octubre el flow de Instagram de Todo un País empezó a enviar con el cliente y el secreto de Cortado. El CRM rechazó 123 envíos de 99 personas con 404 (comunidades que Cortado no tiene) y, como los rechazos solo guardaban el motivo, la comunidad y el identificador, se perdieron el nombre, el @usuario y el mensaje. Un error de configuración no debería hacer perder información que no se puede recuperar.
+- **Qué:** `db/009` agrega `webhook_intento.payload` (jsonb) y la tabla `webhook_intento_sin_cliente`. Ahora **cada rechazo guarda el contenido completo del POST**. Con cliente identificado va a `webhook_intento` y se ve en Data_Cruda (botón Ver JSON, nombre y mensaje en el CSV). Sin cliente identificable (encabezados ausentes o `x-cliente` inexistente, p. ej. un slug mal escrito) va a `webhook_intento_sin_cliente`, que el panel **no** lee (solo por SQL).
+- **Qué no cambia:** las respuestas HTTP son las mismas. El secreto nunca se guarda (viaja en un header). Un `ig_id` de 17 dígitos se conserva exacto en `_ig_id_exacto`.
+- **Topes** (para que el ruido de internet no llene la base): contenido máximo de 64 KB (por encima se guarda el comienzo con una marca), 200 rechazos por secreto incorrecto cada 10 minutos por cliente y 300 sin cliente por hora.
+- **Probado** en producción con un cliente temporal (ya eliminado): secreto incorrecto, comunidad inexistente, cliente inexistente, sin encabezados, body que no es JSON, body de más de 64 KB y caso válido. Se comprobó que el secreto no queda guardado en ninguna tabla.
+- **Pendiente:** política de retención de ambas tablas. Los rechazos anteriores a esta PR no guardaron el contenido y no se pueden recuperar con el JSON; sus identificadores y horas sí (ver la migración de los eventos de Todo un País).
