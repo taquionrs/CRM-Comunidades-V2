@@ -435,10 +435,10 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 
 | Prioridad | Ítem |
 |---|---|
-| P1 | Rotar los secretos del webhook (el de Todo un País quedó visible en una captura) |
+| P1 | Rotar el secreto de **Cortado** (quedó visible en una captura del 2026-10-07). El de Todo un País se rotó el 2026-10-07 |
 | P1 | Login, migración `005` y `panel-data` (hoy el panel muestra teléfonos y nombres a quien tenga la URL) |
 | P1 | Corregir las condiciones de los flows (usar "Contiene" con la palabra sola, no "Es" con la frase completa): Cortado WhatsApp, Cortado Instagram y Todo un País |
-| P2 | Activar Todo un País y probarlo con un contacto real |
+| P2 | Todo un País: ya recibe tráfico por Instagram. Falta revisar el flow de WhatsApp (copiado de Cortado: encabezados, enlaces de grupo y nombres) y probarlo con un contacto real |
 | P2 | Dar de alta Growing Ideas (cuenta `fb5347078`) |
 | P2 | Recargar el monedero de WhatsApp de Cortado |
 | P2 | Datos de Meta Ads: cargar la API key de Windsor.ai y confirmar el campo de conversaciones |
@@ -466,3 +466,28 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Topes** (para que el ruido de internet no llene la base): contenido máximo de 64 KB (por encima se guarda el comienzo con una marca), 200 rechazos por secreto incorrecto cada 10 minutos por cliente y 300 sin cliente por hora.
 - **Probado** en producción con un cliente temporal (ya eliminado): secreto incorrecto, comunidad inexistente, cliente inexistente, sin encabezados, body que no es JSON, body de más de 64 KB y caso válido. Se comprobó que el secreto no queda guardado en ninguna tabla.
 - **Pendiente:** política de retención de ambas tablas. Los rechazos anteriores a esta PR no guardaron el contenido y no se pueden recuperar con el JSON; sus identificadores y horas sí (ver la migración de los eventos de Todo un País).
+
+## 3 sexdecies. PR #8 — Todo un País: flow mal copiado de Cortado, corrección y migración (2026-10-07)
+
+**Qué pasó.** El flow de Instagram de Todo un País ("Test Comunidades IG", creado el 2026-10-02 copiando el de Cortado) estuvo LIVE desde el 2026-10-06 a las 19:05 con tres errores heredados de Cortado:
+1. **Encabezados:** enviaba `x-cliente: cortado-en-jarrito` y el secreto de Cortado. El CRM lo autenticaba como Cortado y rechazaba cada envío con 404, porque las comunidades (San Luis, Quines, La Toma) no son de Cortado. La separación por cliente funcionó: no se mezcló ningún dato.
+2. **Nombre de la comunidad:** la rama de San Luis escribía `San Luis`, y en el CRM la comunidad se llama `San Luis Capital`.
+3. **Enlace del botón "Me sumo":** abría el **grupo de WhatsApp de Cortado**, no el de Todo un País. Las personas que entraron por ese flow en ese período llegaron al grupo equivocado. **El CRM no puede detectar este error** (el POST sale bien y la persona figura como "clic en grupo").
+
+**Qué se hizo (todo el 2026-10-07).**
+- Se rotó el secreto de Todo un País (el anterior había quedado visible en una captura). Verificado: el nuevo autentica, uno erróneo da 401.
+- El equipo corrigió el flow: encabezados y secreto de Todo un País, valor `San Luis Capital` y los enlaces de los botones. La corrección de los enlaces se confirmó alrededor de las 14:24 (hora de Argentina).
+- **Migración de los envíos rechazados:** 133 rechazos de Cortado (de unas 99 personas) se convirtieron en eventos aceptados de Todo un País, con su hora original y marcados con `_recuperado` en el payload (script en `db/mantenimiento/2026-10-07_migrar_rechazos_a_todo_un_pais.sql`). `San Luis` se convirtió en `San Luis Capital`. Los candidatos, insertados y borrados coincidieron (133). Se ensayó antes con rollback.
+- **Límite de la recuperación:** los rechazos de ese período anteriores a la PR #7 no guardaron el contenido, así que de esas personas se recuperaron el identificador de Instagram, la comunidad y la hora, pero **no el nombre ni el @usuario** (solo 18 de las 119 personas tienen nombre).
+- **Estado final de Todo un País:** 144 eventos de 119 personas únicas; 0 rechazos. Cortado: 20 eventos, 18 personas, 1 rechazo (el real del 2026-10-02).
+
+**Cómo leer esos números.** Los eventos de Todo un País anteriores a la corrección del enlace significan "la persona escribió y tocó el botón", **no** "entró al grupo de Todo un País": esas personas fueron a un grupo de Cortado. No sirven como miembros del grupo. Los grupos de WhatsApp de Cortado pueden tener personas de San Luis que no son de su comunidad.
+
+**Acciones para el equipo.** Avisar al equipo de Cortado; decidir si se recontacta a las personas afectadas (en Instagram solo se puede escribir dentro de las 24 horas desde su último mensaje, o con las etiquetas de mensaje que permita ManyChat, que hay que verificar); la lista sale de Data_Cruda → Exportar CSV, con el cliente Todo un País.
+
+**Qué cambió en el procedimiento.** El SOP-001 (v1.4) tiene un recuadro "Si copiás el flow de otro cliente, cambiá todo esto" (encabezado, secreto, enlace de cada "Me sumo", valor de la localidad, etiquetas, mensajes y planilla), un paso de prueba que obliga a comprobar que el grupo que se abre es el del cliente, y dos filas nuevas en la tabla de errores.
+
+**Pendiente.**
+- **Rotar el secreto de Cortado:** quedó visible en una captura. Hay que cambiarlo a la vez en la base y en sus dos flows (WhatsApp e Instagram), porque tienen tráfico real.
+- **Revisar el flow de WhatsApp de Todo un País ("Comunidades TUP")** antes de activarlo: se copió igual que el de Instagram y probablemente tiene los mismos errores (encabezados, enlaces y nombres).
+- **Dar de alta Growing Ideas**, que no está en el CRM.

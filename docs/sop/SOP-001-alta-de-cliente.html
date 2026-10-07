@@ -43,7 +43,7 @@
 <body>
 
 <h1>SOP-001 · Alta de un cliente en el CRM de Comunidades V2</h1>
-<div class="meta"><b>Versión:</b> 1.3 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
+<div class="meta"><b>Versión:</b> 1.4 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
 
 <div class="box tip"><b class="t">Para qué sirve este procedimiento</b>
 Cada cliente de Taquion que tenga una comunidad entra al mismo CRM. Este SOP explica cómo darlo de alta, cómo dejar su flow de ManyChat listo para enviar los datos al CRM, y cómo comprobar con una prueba real que todo llega a la pestaña <b>Data_Cruda</b>. Tiempo estimado: 45 a 60 minutos.</div>
@@ -114,6 +114,15 @@ where c.slug = 'slug-del-cliente';</pre>
 <h2><span class="n">4</span>Preparar el flow en ManyChat <span class="who">Operador de ManyChat</span></h2>
 <p>Trabajá siempre sobre el flow de comunidad del cliente. Los cambios quedan en borrador hasta que se apriete <b>Actualizar</b>.</p>
 
+<div class="box stop"><b class="t">Si copiás el flow de otro cliente, cambiá TODO esto</b>
+Copiar un flow entre cuentas es lo más rápido, pero arrastra datos del cliente original, y el CRM <b>no puede detectar</b> algunos de esos errores. Revisá, en este orden:
+<ul>
+  <li><b>Encabezado <code>x-cliente</code></b> y <b>secreto</b> (<code>x-webhook-secret</code>): los del cliente nuevo, nunca los del original. Con los del original, el CRM rechaza los envíos o los mezcla.</li>
+  <li><b>Enlace de cada botón “Me sumo”</b>: tiene que abrir el <b>grupo de WhatsApp del cliente nuevo</b>. Si queda el del original, las personas entran al grupo equivocado y el CRM igual las registra como si hubieran entrado bien.</li>
+  <li><b>Valor que escribe cada rama en el campo de localidad</b>: igual, letra por letra, al nombre de la comunidad en el CRM (por ejemplo <code>San Luis Capital</code>, no <code>San Luis</code>).</li>
+  <li><b>Etiquetas, mensajes y planilla de Google</b>: las del cliente nuevo.</li>
+</ul></div>
+
 <h3>4.1 Cambios que tiene que tener el flow</h3>
 <table>
   <tr><th style="width:24%">Parte del flow</th><th style="width:44%">Cómo tiene que quedar</th><th>Por qué</th></tr>
@@ -156,7 +165,7 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
 
 <ol>
   <li>Desde el celular de prueba, escribile al <b>número de WhatsApp del cliente</b> una frase que contenga la palabra de una comunidad. Ejemplo: <code>Hola, quiero unirme a la comunidad de Cortado en Jarrito Boedo</code></li>
-  <li>Tiene que llegar el <b>mensaje de bienvenida con el botón “Me sumo”</b>. Tocalo: se abre el enlace del grupo y llega el mensaje de términos y condiciones. Ahí corrió el nodo final.</li>
+  <li>Tiene que llegar el <b>mensaje de bienvenida con el botón “Me sumo”</b>. Tocalo: se abre el enlace del grupo y llega el mensaje de términos y condiciones. Ahí corrió el nodo final. <b>Comprobá que el grupo que se abre es el del cliente que estás probando</b> (el nombre del grupo lo dice).</li>
   <li>Abrí <b>crm-comunidades-v2.vercel.app</b>, elegí el cliente en el selector y entrá a la pestaña <b>Data_Cruda</b>. Tocá <b>Actualizar</b> (o marcá “Actualizar cada 30 s”).</li>
   <li>Tiene que aparecer una fila nueva. Comprobá cada columna:</li>
 </ol>
@@ -182,6 +191,8 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
   <tr><td>Código <b>400</b></td><td>No llegó ni teléfono (WhatsApp) ni <code>ig_id</code> (Instagram), o falta <code>community_id</code>.</td><td>El motivo en Data_Cruda lista los campos del contacto que sí llegaron. Revisar que el chip del cuerpo no esté vacío.</td></tr>
   <tr><td>Código <b>501</b></td><td>El cliente no tiene secreto cargado.</td><td>Repetir el paso 3.</td></tr>
   <tr><td>Aparece en la comunidad equivocada (siempre la última)</td><td>Condiciones con “Es” y frase exacta (o con emoji).</td><td>Cambiar a “Contiene” con la palabra sola (paso 4.1).</td></tr>
+  <tr><td>La persona queda registrada pero entra al grupo de <b>otro</b> cliente</td><td>El botón “Me sumo” conserva el enlace del flow que se copió.</td><td>Cambiar la URL de cada botón por el grupo correcto y publicar. El CRM no lo detecta: hay que verlo abriendo el enlace en la prueba.</td></tr>
+  <tr><td>Los envíos aparecen rechazados en <b>otro</b> cliente (404 con comunidades que no son de ese cliente)</td><td>El flow se copió con el <code>x-cliente</code> y el secreto del original.</td><td>Poner los del cliente correcto. Los envíos rechazados guardan su contenido completo y se pueden recuperar (ver el paso 7 y a quien administra el CRM).</td></tr>
   <tr><td>Hay fila en la planilla pero no en el CRM</td><td>El POST no está en el nodo final, o los cambios no se publicaron.</td><td>Revisar el nodo final y apretar Actualizar.</td></tr>
   <tr><td>La segunda prueba no cambia la comunidad</td><td>Atribución al primer contacto del mismo número.</td><td>Limpiar la prueba anterior (paso 7).</td></tr>
 </table>
