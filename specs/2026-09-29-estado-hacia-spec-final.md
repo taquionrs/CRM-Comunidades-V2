@@ -556,3 +556,7 @@ Lectura en modo solo lectura del flow `Test Comunidades Cortado en Jarrito` (cue
 - Resuelve que la inversión de la comunidad "(general)" (campañas que no distinguen barrio) no entraba en ningún costo por entrada: en el total sí cuenta. Las entradas no se duplican (atribución por primer contacto).
 - Respeta el rango de fechas elegido. Sin MI y MF cargados, el costo por miembro neto del total queda en "—".
 - Verificado con datos reales: el total histórico de Cortado ($7.899.429,93, 96 conversaciones, CPL $82.285,73) coincide con los KPIs de Overview.
+
+## 3 quatervicies. PR #18 — Columna "CTR (todos los clics)" (2026-10-08)
+
+La columna "CTR anuncio" de Control_Comunidades pasa a llamarse **"CTR (todos los clics)"**: es clics totales ÷ impresiones, igual al "CTR (todos)" de Ads Manager (verificado el 6–7/10: Cortado WhatsApp 3,46 % y Todo un País 2,65 % en ambos). No es el CTR de clics en el enlace de Meta (1,53 % y 1,58 % esos días). Solo cambia la etiqueta.
