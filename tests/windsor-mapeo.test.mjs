@@ -186,12 +186,13 @@ test("construirSqlUpsert: upsert por (comunidad, fecha), valores validados y nad
   const { registros } = mapearFilas(filas, MAPEO);
   const [sql] = construirSqlUpsert(registros);
   assert.match(sql, /on conflict \(comunidad_id, fecha\) do update/);
-  assert.ok(sql.includes(`('${TUP}','${C_TOMA}','2026-10-07',15658.64,63,50000,303)`));
+  assert.ok(sql.includes(`('${TUP}','${C_TOMA}','2026-10-07',15658.64,63,50000,303,0)`));
+  assert.ok(sql.includes("leads_meta = excluded.leads_meta"));
   assert.ok(!sql.includes("La Toma"), "no se interpolan nombres");
 });
 
 test("construirSqlUpsert: rechaza uuid, fecha o números inválidos", () => {
-  const ok = { cliente_id: CORTADO, comunidad_id: C_BOEDO, fecha: "2026-10-07", inversion: 1, impresiones: 1, clics: 1, conversaciones: 1 };
+  const ok = { cliente_id: CORTADO, comunidad_id: C_BOEDO, fecha: "2026-10-07", inversion: 1, impresiones: 1, clics: 1, conversaciones: 1, leads: 0 };
   assert.throws(() => construirSqlUpsert([{ ...ok, comunidad_id: "x'; drop table comunidad;--" }]), /UUID/);
   assert.throws(() => construirSqlUpsert([{ ...ok, fecha: "2026-10-07'; --" }]), /Fecha/);
   assert.throws(() => construirSqlUpsert([{ ...ok, inversion: -1 }]), /inversion/);
@@ -199,7 +200,7 @@ test("construirSqlUpsert: rechaza uuid, fecha o números inválidos", () => {
 });
 
 test("construirSqlUpsert: parte en lotes", () => {
-  const regs = Array.from({ length: 1001 }, (_, i) => ({ cliente_id: CORTADO, comunidad_id: C_BOEDO, fecha: `2026-01-${String((i % 28) + 1).padStart(2, "0")}`, inversion: i, impresiones: 1, clics: 1, conversaciones: 0 }));
+  const regs = Array.from({ length: 1001 }, (_, i) => ({ cliente_id: CORTADO, comunidad_id: C_BOEDO, fecha: `2026-01-${String((i % 28) + 1).padStart(2, "0")}`, inversion: i, impresiones: 1, clics: 1, conversaciones: 0, leads: 0 }));
   assert.equal(construirSqlUpsert(regs, 400).length, 3);
   assert.deepEqual(construirSqlUpsert([]), []);
 });
@@ -218,4 +219,20 @@ test("formato real: un fragmento del CSV de Windsor del 2026-10-08 se importa co
   assert.equal(Object.values(ignoradas).reduce((a, b) => a + b, 0), 2);
   assert.equal(registros.find((r) => r.comunidad_nombre === "La Toma").conversaciones, 21);
   assert.equal(registros.find((r) => r.comunidad_nombre === "Boedo").inversion, 414.38);
+});
+
+test("leads de Meta: la columna actions_onsite_conversion_lead_grouped se importa (fila real de La Toma del 6/10: 8 leads) y vacío es 0", () => {
+  const csv = [
+    "date,account_name,campaign,adset_name,spend,clicks,impressions,actions_onsite_conversion_messaging_conversation_started_7d,actions_lead,actions_onsite_conversion_lead_grouped",
+    "2026-10-06,TQN - Growing 2 - LC,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS_LA_TOMA,6754.6,56.0,1505.0,21.0,8.0,8.0",
+    "2026-10-07,TQN - Growing 2 - LC,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS_LA_TOMA,15658.64,303.0,5563.0,63.0,30.0,30.0",
+    "2026-10-07,TQN - Growing 2 - LC,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS_QUINES,16386.45,257.0,6118.0,153.0,,",
+    "",
+  ].join("\n");
+  const { filas } = normalizarFilasWindsor(parsearCsv(csv));
+  const { registros } = mapearFilas(filas, MAPEO);
+  const toma = registros.filter((r) => r.comunidad_id === C_TOMA);
+  assert.deepEqual(toma.map((r) => r.leads), [8, 30]);
+  assert.equal(registros.find((r) => r.comunidad_nombre !== toma[0].comunidad_nombre).leads, 0, "celda vacía = 0");
+  assert.equal(resumirPorComunidad(toma)[0].leads, 38);
 });

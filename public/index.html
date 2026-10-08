@@ -361,6 +361,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
         <td class="mono">${fmtMoney(c.inversion)}</td>
         <td class="mono">${fmtInt(c.conversaciones_meta)}</td>
         <td class="mono">${fmtMoney(c.cpl)}</td>
+        <td class="mono">${fmtInt(c.leads_meta)}</td>
+        <td class="mono">${fmtMoney(c.costo_por_lead)}</td>
         <td class="mono">${fmtPct(c.ctr_anuncio_pct)}</td>
         <td>${c.triggers_entregados > 0 ? `<span class="mono">${fmtInt(c.triggers_entregados)}</span>` : naCell('Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001)')}</td>
         <td class="mono">${fmtInt(c.clics_unicos)}</td>
@@ -373,7 +375,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
         <td class="mono">${fmtMoney(c.cpmn)}</td>
         <td class="mono">${fmtPct(c.tasa_fuga_pct)}</td>
       </tr>`).join('')
-    : `<tr class="empty-row"><td colspan="15">Sin datos todavía.</td></tr>`;
+    : `<tr class="empty-row"><td colspan="17">Sin datos todavía.</td></tr>`;
 
   // Total del cliente: suma de TODAS las comunidades (aunque haya una elegida en el filtro) y razones recalculadas
   // con esos totales, no promediando las filas. Las entradas no se duplican: la atribución es por primer contacto.
@@ -381,12 +383,14 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
   const razon = (num, den, factor = 1) => (den > 0 ? (num / den) * factor : null);
   const tInv = suma('inversion'), tConv = suma('conversaciones_meta'), tEnt = suma('clics_unicos');
   const tMi = suma('miembros_iniciales'), tMf = suma('miembros_finales'), tBajas = suma('bajas_estimadas');
-  const tTrig = suma('triggers_entregados');
+  const tTrig = suma('triggers_entregados'), tLeads = suma('leads_meta');
   const filaTotal = comunidades.length ? `<tr class="totales">
         <td>Total del cliente</td>
         <td class="mono">${fmtMoney(tInv)}</td>
         <td class="mono">${fmtInt(tConv)}</td>
         <td class="mono">${fmtMoney(razon(tInv, tConv))}</td>
+        <td class="mono">${fmtInt(tLeads)}</td>
+        <td class="mono">${fmtMoney(razon(tInv, tLeads))}</td>
         <td class="mono">${fmtPct(razon(suma('clics'), suma('impresiones'), 100))}</td>
         <td>${tTrig > 0 ? `<span class="mono">${fmtInt(tTrig)}</span>` : naCell('Todavía no llegó ningún aviso de inicio de flow')}</td>
         <td class="mono">${fmtInt(tEnt)}</td>
@@ -411,9 +415,9 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
     <div class="card"><h3>Matriz de atribución multi-plataforma</h3>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican.</div>
       <div class="tbl-wrap"><table><thead><tr>
-        <th></th><th colspan="4" style="color:var(--accent)">Meta Ads</th><th style="color:var(--warn)">ManyChat Bot</th><th colspan="2">CRM / Conversión</th><th colspan="4">WhatsApp &amp; Salud</th><th colspan="3">Financiera</th>
+        <th></th><th colspan="6" style="color:var(--accent)">Meta Ads</th><th style="color:var(--warn)">ManyChat Bot</th><th colspan="2">CRM / Conversión</th><th colspan="4">WhatsApp &amp; Salud</th><th colspan="3">Financiera</th>
       </tr><tr>
-        <th>Comunidad</th><th>Inversión</th><th>Conversaciones</th><th>CPL</th><th>CTR (todos los clics)</th>
+        <th>Comunidad</th><th>Inversión</th><th>Conversaciones</th><th>CPL</th><th>Clientes potenciales (Meta)</th><th>Costo por cliente potencial</th><th>CTR (todos los clics)</th>
         <th>Trigger entregados</th><th>Entradas al flow</th><th>Entradas / conversaciones</th>
         <th>Mi</th><th>Mf</th><th>Crecimiento neto</th><th>Bajas est.</th>
         <th>Costo por entrada al flow</th><th>Costo por miembro neto</th><th>Tasa de fuga</th>

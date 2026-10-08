@@ -560,3 +560,12 @@ Lectura en modo solo lectura del flow `Test Comunidades Cortado en Jarrito` (cue
 ## 3 quatervicies. PR #18 — Columna "CTR (todos los clics)" (2026-10-08)
 
 La columna "CTR anuncio" de Control_Comunidades pasa a llamarse **"CTR (todos los clics)"**: es clics totales ÷ impresiones, igual al "CTR (todos)" de Ads Manager (verificado el 6–7/10: Cortado WhatsApp 3,46 % y Todo un País 2,65 % en ambos). No es el CTR de clics en el enlace de Meta (1,53 % y 1,58 % esos días). Solo cambia la etiqueta.
+
+## 3 quinvicies. PR #19 — Clientes potenciales (Meta) por comunidad (2026-10-08)
+
+- **Campo elegido: `actions_onsite_conversion_lead_grouped`** de Windsor (conector Facebook). Se probó contra el CSV del 6 al 7 de octubre: Todo un País suma 158 y Cortado WhatsApp 0, igual que la columna "Resultados" ("Cliente potencial de Meta") de Ads Manager. `actions_lead` dio lo mismo en esos días; los demás campos de leads (formulario instantáneo, pixel, offline) vinieron vacíos.
+- **No es lo mismo que "Conversaciones":** las conversaciones de mensajes iniciadas (`actions_onsite_conversion_messaging_conversation_started_7d`) siguen importándose aparte (45 y 350 esos días, coinciden con Ads Manager).
+- **Base:** `db/012` agrega `meta_ads_metrica.leads_meta` y `leads_meta` / `costo_por_lead` a `comunidad_performance_rango`.
+- **Importador:** lee la columna y la guarda por upsert; 18 pruebas. **Panel:** columnas "Clientes potenciales (Meta)" y "Costo por cliente potencial" (también en el total del cliente). Total Todo un País 6–7/10: 158 leads, $732,65 por lead, igual al de Ads Manager.
+- **Importación del CSV (1 al 7/10):** también actualizó la inversión a los valores vigentes de Meta ($55.171,70 Cortado WhatsApp y $115.758,22 Todo un País, iguales a Ads Manager).
+- **Observación abierta:** Cortado WhatsApp muestra 0 leads en Meta pero 23 entradas al flow en el CRM; el flow de Todo un País sí coincide (158 vs 162). Pendiente revisar en Events Manager si el evento de ManyChat llega a Meta desde la cuenta de Cortado.
