@@ -512,3 +512,13 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 3. **No se carga `WINDSOR_API_KEY` en Supabase** hasta que `windsor-sync` valide al usuario (hoy se puede invocar con la clave pública del panel y gastaría el cupo de Windsor). Mientras tanto: importación desde la computadora del equipo, que lee la clave del entorno local y escribe en `meta_ads_metrica`.
 
 **Pendiente.** Ver en Windsor, para las campañas de Cortado y Todo un País: los nombres de los conjuntos de anuncios (¿traen el barrio?), si el campo de conversaciones devuelve números, y si hay otras campañas de estos clientes (por ejemplo, las de Instagram). Hasta tener eso no se define el mapeo definitivo.
+
+## 3 octodecies. PR #10 — Importador de Meta Ads por comunidad (2026-10-08)
+
+Implementa las consecuencias de diseño 1 y 3 de la sección 3 septendecies.
+- **Base (`db/010`, aplicada):** tabla `comunidad_meta_origen` (campaña + conjunto → comunidad; conjunto vacío = toda la campaña), `cliente.meta_cuenta_id` y función `normalizar_nombre()`.
+- **Mapeo cargado (`db/mantenimiento/2026-10-08_cargar_mapeo_meta.sql`):** Cortado en Jarrito → Boedo, Palermo, Villa Devoto y "Cortado en Jarrito (general)" (campaña sin barrio); Todo un País → La Toma, Quines, San Luis Capital (San Luis = San Luis Capital, confirmado) y "Todo un País (general)" (sin campaña asignada todavía). Cuenta `1669338306456901` para ambos.
+- **Importador (`scripts/windsor-importar.mjs` + `scripts/lib/windsor-mapeo.mjs`, 17 pruebas):** lee un CSV de Windsor o la API, ensayo por defecto, `--aplicar` guarda por upsert (comunidad, fecha). Clave de Windsor solo en el entorno local.
+- **Primera importación real (CSV del 1 al 7 de octubre):** 19 registros comunidad×día, inversión total 714.202,21; 121 filas de campañas de otros clientes ignoradas. Repetirla no duplica.
+- **Límites conocidos:** el CSV no traía `impressions` (impresiones y CTR en 0 hasta reimportar con esa columna); la campaña de Cortado "general" tiene 14.014 clics y 6 conversaciones (revisar con el equipo si el objetivo de esa campaña es tráfico y no mensajes); la comunidad "Todo un País (general)" no tiene campaña mapeada.
+- **Seguridad:** `comunidad_meta_origen` es solo lectura para el panel; `anon` no puede escribir. `db/005` la incluye para cuando haya login.
