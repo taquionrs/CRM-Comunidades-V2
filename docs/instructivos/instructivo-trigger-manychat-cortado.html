@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Instructivo · Aviso de Trigger entregado en el flow de Cortado en Jarrito</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm;
+    @bottom-left { content: "Instructivo · Trigger entregado · Cortado en Jarrito"; font: 8pt 'Segoe UI', Arial, sans-serif; color: #7a8594; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 8pt 'Segoe UI', Arial, sans-serif; color: #7a8594; } }
+  :root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee5; --brand:#0b6b63; --brand-soft:#e6f3f1; --warn:#9a5b00; --warn-soft:#fff4e0; --code:#f3f5f8; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; line-height: 1.45; color: var(--ink); margin: 0; }
+  h1 { font-size: 19pt; margin: 0 0 4px; color: var(--brand); line-height: 1.15; }
+  h2 { font-size: 13pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--brand); break-after: avoid; }
+  p { margin: 5px 0; }
+  .meta { color: var(--muted); font-size: 9pt; margin-bottom: 10px; }
+  .meta b { color: var(--ink); }
+  ul, ol { margin: 4px 0 6px 20px; padding: 0; }
+  li { margin: 3px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 8px; font-size: 9pt; }
+  th { background: var(--brand-soft); text-align: left; padding: 5px 7px; border: 1px solid var(--line); }
+  td { padding: 5px 7px; border: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 8.8pt; background: var(--code); padding: 1px 4px; border-radius: 3px; }
+  pre { font-family: Consolas, 'Courier New', monospace; font-size: 8.8pt; background: var(--code); border: 1px solid var(--line); border-left: 3px solid var(--brand); padding: 8px 10px; margin: 6px 0 8px; white-space: pre-wrap; word-break: break-all; break-inside: avoid; }
+  .box { border-radius: 5px; padding: 7px 10px; margin: 8px 0; font-size: 9.5pt; break-inside: avoid; }
+  .tip { background: var(--brand-soft); border-left: 4px solid var(--brand); }
+  .warn { background: var(--warn-soft); border-left: 4px solid var(--warn); }
+  .box b.t { display: block; margin-bottom: 2px; }
+  .flow { display: flex; align-items: stretch; gap: 4px; margin: 8px 0 4px; font-size: 8.8pt; }
+  .flow div { flex: 1; background: var(--brand-soft); border: 1px solid #b9dcd7; border-radius: 5px; padding: 7px 4px; text-align: center; }
+  .flow div.nuevo { background: var(--warn-soft); border-color: #e6c27a; font-weight: 700; }
+  .flow span { align-self: center; color: var(--brand); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1>Aviso de “Trigger entregado” en el flow de Cortado en Jarrito</h1>
+<div class="meta"><b>Para:</b> responsable del flow de ManyChat &nbsp;·&nbsp; <b>Fecha:</b> 8 de octubre de 2026 &nbsp;·&nbsp; <b>Tiempo estimado:</b> 10 minutos &nbsp;·&nbsp; <b>Cuenta:</b> Cortado en Jarrito</div>
+
+<h2>Para qué sirve</h2>
+<p>Con este paso el CRM cuenta cuántas personas disparan el flow en cada comunidad y lo muestra en la columna <b>“Trigger entregados”</b> de Control_Comunidades. Hoy esa celda dice “sin fuente”.</p>
+<p><b>Dónde:</b> ManyChat → cuenta <b>Cortado en Jarrito</b> → Automatización → flow <b>“Test Comunidades Cortado en Jarrito”</b>.</p>
+<p>Se agrega <b>un nodo nuevo en cada una de las 3 ramas</b> (Boedo, Palermo y Villa Devoto), entre la condición y el primer mensaje:</p>
+<div class="flow">
+  <div>Condición<br>(salida verde)</div><span>›</span>
+  <div class="nuevo">NUEVO nodo<br>“Acciones”</div><span>›</span>
+  <div>Enviar mensaje<br>(botón “Me sumo”)</div>
+</div>
+
+<h2>Antes de empezar</h2>
+<ul>
+  <li>Abrí el <b>nodo final</b> del flow (el último nodo “Acciones”, donde está la “Solicitud externa” al CRM). De ahí vas a <b>copiar la URL y los encabezados</b>, incluido el secreto.</li>
+  <li>Tené a mano un número de prueba para verificar al final.</li>
+</ul>
+
+<h2>Paso a paso (repetir en cada rama)</h2>
+<ol>
+  <li>Entrá al flow y tocá <b>Editar automatización</b>.</li>
+  <li>Ubicá la <b>Condición</b> de la rama y el <b>Enviar mensaje</b> que le sigue (el del botón “Me sumo”).</li>
+  <li>Entre los dos, agregá un nodo nuevo de <b>Acciones</b>. La línea verde de la condición debe ir a este nodo nuevo, y la salida del nodo nuevo al mensaje.</li>
+  <li>Dentro del nodo, agregá la acción <b>Automatización → Realizar solicitud externa</b>.</li>
+  <li>Completá los campos:</li>
+</ol>
+<table>
+  <tr><th style="width:28%">Campo</th><th>Valor</th></tr>
+  <tr><td>Tipo de solicitud</td><td><code>POST</code></td></tr>
+  <tr><td>URL</td><td>La misma del nodo final: <code>https://zyyxsammrryhfrgfwlxr.supabase.co/functions/v1/manychat-webhook</code></td></tr>
+  <tr><td>Encabezado 1</td><td><code>x-cliente</code> = <code>cortado-en-jarrito</code></td></tr>
+  <tr><td>Encabezado 2</td><td><code>x-webhook-secret</code> = el <b>mismo valor</b> que tiene el nodo final (copiarlo de ahí)</td></tr>
+  <tr><td>Cuerpo</td><td>Ver el punto siguiente</td></tr>
+</table>
+<ol start="6">
+  <li><b>Cuerpo de la solicitud:</b>
+<pre>{"evento": "trigger", "community_id": "Palermo", "contact": &lt;Full Contact Data&gt;}</pre>
+    <ul>
+      <li><code>&lt;Full Contact Data&gt;</code> se inserta con el botón <b>“+ Añadir Full Contact Data”</b>. Queda como una pastilla azul, <b>sin comillas</b>, igual que en el nodo final.</li>
+      <li>En <code>community_id</code> va el <b>nombre fijo</b> de la rama, escrito exactamente así:</li>
+    </ul>
+  </li>
+</ol>
+<table>
+  <tr><th style="width:40%">Rama</th><th>Valor de <code>community_id</code></th></tr>
+  <tr><td>Boedo</td><td><code>Boedo</code></td></tr>
+  <tr><td>Palermo</td><td><code>Palermo</code></td></tr>
+  <tr><td>Villa Devoto</td><td><code>Villa Devoto</code></td></tr>
+</table>
+<div class="box warn"><b class="t">No usar el campo Localidad_CABA en este paso</b>En este punto del flow ese campo todavía tiene la frase completa del anuncio (no el nombre limpio de la comunidad) y el CRM rechazaría el aviso. Por eso va el nombre escrito a mano.</div>
+<ol start="7">
+  <li>Repetí en las otras dos ramas, cambiando solo el <code>community_id</code>.</li>
+  <li><b>Publicá</b> el flow.</li>
+</ol>
+
+<h2>Qué NO tocar</h2>
+<ul>
+  <li>El nodo final con la solicitud externa que ya existe.</li>
+  <li>Las condiciones, los disparadores y los mensajes.</li>
+  <li>La palabra <code>trigger</code> en el campo <code>evento</code>: tiene que decir exactamente eso.</li>
+</ul>
+
+<h2>Cómo comprobar que funcionó</h2>
+<ol>
+  <li>Con un número de prueba, escribí al WhatsApp de Cortado la frase de una de las ramas (por ejemplo, la de Palermo).</li>
+  <li>Avisale a Marketing. En Control_Comunidades, la celda “Trigger entregados” de Palermo debería pasar de “sin fuente” a <b>1</b>.</li>
+  <li>Si el número no aparece, Marketing revisa en el CRM: <b>Data_Cruda → filtro “Rechazados”</b>. Ahí queda el motivo.</li>
+</ol>
+
+<h2>Errores frecuentes</h2>
+<table>
+  <tr><th style="width:38%">Si pasa esto</th><th>Probable causa</th></tr>
+  <tr><td>Aparece un rechazo “Comunidad no encontrada”</td><td><code>community_id</code> mal escrito. Tiene que ser idéntico al nombre de la comunidad en el CRM.</td></tr>
+  <tr><td>Aparece un rechazo “Secreto incorrecto”</td><td>El valor de <code>x-webhook-secret</code> no es el mismo del nodo final.</td></tr>
+  <tr><td>El aviso no llega y tampoco hay rechazo</td><td>El nodo nuevo no quedó conectado entre la condición y el mensaje, o no se publicó el flow.</td></tr>
+  <tr><td>Una persona que escribe varias veces cuenta una sola vez</td><td>Es normal: la columna cuenta personas distintas, no mensajes.</td></tr>
+</table>
+
+<div class="box tip"><b class="t">Importante</b>Este paso solo agrega un aviso. No cambia lo que reciben las personas ni lo que se registra hoy en el CRM.</div>
+
+</body>
+</html>
