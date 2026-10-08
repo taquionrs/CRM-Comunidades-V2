@@ -9,6 +9,8 @@
 //     conjunto que no figura se reporta como DESCONOCIDO y su gasto NO se asigna (nunca se inventa a quién pertenece).
 
 const CAMPO_CONVERSACIONES = "actions_onsite_conversion_messaging_conversation_started_7d";
+// "Cliente potencial de Meta" de Ads Manager (verificado 2026-10-08: 158 en Todo un País, 0 en Cortado WhatsApp, 6–7/10).
+const CAMPO_LEADS = "actions_onsite_conversion_lead_grouped";
 
 /** Igual a crm_comunidades_v2.normalizar_nombre() de db/010: recorta, quita tildes, colapsa espacios, minúsculas. */
 export function normalizarNombre(texto) {
@@ -65,6 +67,7 @@ export function normalizarFilasWindsor(filas) {
       impresiones: Math.round(numero(f.impressions)),
       clics: Math.round(numero(f.clicks)),
       conversaciones: Math.round(numero(f[CAMPO_CONVERSACIONES] ?? f.messaging_conversation_started_7d)),
+      leads: Math.round(numero(f[CAMPO_LEADS])),
     });
   }
   return { filas: out, sinFecha };
@@ -112,9 +115,9 @@ export function mapearFilas(filas, mapeo, opciones = {}) {
     const clave = `${m.comunidad_id}|${f.fecha}`;
     const a = acumulado.get(clave) ?? {
       cliente_id: m.cliente_id, cliente_slug: m.cliente_slug, comunidad_id: m.comunidad_id, comunidad_nombre: m.comunidad_nombre,
-      fecha: f.fecha, inversion: 0, impresiones: 0, clics: 0, conversaciones: 0,
+      fecha: f.fecha, inversion: 0, impresiones: 0, clics: 0, conversaciones: 0, leads: 0,
     };
-    a.inversion += f.inversion; a.impresiones += f.impresiones; a.clics += f.clics; a.conversaciones += f.conversaciones;
+    a.inversion += f.inversion; a.impresiones += f.impresiones; a.clics += f.clics; a.conversaciones += f.conversaciones; a.leads += f.leads;
     acumulado.set(clave, a);
   }
 
@@ -136,8 +139,8 @@ export function resumirPorComunidad(registros) {
   const m = new Map();
   for (const r of registros) {
     const k = `${r.cliente_slug} | ${r.comunidad_nombre}`;
-    const x = m.get(k) ?? { comunidad: k, dias: 0, desde: r.fecha, hasta: r.fecha, inversion: 0, impresiones: 0, clics: 0, conversaciones: 0 };
-    x.dias++; x.inversion += r.inversion; x.impresiones += r.impresiones; x.clics += r.clics; x.conversaciones += r.conversaciones;
+    const x = m.get(k) ?? { comunidad: k, dias: 0, desde: r.fecha, hasta: r.fecha, inversion: 0, impresiones: 0, clics: 0, conversaciones: 0, leads: 0 };
+    x.dias++; x.inversion += r.inversion; x.impresiones += r.impresiones; x.clics += r.clics; x.conversaciones += r.conversaciones; x.leads += r.leads;
     if (r.fecha < x.desde) x.desde = r.fecha; if (r.fecha > x.hasta) x.hasta = r.fecha;
     m.set(k, x);
   }
@@ -153,18 +156,18 @@ export function construirSqlUpsert(registros, tamanoLote = 400) {
     const valores = registros.slice(i, i + tamanoLote).map((r) => {
       if (!UUID.test(r.cliente_id) || !UUID.test(r.comunidad_id)) throw new Error("UUID inválido en un registro");
       if (!FECHA.test(r.fecha)) throw new Error(`Fecha inválida: ${r.fecha}`);
-      for (const k of ["inversion", "impresiones", "clics", "conversaciones"]) {
+      for (const k of ["inversion", "impresiones", "clics", "conversaciones", "leads"]) {
         if (!Number.isFinite(r[k]) || r[k] < 0) throw new Error(`Valor inválido en ${k}: ${r[k]}`);
       }
-      return `('${r.cliente_id}','${r.comunidad_id}','${r.fecha}',${r.inversion.toFixed(2)},${r.conversaciones},${r.impresiones},${r.clics})`;
+      return `('${r.cliente_id}','${r.comunidad_id}','${r.fecha}',${r.inversion.toFixed(2)},${r.conversaciones},${r.impresiones},${r.clics},${r.leads})`;
     });
     sentencias.push(
-      "insert into crm_comunidades_v2.meta_ads_metrica (cliente_id, comunidad_id, fecha, inversion, conversaciones_meta, impresiones, clics) values\n" +
+      "insert into crm_comunidades_v2.meta_ads_metrica (cliente_id, comunidad_id, fecha, inversion, conversaciones_meta, impresiones, clics, leads_meta) values\n" +
       valores.join(",\n") +
-      "\non conflict (comunidad_id, fecha) do update set inversion = excluded.inversion, conversaciones_meta = excluded.conversaciones_meta, impresiones = excluded.impresiones, clics = excluded.clics;",
+      "\non conflict (comunidad_id, fecha) do update set inversion = excluded.inversion, conversaciones_meta = excluded.conversaciones_meta, impresiones = excluded.impresiones, clics = excluded.clics, leads_meta = excluded.leads_meta;",
     );
   }
   return sentencias;
 }
 
-export { CAMPO_CONVERSACIONES };
+export { CAMPO_CONVERSACIONES, CAMPO_LEADS };
