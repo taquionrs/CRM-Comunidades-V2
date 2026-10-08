@@ -69,3 +69,16 @@ Control_Comunidades muestra **Trigger entregados**: personas distintas que recib
 Qué hace el webhook con ese aviso: lo guarda en la tabla `trigger_entregado` (no en `evento_crudo`), así que **no cuenta como clic único ni cambia la atribución**. Responde `{"ok": true, "evento": "trigger"}`. Si la misma persona dispara el flow varias veces, se cuenta una sola vez en el panel.
 
 Cómo verificar: disparar el flow con un número de prueba y, en Control_Comunidades, la celda "Trigger entregados" de esa comunidad deja de decir "sin fuente" y muestra 1. Los avisos de trigger no aparecen en Data_Cruda (ahí solo están los contactos y los rechazos).
+
+### Simular avisos de trigger (sin tocar ManyChat)
+
+`scripts/simular-trigger.mjs` genera avisos de prueba con teléfonos inventados (`5491199999…`) para ver la columna "Trigger entregados" en Control_Comunidades, y los borra al terminar.
+
+```bash
+node scripts/simular-trigger.mjs --cliente cortado-en-jarrito --comunidad Palermo --personas 3 --repeticiones 2
+node scripts/simular-trigger.mjs --limpiar
+```
+
+- **Modo base** (por defecto): inserta directo en la base con el Supabase CLI. No usa secretos.
+- **Modo `--webhook`**: manda POST reales a la Edge Function (prueba secreto, comunidad y guardado). El secreto se toma de la variable de entorno `WEBHOOK_SECRET` y no se imprime.
+- La columna cuenta **personas distintas**: 3 personas × 2 avisos = 3 en el panel.
