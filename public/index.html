@@ -251,7 +251,7 @@ function renderOverview(kpis, comunidades){
     [fmtMoney(k.inversion_total), 'Inversión total Meta'],
     [fmtInt(k.conversaciones_totales), 'Conversaciones totales (Meta)'],
     [fmtMoney(k.cpl_global), 'CPL global'],
-    [fmtInt(k.clics_unicos_totales), 'Clics únicos totales a comunidad'],
+    [fmtInt(k.clics_unicos_totales), 'Entradas únicas al flow (todas las comunidades)'],
     [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales'],
     [fmtMoney(k.cpme_global), 'CPME global'],
     [fmtPct(k.tasa_fuga_global_pct), 'Tasa de fuga global'],
@@ -280,8 +280,8 @@ function renderOverview(kpis, comunidades){
     : `<tr class="empty-row"><td colspan="6">Sin comunidades cargadas todavía — agregá una abajo.</td></tr>`;
 
   return kpiCards +
-    `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; clics únicos y bajas estimadas se calculan solos (First-Contact Attribution).</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Clics únicos (CRM)</th><th>Bajas est. (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
+    `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow y las bajas estimadas se calculan solas (First-Contact Attribution).</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Entradas al flow (CRM)</th><th>Bajas est. (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
     renderComunidadesForm(comunidades);
 }
@@ -389,7 +389,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
         <th></th><th colspan="4" style="color:var(--accent)">Meta Ads</th><th style="color:var(--warn)">ManyChat Bot</th><th colspan="2">CRM / Conversión</th><th colspan="4">WhatsApp &amp; Salud</th><th colspan="2">Financiera</th>
       </tr><tr>
         <th>Comunidad</th><th>Inversión</th><th>Conversaciones</th><th>CPL</th><th>CTR anuncio</th>
-        <th>Trigger entregados</th><th>Clics únicos</th><th>Tasa clic a grupo</th>
+        <th>Trigger entregados</th><th>Entradas al flow</th><th>Entradas / conversaciones</th>
         <th>Mi</th><th>Mf</th><th>Crecimiento neto</th><th>Bajas est.</th>
         <th>CPCU</th><th>CPMN / Tasa fuga</th>
       </tr></thead><tbody>${rows}</tbody></table></div>

@@ -3,7 +3,7 @@
 ## Webhook en vivo (`manychat-webhook`)
 
 1. Dar de alta el cliente con el hash de su secreto: ver [agregar un cliente](agregar-un-cliente.md). Cada cuenta de ManyChat tiene su propio secreto.
-2. En el flow de ManyChat de esa cuenta (el paso posterior a que la persona responde "Me sumo" en la encuesta), agregar una acción **"External Request"**:
+2. En el flow de ManyChat de esa cuenta (el nodo final del flow; ver abajo cuándo sale realmente), agregar una acción **"External Request"**:
    - Método: `POST`
    - URL: `https://<tu-proyecto>.supabase.co/functions/v1/manychat-webhook`
    - Headers: `x-cliente: <slug del cliente>`, `x-webhook-secret: <el secreto en claro de ese cliente>`, `content-type: application/json`
@@ -44,23 +44,27 @@ El flow no tiene disparador ni mensajes: cuando el POST esté probado, se copia 
 - **Cliente:** `cortado-en-jarrito`, cuenta de ManyChat `fb5616665`. Comunidades: `Boedo`, `Palermo`, `Villa Devoto`. El secreto del webhook está en un archivo local ignorado por Git (`SECRETO-cortado-en-jarrito.txt`); en la base solo se guarda su hash.
 - **Flow:** "Test Comunidades Cortado en Jarrito", con la acción "Solicitud externa" en el nodo final ("Acciones #8"), junto a Google Sheets y el evento a la API de conversiones de Meta (canal WhatsApp).
 - **Número de WhatsApp del cliente:** +54 9 11 2753-5622 (Configuración → WhatsApp de la cuenta).
-- **Probado de punta a punta** el 2026-10-01: mensaje por WhatsApp → "Me sumo" → evento en Data_Cruda, asignado a Boedo.
+- **Probado de punta a punta** el 2026-10-01: mensaje por WhatsApp → evento en Data_Cruda, asignado a Boedo.
 
 ### Cuidado con las condiciones por texto
 
-Los flows de comunidades comparan `Localidad_<zona>` con una frase exacta. Si la condición usa el operador **"es"** y la frase termina con un emoji (en Cortado, ☕), cualquier texto escrito a mano sin ese emoji no coincide con ninguna rama y el flow cae en la última salida (Villa Devoto). Eso ensució la planilla anterior y el primer evento del CRM. Corrección aplicada en Cortado: condiciones de **"es" a "contiene"** con la palabra del barrio (`Boedo`, `Palermo`). Al armar flows nuevos, usar siempre "contiene".
+Los flows de comunidades comparan `Localidad_<zona>` con la **frase completa** que manda el formulario de anuncios con opción múltiple (en Cortado, por ejemplo, `Hola, quiero unirme a la comunidad de Cortado en Jarrito Palermo ☕`). Es a propósito: ese texto sale prellenado del anuncio. Con el operador **"contiene"** coincide aunque la persona agregue algo; con **"es"** cualquier diferencia mínima (un emoji, un espacio) manda a la persona a la última rama (Villa Devoto), lo que ensució la planilla anterior y el primer evento del CRM. Al armar flows nuevos: operador "contiene" y la frase vigente del formulario. **Si se cambia el texto del formulario de anuncios, hay que cambiarlo también en la condición.**
 
 Además, el POST tiene que salir **después** de las acciones de rama (nodo final), porque cada rama reescribe `Localidad_<zona>` con el nombre limpio de la comunidad; el cuerpo usa ese valor como `community_id`.
 
-## Aviso de "trigger entregado" (mide cuántas personas reciben el primer mensaje)
+## Cuándo sale realmente el POST al CRM (leído en el flow de Cortado el 2026-10-08)
 
-Control_Comunidades muestra **Trigger entregados**: personas distintas que recibieron el primer mensaje del flow, antes de responder "Me sumo". Para que el número aparezca, cada rama del flow manda un segundo POST **al empezar**:
+En el flow publicado todos los pasos están encadenados con "Siguiente paso": después de enviar el primer mensaje (el del botón "Me sumo") corren solas las acciones de la rama, el mensaje de términos y el nodo final con el POST. Los números del propio flow lo muestran: en Villa Devoto, de 7 mensajes enviados el 71,4 % hizo clic en "Me sumo" (5 personas) y aun así el segundo mensaje se envió a 6. **El POST no espera el toque en "Me sumo"**, y por eso lo que cuenta el CRM como "clics únicos" son **personas que entraron al flow**, no personas que tocaron el botón. (Deducido de esas cifras; falta confirmarlo con una prueba: escribir con un número de prueba, **no** tocar "Me sumo" y ver si aparece en Data_Cruda.) Medir el toque real exigiría que el botón deje de ser un enlace y continúe el flow; por ahora se decidió dejar el flow como está.
 
-- Mismo nodo "Solicitud externa", mismos encabezados (`x-cliente`, `x-webhook-secret`) y misma URL que el POST de "Me sumo".
+## Aviso de "trigger entregado" (opcional)
+
+Control_Comunidades muestra **Trigger entregados**: personas distintas que recibieron el primer mensaje del flow. Con el flow actual este número sería casi igual a las entradas al flow (el POST final también sale automáticamente), así que **hoy no aporta un dato nuevo y no es necesario agregarlo**; queda disponible por si el flow cambia. Para que el número aparezca, cada rama del flow manda un segundo POST **al empezar**:
+
+- Mismo nodo "Solicitud externa", mismos encabezados (`x-cliente`, `x-webhook-secret`) y misma URL que el POST final.
 - Body: igual que el del POST final, **agregando** `"evento": "trigger"`:
   `{"evento": "trigger", "community_id": <Localidad_… de esa rama>, "contact": <Full Contact Data>}`
 - Va **en cada rama, justo después de que el flow ya sabe la comunidad** (cuando `Localidad_<zona>` ya tiene el nombre limpio) y antes del primer mensaje. Si el flow todavía no sabe la comunidad en ese punto, el webhook lo rechaza con "Falta la comunidad" y queda en Data_Cruda → Rechazados.
-- El POST final de "Me sumo" **no se toca** y no lleva `evento`.
+- El POST final **no se toca** y no lleva `evento`.
 
 Qué hace el webhook con ese aviso: lo guarda en la tabla `trigger_entregado` (no en `evento_crudo`), así que **no cuenta como clic único ni cambia la atribución**. Responde `{"ok": true, "evento": "trigger"}`. Si la misma persona dispara el flow varias veces, se cuenta una sola vez en el panel.
 
