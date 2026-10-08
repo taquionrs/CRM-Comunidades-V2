@@ -526,3 +526,11 @@ Implementa las consecuencias de diseño 1 y 3 de la sección 3 septendecies.
 ## 3 novodecies. PR #11 — Títulos de la matriz de Control_Comunidades (2026-10-08)
 
 Error de presentación, no de datos: los títulos decían "Trigger entregados, Envíos de enlace, Clics únicos" pero las celdas se pintaban como trigger (sin fuente), clics únicos, envíos de enlace (sin fuente). Se intercambiaron los dos títulos del medio; los números no cambian. Origen: anterior a la PR #10.
+
+## 3 vicies. PR #12 — Trigger entregados y columna Envíos de enlace (2026-10-08)
+
+- **Envíos de enlace: columna eliminada.** El equipo confirmó que el enlace al grupo se envía justo después de "Me sumo": es el mismo evento que ya cuenta como clic único, así que la columna mostraría el mismo número.
+- **Trigger entregados: ahora tiene fuente.** El flow de ManyChat manda un segundo POST al empezar, con `"evento": "trigger"`. El webhook lo guarda en `trigger_entregado` (db/011) y **no** en `evento_crudo`, para no alterar clics únicos, atribución ni Base_Limpia. El panel cuenta personas distintas por comunidad y rango de fechas (`comunidad_performance_rango.triggers_entregados`). Hasta que el flow mande el aviso, la celda sigue diciendo "sin fuente" con la explicación.
+- **Panel:** además se corrigieron los grupos de encabezado de la matriz (Meta Ads / ManyChat Bot / CRM) que estaban corridos respecto de sus columnas.
+- **Verificado:** con rollback sobre producción, 4 avisos de 3 personas (uno de hace 40 días) dan 3 en el histórico y 2 en los últimos 7 días (uno quedó fuera de rango), los clics únicos no cambian, no se crean eventos crudos y `anon` no puede insertar. Webhook desplegado.
+- **Pendiente del equipo:** agregar el paso "Solicitud externa" al empezar cada rama del flow (pasos en `docs/how-to/configurar-webhook-manychat.md`). SOP-001 (PDF) todavía no incluye este paso.

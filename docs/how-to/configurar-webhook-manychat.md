@@ -51,3 +51,17 @@ El flow no tiene disparador ni mensajes: cuando el POST esté probado, se copia 
 Los flows de comunidades comparan `Localidad_<zona>` con una frase exacta. Si la condición usa el operador **"es"** y la frase termina con un emoji (en Cortado, ☕), cualquier texto escrito a mano sin ese emoji no coincide con ninguna rama y el flow cae en la última salida (Villa Devoto). Eso ensució la planilla anterior y el primer evento del CRM. Corrección aplicada en Cortado: condiciones de **"es" a "contiene"** con la palabra del barrio (`Boedo`, `Palermo`). Al armar flows nuevos, usar siempre "contiene".
 
 Además, el POST tiene que salir **después** de las acciones de rama (nodo final), porque cada rama reescribe `Localidad_<zona>` con el nombre limpio de la comunidad; el cuerpo usa ese valor como `community_id`.
+
+## Aviso de "trigger entregado" (mide cuántas personas reciben el primer mensaje)
+
+Control_Comunidades muestra **Trigger entregados**: personas distintas que recibieron el primer mensaje del flow, antes de responder "Me sumo". Para que el número aparezca, cada rama del flow manda un segundo POST **al empezar**:
+
+- Mismo nodo "Solicitud externa", mismos encabezados (`x-cliente`, `x-webhook-secret`) y misma URL que el POST de "Me sumo".
+- Body: igual que el del POST final, **agregando** `"evento": "trigger"`:
+  `{"evento": "trigger", "community_id": <Localidad_… de esa rama>, "contact": <Full Contact Data>}`
+- Va **en cada rama, justo después de que el flow ya sabe la comunidad** (cuando `Localidad_<zona>` ya tiene el nombre limpio) y antes del primer mensaje. Si el flow todavía no sabe la comunidad en ese punto, el webhook lo rechaza con "Falta la comunidad" y queda en Data_Cruda → Rechazados.
+- El POST final de "Me sumo" **no se toca** y no lleva `evento`.
+
+Qué hace el webhook con ese aviso: lo guarda en la tabla `trigger_entregado` (no en `evento_crudo`), así que **no cuenta como clic único ni cambia la atribución**. Responde `{"ok": true, "evento": "trigger"}`. Si la misma persona dispara el flow varias veces, se cuenta una sola vez en el panel.
+
+Cómo verificar: disparar el flow con un número de prueba y, en Control_Comunidades, la celda "Trigger entregados" de esa comunidad deja de decir "sin fuente" y muestra 1. Los avisos de trigger no aparecen en Data_Cruda (ahí solo están los contactos y los rechazos).
