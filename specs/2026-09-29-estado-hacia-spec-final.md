@@ -534,3 +534,12 @@ Error de presentación, no de datos: los títulos decían "Trigger entregados, E
 - **Panel:** además se corrigieron los grupos de encabezado de la matriz (Meta Ads / ManyChat Bot / CRM) que estaban corridos respecto de sus columnas.
 - **Verificado:** con rollback sobre producción, 4 avisos de 3 personas (uno de hace 40 días) dan 3 en el histórico y 2 en los últimos 7 días (uno quedó fuera de rango), los clics únicos no cambian, no se crean eventos crudos y `anon` no puede insertar. Webhook desplegado.
 - **Pendiente del equipo:** agregar el paso "Solicitud externa" al empezar cada rama del flow (pasos en `docs/how-to/configurar-webhook-manychat.md`). SOP-001 (PDF) todavía no incluye este paso.
+
+## 3 unvicies. PR #13 — Documentación corregida tras leer el flow real de Cortado (2026-10-08)
+
+Lectura en modo solo lectura del flow `Test Comunidades Cortado en Jarrito` (cuenta ManyChat de Cortado), versión publicada:
+- **Condiciones con frase completa: es a propósito.** El texto sale prellenado del formulario de anuncios con opción múltiple. Se retira la recomendación anterior de pasarlas a "Contiene" con una palabra sola (README, how-to y SOP-001 v1.5). Si cambia el texto del formulario, hay que cambiar la condición.
+- **El POST al CRM no espera el toque en "Me sumo".** Todos los pasos están encadenados con "Siguiente paso" (acciones de rama, mensaje de términos y nodo final con el POST). Evidencia: en Villa Devoto, de 7 mensajes enviados el 71,4 % hizo clic (5 personas) y el segundo mensaje se envió a 6. Consecuencia: lo que el CRM llama "clics únicos" son **entradas al flow**, no toques del botón. **Pendiente de confirmar** con una prueba sin tocar el botón.
+- **Panel:** se renombran las etiquetas ("Clics únicos" → "Entradas al flow", "Tasa clic a grupo" → "Entradas / conversaciones"). Los nombres internos en la base no cambian.
+- **Trigger entregados (PR #12):** con este flow daría casi lo mismo que las entradas al flow; queda disponible pero opcional. Documentado en el how-to.
+- **Decisión:** el flow se deja como está por ahora. Medir el toque real implicaría convertir "Me sumo" en un botón que continúa el flow, con el enlace al grupo en el mensaje siguiente.

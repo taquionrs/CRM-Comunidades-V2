@@ -28,7 +28,7 @@ Hermano de [`crm-comunidades`](https://github.com/MarketingTaquion/CRM-Comunidad
 
 El detalle y las prioridades están en el [spec](specs/2026-09-29-estado-hacia-spec-final.md), sección 3 terdecies.
 
-1. **Antes de abrir los flows al público**: rotar los secretos del webhook, y corregir las condiciones de los flows para que usen "Contiene" con la palabra sola.
+1. **Antes de abrir los flows al público**: rotar los secretos del webhook. (Las condiciones de los flows usan la frase completa del formulario de anuncios a propósito: no se cambian.)
 2. **Puesta en marcha de clientes**: activar Todo un País, dar de alta Growing Ideas, recargar el monedero de WhatsApp de Cortado.
 3. **Datos de Meta Ads**: ya se importan por comunidad desde la computadora del equipo (`scripts/windsor-importar.mjs`, ver [cómo configurar Windsor](docs/how-to/configurar-windsor-ai.md)); falta automatizarlo cuando Tecnología cierre la seguridad.
 4. **Miembros iniciales y finales** (carga manual) y mejoras de sus cuadros en el panel.

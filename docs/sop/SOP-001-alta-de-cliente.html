@@ -43,7 +43,7 @@
 <body>
 
 <h1>SOP-001 · Alta de un cliente en el CRM de Comunidades V2</h1>
-<div class="meta"><b>Versión:</b> 1.4 &nbsp;·&nbsp; <b>Fecha:</b> 1 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
+<div class="meta"><b>Versión:</b> 1.5 &nbsp;·&nbsp; <b>Fecha:</b> 8 de octubre de 2026 &nbsp;·&nbsp; <b>Responsable:</b> Taquion (Marketing) &nbsp;·&nbsp; <b>Cliente de referencia:</b> Cortado en Jarrito (verificado en producción)</div>
 
 <div class="box tip"><b class="t">Para qué sirve este procedimiento</b>
 Cada cliente de Taquion que tenga una comunidad entra al mismo CRM. Este SOP explica cómo darlo de alta, cómo dejar su flow de ManyChat listo para enviar los datos al CRM, y cómo comprobar con una prueba real que todo llega a la pestaña <b>Data_Cruda</b>. Tiempo estimado: 45 a 60 minutos.</div>
@@ -127,11 +127,12 @@ Copiar un flow entre cuentas es lo más rápido, pero arrastra datos del cliente
 <table>
   <tr><th style="width:24%">Parte del flow</th><th style="width:44%">Cómo tiene que quedar</th><th>Por qué</th></tr>
   <tr><td><b>Disparadores</b></td><td>Uno por comunidad: “El usuario envía un mensaje · <b>el mensaje contiene</b> &lt;palabra del barrio&gt;”.</td><td>Así se activa aunque la persona escriba la frase distinta.</td></tr>
-  <tr><td><b>Condiciones</b></td><td>Comparar el campo de localidad con el operador <b>“Contiene”</b> y <b>solo la palabra</b> (por ejemplo <code>Boedo</code>).</td><td>Con “Es” y la frase completa (sobre todo si termina en un emoji, como ☕) cualquier mensaje escrito a mano no coincide y cae en la última rama.</td></tr>
+  <tr><td><b>Condiciones</b></td><td>Comparar el campo de localidad con el operador <b>“Contiene”</b> y la <b>frase completa que manda el formulario de anuncios</b> de ese barrio (por ejemplo <code>Hola, quiero unirme a la comunidad de Cortado en Jarrito Palermo ☕</code>).</td><td>Esa frase sale prellenada del formulario de anuncios con opción múltiple, así que es la que llega. <b>Si se cambia el texto del formulario, hay que cambiar igual la condición</b>. Con “Es” en lugar de “Contiene”, cualquier diferencia mínima (un emoji, un espacio) manda a la persona a la última rama.</td></tr>
   <tr><td><b>Cada rama</b></td><td>Mensaje de bienvenida con botón “Me sumo” (enlace al grupo) → acciones: añadir la etiqueta del barrio, <b>establecer el campo de localidad con el nombre exacto de la comunidad</b> (igual al del paso 1) y establecer <code>Estado_Comunidad</code> = “Clic en grupo”.</td><td>El POST usa ese campo como comunidad. Si no coincide con el CRM, el CRM lo rechaza.</td></tr>
   <tr><td><b>Nodo final</b></td><td>Todas las ramas convergen en un único nodo de acciones. Ahí van, en este orden: (a) planilla de Google (respaldo), (b) <b>Solicitud externa (POST al CRM)</b>, (c) evento a la API de conversiones de Meta, si existe, con canal <b>WhatsApp</b>.</td><td>El POST tiene que salir <b>después</b> de las acciones de rama, que son las que dejan la localidad limpia.</td></tr>
   <tr><td><b>Disparador por etiqueta</b></td><td><b>No usar</b> “Se produce un evento de contactos: etiqueta aplicada”.</td><td>El flow aplica etiquetas: se dispara a sí mismo en bucle.</td></tr>
 </table>
+<p><b>Nota sobre el nodo final:</b> en el flow de Cortado todos los pasos están encadenados con “Siguiente paso”, así que el POST al CRM sale solo después de enviar los mensajes, <b>sin esperar</b> a que la persona toque “Me sumo”. Por eso el CRM cuenta <b>entradas al flow</b> (personas que recibieron el mensaje), no toques del botón. Se dedujo de las cifras del flow y falta confirmarlo con una prueba: escribir con un número de prueba, no tocar “Me sumo” y ver si aparece en Data_Cruda.</p>
 
 <h3>4.2 Configurar la “Solicitud externa” (POST)</h3>
 <p>En el nodo final: <b>+ Acción → Automatización → Realizar solicitud externa</b>, y abrirla.</p>
@@ -165,7 +166,7 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
 
 <ol>
   <li>Desde el celular de prueba, escribile al <b>número de WhatsApp del cliente</b> una frase que contenga la palabra de una comunidad. Ejemplo: <code>Hola, quiero unirme a la comunidad de Cortado en Jarrito Boedo</code></li>
-  <li>Tiene que llegar el <b>mensaje de bienvenida con el botón “Me sumo”</b>. Tocalo: se abre el enlace del grupo y llega el mensaje de términos y condiciones. Ahí corrió el nodo final. <b>Comprobá que el grupo que se abre es el del cliente que estás probando</b> (el nombre del grupo lo dice).</li>
+  <li>Tiene que llegar el <b>mensaje de bienvenida con el botón “Me sumo”</b>. Tocalo: se abre el enlace del grupo y llega el mensaje de términos y condiciones. El nodo final corre solo, después de enviarse los mensajes, sin esperar el toque (ver nota al final de este paso). <b>Comprobá que el grupo que se abre es el del cliente que estás probando</b> (el nombre del grupo lo dice).</li>
   <li>Abrí <b>crm-comunidades-v2.vercel.app</b>, elegí el cliente en el selector y entrá a la pestaña <b>Data_Cruda</b>. Tocá <b>Actualizar</b> (o marcá “Actualizar cada 30 s”).</li>
   <li>Tiene que aparecer una fila nueva. Comprobá cada columna:</li>
 </ol>
@@ -185,12 +186,12 @@ Usá solo tu teléfono de prueba. El CRM atribuye cada persona a su <b>primer co
 <table>
   <tr><th style="width:27%">Síntoma</th><th style="width:36%">Causa probable</th><th>Qué hacer</th></tr>
   <tr><td>No llega el mensaje de bienvenida</td><td>El texto no contiene ninguna palabra de disparador; el flow no está publicado; el monedero no tiene saldo.</td><td>Revisar los disparadores; confirmar que no hay punto naranja junto a LIVE; ver Configuración → Registros (“insufficient funds in your Wallet”) y recargar el monedero.</td></tr>
-  <tr><td>Llegó la bienvenida pero no hay fila en Data_Cruda</td><td>La persona no tocó “Me sumo” (el nodo final no corrió), o el POST fue rechazado.</td><td>Tocar “Me sumo”. Si ya lo tocó, abrir Data_Cruda → filtro <b>Rechazados</b>: ahí aparece el código y el motivo. Compararlos con los códigos de abajo.</td></tr>
+  <tr><td>Llegó la bienvenida pero no hay fila en Data_Cruda</td><td>El POST fue rechazado, o el flow no llegó al nodo final (por ejemplo, la ventana de 24 horas de WhatsApp o un saldo insuficiente).</td><td>Abrir Data_Cruda → filtro <b>Rechazados</b>: ahí aparece el código y el motivo. Compararlos con los códigos de abajo.</td></tr>
   <tr><td>Código <b>401</b></td><td>Secreto o slug incorrectos (o cliente inactivo).</td><td>Volver a pegar el secreto desde el gestor, sin espacios; revisar que <code>x-cliente</code> sea el slug exacto.</td></tr>
   <tr><td>Código <b>404</b> “Comunidad no encontrada”</td><td>El nombre que llega en <code>community_id</code> no existe en ese cliente.</td><td>Igualar el nombre del flow con el del CRM (mayúsculas, tildes, espacios).</td></tr>
   <tr><td>Código <b>400</b></td><td>No llegó ni teléfono (WhatsApp) ni <code>ig_id</code> (Instagram), o falta <code>community_id</code>.</td><td>El motivo en Data_Cruda lista los campos del contacto que sí llegaron. Revisar que el chip del cuerpo no esté vacío.</td></tr>
   <tr><td>Código <b>501</b></td><td>El cliente no tiene secreto cargado.</td><td>Repetir el paso 3.</td></tr>
-  <tr><td>Aparece en la comunidad equivocada (siempre la última)</td><td>Condiciones con “Es” y frase exacta (o con emoji).</td><td>Cambiar a “Contiene” con la palabra sola (paso 4.1).</td></tr>
+  <tr><td>Aparece en la comunidad equivocada (siempre la última)</td><td>La condición no coincide con el texto que llega (por ejemplo, se cambió la frase del formulario de anuncios, o se usó “Es”).</td><td>Usar “Contiene” con la frase completa vigente del formulario de anuncios (paso 4.1).</td></tr>
   <tr><td>La persona queda registrada pero entra al grupo de <b>otro</b> cliente</td><td>El botón “Me sumo” conserva el enlace del flow que se copió.</td><td>Cambiar la URL de cada botón por el grupo correcto y publicar. El CRM no lo detecta: hay que verlo abriendo el enlace en la prueba.</td></tr>
   <tr><td>Los envíos aparecen rechazados en <b>otro</b> cliente (404 con comunidades que no son de ese cliente)</td><td>El flow se copió con el <code>x-cliente</code> y el secreto del original.</td><td>Poner los del cliente correcto. Los envíos rechazados guardan su contenido completo y se pueden recuperar (ver el paso 7 y a quien administra el CRM).</td></tr>
   <tr><td>Hay fila en la planilla pero no en el CRM</td><td>El POST no está en el nodo final, o los cambios no se publicaron.</td><td>Revisar el nodo final y apretar Actualizar.</td></tr>
@@ -215,7 +216,7 @@ delete from crm_comunidades_v2.usuario_curado
 <ul class="check">
   <li>Cliente visible en el selector del panel, con todas sus comunidades.</li>
   <li>Secreto guardado en el gestor de contraseñas y snippet de Supabase borrado.</li>
-  <li>Flow con disparadores por palabra, condiciones “Contiene”, y la localidad de cada rama igual al nombre en el CRM.</li>
+  <li>Flow con disparadores por palabra, condiciones “Contiene” con la frase del formulario de anuncios, y la localidad de cada rama igual al nombre en el CRM.</li>
   <li>POST en el nodo final, con los dos encabezados y el cuerpo con chips, y flow <b>publicado</b> (sin punto naranja).</li>
   <li>Evento a la API de conversiones (si existe) con canal WhatsApp.</li>
   <li>Prueba real hecha: la fila apareció en Data_Cruda con comunidad y texto correctos.</li>
