@@ -58,12 +58,13 @@ En el flow publicado todos los pasos están encadenados con "Siguiente paso": de
 
 ## Aviso de "trigger entregado" (opcional)
 
-Control_Comunidades muestra **Trigger entregados**: personas distintas que recibieron el primer mensaje del flow. Con el flow actual este número sería casi igual a las entradas al flow (el POST final también sale automáticamente), así que **hoy no aporta un dato nuevo y no es necesario agregarlo**; queda disponible por si el flow cambia. Para que el número aparezca, cada rama del flow manda un segundo POST **al empezar**:
+Control_Comunidades muestra **Trigger entregados**: personas distintas que recibieron el primer mensaje del flow. Con el flow actual este número queda cerca de las entradas al flow (el POST final también sale automáticamente), pero se decidió medirlo desde ManyChat igual. Hay un [instructivo en PDF](../instructivos/instructivo-trigger-manychat-cortado.pdf) para quien configura el flow de Cortado. Para que el número aparezca, cada rama del flow manda un segundo POST **antes del primer mensaje**:
 
 - Mismo nodo "Solicitud externa", mismos encabezados (`x-cliente`, `x-webhook-secret`) y misma URL que el POST final.
 - Body: igual que el del POST final, **agregando** `"evento": "trigger"`:
-  `{"evento": "trigger", "community_id": <Localidad_… de esa rama>, "contact": <Full Contact Data>}`
-- Va **en cada rama, justo después de que el flow ya sabe la comunidad** (cuando `Localidad_<zona>` ya tiene el nombre limpio) y antes del primer mensaje. Si el flow todavía no sabe la comunidad en ese punto, el webhook lo rechaza con "Falta la comunidad" y queda en Data_Cruda → Rechazados.
+  `{"evento": "trigger", "community_id": "<nombre exacto de la comunidad de esa rama>", "contact": <Full Contact Data>}`
+  **`community_id` va como texto fijo por rama** (por ejemplo `Palermo`), no con el campo `Localidad_…`: en ese punto del flow el campo todavía tiene la frase completa del anuncio y el webhook la rechazaría con "Comunidad no encontrada".
+- Va **en cada rama, entre la condición y el primer mensaje** (el de "Me sumo"): ahí es donde el flow ya sabe de qué comunidad se trata. Si el nombre no coincide con el del CRM, el webhook lo rechaza con "Comunidad no encontrada" y queda en Data_Cruda → Rechazados.
 - El POST final **no se toca** y no lleva `evento`.
 
 Qué hace el webhook con ese aviso: lo guarda en la tabla `trigger_entregado` (no en `evento_crudo`), así que **no cuenta como clic único ni cambia la atribución**. Responde `{"ok": true, "evento": "trigger"}`. Si la misma persona dispara el flow varias veces, se cuenta una sola vez en el panel.

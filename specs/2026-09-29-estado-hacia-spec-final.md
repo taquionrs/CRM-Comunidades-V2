@@ -543,3 +543,9 @@ Lectura en modo solo lectura del flow `Test Comunidades Cortado en Jarrito` (cue
 - **Panel:** se renombran las etiquetas ("Clics únicos" → "Entradas al flow", "Tasa clic a grupo" → "Entradas / conversaciones"). Los nombres internos en la base no cambian.
 - **Trigger entregados (PR #12):** con este flow daría casi lo mismo que las entradas al flow; queda disponible pero opcional. Documentado en el how-to.
 - **Decisión:** el flow se deja como está por ahora. Medir el toque real implicaría convertir "Me sumo" en un botón que continúa el flow, con el enlace al grupo en el mensaje siguiente.
+
+## 3 duovicies. PR #16 — Nombres de los costos y corrección del how-to del trigger (2026-10-08)
+
+- **Panel, Control_Comunidades:** "CPCU" pasa a "Costo por entrada al flow" y "CPMN / Tasa fuga" se separa en "Costo por miembro neto" y "Tasa de fuga" (la tabla tenía 3 celdas financieras y solo 2 títulos, así que la tasa de fuga quedaba sin encabezado). Los nombres internos en la base no cambian.
+- **Qué mide cada costo:** CPL = inversión ÷ conversaciones de Meta; costo por entrada al flow = inversión ÷ personas que entraron al flow (no es una incorporación al grupo); **costo por miembro neto (CPMN) = inversión ÷ (MF − MI)**, el que corresponde a "costo por incorporación" y requiere cargar MI y MF.
+- **How-to del trigger:** `community_id` del aviso va como **texto fijo por rama**, no con `Localidad_…` (en ese punto del flow el campo todavía tiene la frase completa del anuncio). Se enlaza el instructivo en PDF (PR #15).
