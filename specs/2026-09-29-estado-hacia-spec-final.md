@@ -522,3 +522,7 @@ Implementa las consecuencias de diseño 1 y 3 de la sección 3 septendecies.
 - **Primera importación real (CSV del 1 al 7 de octubre):** 19 registros comunidad×día, inversión total 714.202,21; 121 filas de campañas de otros clientes ignoradas. Repetirla no duplica.
 - **Límites conocidos:** el CSV no traía `impressions` (impresiones y CTR en 0 hasta reimportar con esa columna); la campaña de Cortado "general" tiene 14.014 clics y 6 conversaciones (revisar con el equipo si el objetivo de esa campaña es tráfico y no mensajes); la comunidad "Todo un País (general)" no tiene campaña mapeada.
 - **Seguridad:** `comunidad_meta_origen` es solo lectura para el panel; `anon` no puede escribir. `db/005` la incluye para cuando haya login.
+
+## 3 novodecies. PR #11 — Títulos de la matriz de Control_Comunidades (2026-10-08)
+
+Error de presentación, no de datos: los títulos decían "Trigger entregados, Envíos de enlace, Clics únicos" pero las celdas se pintaban como trigger (sin fuente), clics únicos, envíos de enlace (sin fuente). Se intercambiaron los dos títulos del medio; los números no cambian. Origen: anterior a la PR #10.
