@@ -25,10 +25,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const WINDSOR_API_KEY = Deno.env.get("WINDSOR_API_KEY");
-// Nombre del campo de Windsor.ai para "conversaciones iniciadas". El documento de Jaz lo llama
+// Nombre del campo de Windsor.ai para "conversaciones iniciadas". El documento de Jaz lo llama messaging_conversation_started_7d,
+// pero en el conector facebook de Windsor el campo real es actions_onsite_conversion_messaging_conversation_started_7d
+// (documentación de Windsor, verificado 2026-10-08 y con datos reales). Antes decía
 // messaging_conversation_started_7d; el nombre exacto no se pudo confirmar contra la documentación de
 // Windsor.ai, así que se puede corregir sin tocar el código: supabase secrets set WINDSOR_CONVERSATIONS_FIELD=...
-const CAMPO_CONVERSACIONES = Deno.env.get("WINDSOR_CONVERSATIONS_FIELD") ?? "messaging_conversation_started_7d";
+const CAMPO_CONVERSACIONES = Deno.env.get("WINDSOR_CONVERSATIONS_FIELD") ?? "actions_onsite_conversion_messaging_conversation_started_7d";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

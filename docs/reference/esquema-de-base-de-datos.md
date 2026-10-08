@@ -108,6 +108,18 @@ Tope: 300 filas por hora, para que el ruido de internet no llene la base.
 
 Constraint: `(comunidad_id, fecha)` único.
 
+### `comunidad_meta_origen` (010)
+Qué campaña / conjunto de anuncios de Meta pertenece a cada comunidad. Lo lee `scripts/windsor-importar.mjs`.
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid, PK | |
+| `cliente_id`, `comunidad_id` | uuid, not null | FK compuesta `(comunidad_id, cliente_id)` |
+| `campana_nombre` | text, not null | Nombre de la campaña en Meta |
+| `adset_nombre` | text, nullable | Conjunto de anuncios. NULL = toda la campaña va a esa comunidad |
+| `creado_en` | timestamptz | |
+
+Único por `(cliente_id, campaña normalizada, conjunto normalizado)`. Función `normalizar_nombre(text)`: recorta, quita tildes, colapsa espacios, minúsculas. `cliente.meta_cuenta_id` guarda el ID de la cuenta publicitaria de Meta del cliente. Lectura abierta temporal (como el resto); `005` la restringe por cliente.
+
 ### `usuario_cliente` (005)
 `(user_id, cliente_id)`: qué usuario ve qué cliente. Alimenta el selector de cliente cuando haya login.
 

@@ -19,3 +19,23 @@ supabase secrets set WINDSOR_CONVERSATIONS_FIELD=<nombre exacto del campo en Win
 ```
 
 El CTR de anuncio sale de `clicks / impressions`: ya no figura "sin fuente".
+
+## Importar la inversión por comunidad desde tu computadora (PR #10)
+
+Mientras `windsor-sync` no tenga la clave cargada en Supabase, la inversión de Meta Ads se importa con un script local. No deja ninguna clave en la nube.
+
+1. En Windsor (conector Facebook) exportá un CSV con las columnas `date, account_id, account_name, campaign, adset_name, spend, impressions, clicks, actions_onsite_conversion_messaging_conversation_started_7d`, por día, del período que quieras.
+2. **Ensayo** (no guarda nada, solo muestra qué haría):
+   ```bash
+   node scripts/windsor-importar.mjs --csv "C:/ruta/data.csv" --cuenta "TQN - Growing 2 - LC"
+   ```
+3. Si el resumen por comunidad es el esperado, repetí el comando agregando `--aplicar`. Se puede repetir sobre el mismo período: reemplaza los valores de cada comunidad y día, no duplica.
+
+Qué hace con el CSV:
+- **Campaña → cliente, conjunto de anuncios → comunidad**, según la tabla `comunidad_meta_origen` (reglas con `adset_nombre` vacío = toda la campaña a una comunidad "general"). Los nombres se comparan sin tildes, sin mayúsculas y con espacios colapsados.
+- Las campañas que no están en el mapeo (otros clientes de la misma cuenta) se ignoran y se informa cuántas filas.
+- Si una campaña mapeada trae un conjunto que no figura, avisa con el gasto y **no lo asigna**: hay que agregar la regla a `comunidad_meta_origen`.
+- Con `--windsor --desde AAAA-MM-DD --hasta AAAA-MM-DD` consulta la API directamente (requiere la variable de entorno `WINDSOR_API_KEY`; la clave nunca se imprime).
+- Las pruebas del importador: `npm test`.
+
+**Alta de una comunidad nueva en Meta:** insertar una fila en `comunidad_meta_origen` (ver `db/mantenimiento/2026-10-08_cargar_mapeo_meta.sql` como modelo) con el nombre exacto de la campaña y del conjunto.
