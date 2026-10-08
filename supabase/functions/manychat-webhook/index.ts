@@ -140,6 +140,12 @@ export function nombreDeContacto(contact: Record<string, unknown> | null): strin
   return nombre;
 }
 
+// El flow marca el aviso de inicio con "evento": "trigger" (también se acepta "trigger_entregado").
+export function esAvisoTrigger(valor: unknown): boolean {
+  const v = textoLimpio(valor)?.toLowerCase();
+  return v === "trigger" || v === "trigger_entregado";
+}
+
 // Primer campo personalizado "Localidad*" con valor (fallback si el flow no manda community_id).
 function comunidadDesdeCamposPersonalizados(contact: Record<string, unknown> | null): string | null {
   const campos = contact?.custom_fields;
@@ -318,6 +324,17 @@ Deno.serve(async (req) => {
       "Comunidad no encontrada: el nombre que llegó no existe en este cliente",
       { comunidad: communityId, telefono: identificador },
     );
+  }
+
+  // Aviso de "se entregó el primer mensaje del flow" (db/011): "evento": "trigger" en el body. No es un contacto:
+  // va a trigger_entregado, nunca a evento_crudo, así no toca clics únicos, atribución ni Base_Limpia.
+  if (esAvisoTrigger(body.evento)) {
+    const { error: errTrigger } = await admin
+      .schema("crm_comunidades_v2")
+      .from("trigger_entregado")
+      .insert({ cliente_id: cliente.id, comunidad_id: comunidad.id, telefono_id: identificador });
+    if (errTrigger) return await rechazar(500, errTrigger.message, `Error al guardar el aviso de trigger: ${errTrigger.message}`, { comunidad: communityId, telefono: identificador });
+    return json({ ok: true, evento: "trigger", telefono_normalizado: identificador, canal });
   }
 
   // recibido_en: hora del servidor (default de la tabla). El payload completo queda tal cual llegó.

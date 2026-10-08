@@ -120,6 +120,17 @@ Qué campaña / conjunto de anuncios de Meta pertenece a cada comunidad. Lo lee 
 
 Único por `(cliente_id, campaña normalizada, conjunto normalizado)`. Función `normalizar_nombre(text)`: recorta, quita tildes, colapsa espacios, minúsculas. `cliente.meta_cuenta_id` guarda el ID de la cuenta publicitaria de Meta del cliente. Lectura abierta temporal (como el resto); `005` la restringe por cliente.
 
+### `trigger_entregado` (011)
+Avisos "se entregó el primer mensaje del flow" que manda ManyChat al empezar (`"evento": "trigger"`). No son contactos: no entran a `evento_crudo` ni a la atribución. Una fila por aviso (con duplicados); el panel cuenta personas distintas.
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid, PK | |
+| `cliente_id`, `comunidad_id` | uuid, not null | FK compuesta `(comunidad_id, cliente_id)` |
+| `telefono_id` | text, not null | Dígitos o `ig:<id>`, igual que `evento_crudo` |
+| `recibido_en` | timestamptz | Hora del servidor |
+
+Lectura abierta temporal; solo el webhook (service_role) escribe. `comunidad_performance_rango` devuelve además `triggers_entregados` (011).
+
 ### `usuario_cliente` (005)
 `(user_id, cliente_id)`: qué usuario ve qué cliente. Alimenta el selector de cliente cuando haya login.
 

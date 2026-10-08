@@ -58,6 +58,7 @@ alter table crm_comunidades_v2.usuario_cliente enable row level security;
 alter table crm_comunidades_v2.usuario_estado_historial enable row level security;
 alter table crm_comunidades_v2.webhook_intento enable row level security; -- 007
 alter table crm_comunidades_v2.comunidad_meta_origen enable row level security; -- 010
+alter table crm_comunidades_v2.trigger_entregado enable row level security; -- 011
 
 do $$
 declare
@@ -69,7 +70,7 @@ begin
     select policyname, tablename from pg_policies
      where schemaname = 'crm_comunidades_v2'
        and tablename in ('cliente','comunidad','evento_crudo','usuario_curado',
-                         'meta_ads_metrica','usuario_estado_historial','usuario_cliente','webhook_intento','comunidad_meta_origen')
+                         'meta_ads_metrica','usuario_estado_historial','usuario_cliente','webhook_intento','comunidad_meta_origen','trigger_entregado')
   loop
     execute format('drop policy if exists %I on crm_comunidades_v2.%I', p.policyname, p.tablename);
   end loop;
@@ -94,7 +95,7 @@ begin
 
   -- Solo lectura desde el panel: el log crudo nunca se edita ni se borra
   -- (entra por el webhook con service_role) y el historial lo escribe un trigger.
-  foreach t in array array['evento_crudo','usuario_estado_historial','webhook_intento','comunidad_meta_origen']
+  foreach t in array array['evento_crudo','usuario_estado_historial','webhook_intento','comunidad_meta_origen','trigger_entregado']
   loop
     execute format(
       'create policy cliente_select on crm_comunidades_v2.%I for select to authenticated '
@@ -118,6 +119,7 @@ revoke insert, update, delete on crm_comunidades_v2.usuario_estado_historial fro
 revoke insert, update, delete on crm_comunidades_v2.evento_crudo from authenticated;
 revoke insert, update, delete on crm_comunidades_v2.webhook_intento from authenticated;
 revoke insert, update, delete on crm_comunidades_v2.comunidad_meta_origen from authenticated;
+revoke insert, update, delete on crm_comunidades_v2.trigger_entregado from authenticated;
 
 -- ----------------------------------------------------------------------------
 -- Ejemplo: habilitar a un usuario en todos los clientes (correr a mano).
