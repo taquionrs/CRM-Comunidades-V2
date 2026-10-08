@@ -441,7 +441,7 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 | P2 | Todo un País: ya recibe tráfico por Instagram. Falta revisar el flow de WhatsApp (copiado de Cortado: encabezados, enlaces de grupo y nombres) y probarlo con un contacto real |
 | P2 | Dar de alta Growing Ideas (cuenta `fb5347078`) |
 | P2 | Recargar el monedero de WhatsApp de Cortado |
-| P2 | Datos de Meta Ads: cargar la API key de Windsor.ai y confirmar el campo de conversaciones |
+| P2 | Datos de Meta Ads: la fuente quedó asentada (cuenta `TQN - Growing 2 - LC`, ver 3 septendecies). Falta confirmar los conjuntos de anuncios por comunidad y el campo de conversaciones (`actions_onsite_conversion_messaging_conversation_started_7d`); no se carga la clave de Windsor en Supabase hasta validar al usuario en `windsor-sync` |
 | P2 | Carga manual de miembros iniciales y finales (MI / MF) |
 | P2 | Panel: aclarar los cuadros "miembros reales" de Base_Limpia y avisar cuando MF está sin cargar |
 | P2 | Política de retención de `webhook_intento` |
@@ -491,3 +491,24 @@ Reescribir el spec V2 con la plantilla del método (front-matter, requisitos, cr
 - **Rotar el secreto de Cortado:** quedó visible en una captura. Hay que cambiarlo a la vez en la base y en sus dos flows (WhatsApp e Instagram), porque tienen tráfico real.
 - **Revisar el flow de WhatsApp de Todo un País ("Comunidades TUP")** antes de activarlo: se copió igual que el de Instagram y probablemente tiene los mismos errores (encabezados, enlaces y nombres).
 - **Dar de alta Growing Ideas**, que no está en el CRM.
+
+## 3 septendecies. Control_Comunidades: de dónde salen los datos de Meta Ads (decisión del 2026-10-08)
+
+**Pregunta.** ¿Los datos de Meta Ads (inversión, impresiones, clics y conversaciones por comunidad) se toman directamente de Windsor.ai o a través de Pulso?
+
+**Decisión: directamente de Windsor.ai, no a través de Pulso.** Motivos verificados leyendo el código de Pulso (`pulso-ignite/lib/windsor*.ts`):
+- Pulso trabaja a nivel **campaña y anuncio**, agregado por período. Nunca pide `adset_name` ni campos de mensajes (su `conversions` es genérico), y el CRM necesita datos **por conjunto de anuncios y por día** (`meta_ads_metrica`: una fila por comunidad y fecha).
+- Los endpoints de Pulso son públicos y la seguridad de Pulso y del CRM V2 está en manos del equipo de Tecnología: depender de ellos acoplaría el CRM a algo que va a cambiar.
+- Pulso tarda de 9 a 20 segundos en consultas de anuncios; no conviene encadenarlo.
+- Se **reutilizan sus lecciones, no su código**: reintentos ante 429 y 5xx, tiempo límite, tope de consultas simultáneas y `trim()` de los nombres (a Pulso un espacio invisible le rompió el cruce de nombres en silencio).
+
+**Fuente asentada.** Cuenta publicitaria de Meta **`TQN - Growing 2 - LC`** (ID `1669338306456901`), conector Facebook de Windsor. Evidencia: la vista de Pulso muestra, dentro de esa cuenta, las campañas `TQN_AON_META_CON_INTE_MANUAL_CORTADO_EN_JARRITO`, `TQN_META_CON_LEADS_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` y `TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS`, todas con gasto real. Confirmado por el equipo que **la cuenta `Cuenta Todo un País` (ID `2519911211576322`), también conectada en Windsor, no se usa** y se ignora.
+
+**Lo que Windsor tiene conectado** (revisado el 2026-10-08 en modo solo lectura): Facebook: `TQN - Growing 2 - LC`, `TQN - Growing - LC`, `Diego Marcelo Lajst`, `Cuenta Todo un País`, `Froneri Arg`; Google Ads: `TQN - LC`, `FRONERI`; una hoja de Google Sheets; TikTok: `Taquion`, `Taquion0126`, `Taquion-AdAccountTTK`. Windsor ofrece además **Supabase y PostgreSQL como destinos**: Windsor podría escribir directamente en una tabla, sin función propia ni clave de Windsor en la nube. Queda como alternativa a consultar con Tecnología (implica darle a un servicio externo un usuario de base, y no se verificó si el plan lo incluye).
+
+**Consecuencias de diseño** (a implementar en una PR aparte):
+1. **El cliente se distingue por la campaña, la comunidad por el conjunto de anuncios.** El mapeo actual (`comunidad.adset_name`, único por cliente) no alcanza en una cuenta compartida. Propuesta: una tabla que diga, para cada comunidad, qué campaña y qué conjunto de anuncios le corresponden (varios por comunidad), comparando con `trim` y sin diferencia de mayúsculas.
+2. **El campo de conversaciones tiene otro nombre.** En el conector de Windsor es `actions_onsite_conversion_messaging_conversation_started_7d`, no `messaging_conversation_started_7d` (el del documento de Jaz). `adset_name` sí existe.
+3. **No se carga `WINDSOR_API_KEY` en Supabase** hasta que `windsor-sync` valide al usuario (hoy se puede invocar con la clave pública del panel y gastaría el cupo de Windsor). Mientras tanto: importación desde la computadora del equipo, que lee la clave del entorno local y escribe en `meta_ads_metrica`.
+
+**Pendiente.** Ver en Windsor, para las campañas de Cortado y Todo un País: los nombres de los conjuntos de anuncios (¿traen el barrio?), si el campo de conversaciones devuelve números, y si hay otras campañas de estos clientes (por ejemplo, las de Instagram). Hasta tener eso no se define el mapeo definitivo.
