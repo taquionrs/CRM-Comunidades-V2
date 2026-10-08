@@ -549,3 +549,10 @@ Lectura en modo solo lectura del flow `Test Comunidades Cortado en Jarrito` (cue
 - **Panel, Control_Comunidades:** "CPCU" pasa a "Costo por entrada al flow" y "CPMN / Tasa fuga" se separa en "Costo por miembro neto" y "Tasa de fuga" (la tabla tenía 3 celdas financieras y solo 2 títulos, así que la tasa de fuga quedaba sin encabezado). Los nombres internos en la base no cambian.
 - **Qué mide cada costo:** CPL = inversión ÷ conversaciones de Meta; costo por entrada al flow = inversión ÷ personas que entraron al flow (no es una incorporación al grupo); **costo por miembro neto (CPMN) = inversión ÷ (MF − MI)**, el que corresponde a "costo por incorporación" y requiere cargar MI y MF.
 - **How-to del trigger:** `community_id` del aviso va como **texto fijo por rama**, no con `Localidad_…` (en ese punto del flow el campo todavía tiene la frase completa del anuncio). Se enlaza el instructivo en PDF (PR #15).
+
+## 3 tervicies. PR #17 — Fila "Total del cliente" en Control_Comunidades (2026-10-08)
+
+- La matriz suma al pie **todas las comunidades del cliente** (aunque haya una elegida en el filtro) y **recalcula las razones con esos totales**, no promedia filas: CPL = inversión total ÷ conversaciones totales; costo por entrada al flow = inversión total ÷ entradas totales; CTR = clics ÷ impresiones.
+- Resuelve que la inversión de la comunidad "(general)" (campañas que no distinguen barrio) no entraba en ningún costo por entrada: en el total sí cuenta. Las entradas no se duplican (atribución por primer contacto).
+- Respeta el rango de fechas elegido. Sin MI y MF cargados, el costo por miembro neto del total queda en "—".
+- Verificado con datos reales: el total histórico de Cortado ($7.899.429,93, 96 conversaciones, CPL $82.285,73) coincide con los KPIs de Overview.

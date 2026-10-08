@@ -375,6 +375,31 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
       </tr>`).join('')
     : `<tr class="empty-row"><td colspan="15">Sin datos todavía.</td></tr>`;
 
+  // Total del cliente: suma de TODAS las comunidades (aunque haya una elegida en el filtro) y razones recalculadas
+  // con esos totales, no promediando las filas. Las entradas no se duplican: la atribución es por primer contacto.
+  const suma = (campo) => comunidades.reduce((s, c) => s + (Number(c[campo]) || 0), 0);
+  const razon = (num, den, factor = 1) => (den > 0 ? (num / den) * factor : null);
+  const tInv = suma('inversion'), tConv = suma('conversaciones_meta'), tEnt = suma('clics_unicos');
+  const tMi = suma('miembros_iniciales'), tMf = suma('miembros_finales'), tBajas = suma('bajas_estimadas');
+  const tTrig = suma('triggers_entregados');
+  const filaTotal = comunidades.length ? `<tr class="totales">
+        <td>Total del cliente</td>
+        <td class="mono">${fmtMoney(tInv)}</td>
+        <td class="mono">${fmtInt(tConv)}</td>
+        <td class="mono">${fmtMoney(razon(tInv, tConv))}</td>
+        <td class="mono">${fmtPct(razon(suma('clics'), suma('impresiones'), 100))}</td>
+        <td>${tTrig > 0 ? `<span class="mono">${fmtInt(tTrig)}</span>` : naCell('Todavía no llegó ningún aviso de inicio de flow')}</td>
+        <td class="mono">${fmtInt(tEnt)}</td>
+        <td class="mono">${fmtPct(razon(tEnt, tConv, 100))}</td>
+        <td class="mono">${fmtInt(tMi)}</td>
+        <td class="mono">${fmtInt(tMf)}</td>
+        <td class="mono">${fmtInt(tMf - tMi)}</td>
+        <td class="mono">${fmtInt(tBajas)}</td>
+        <td class="mono">${fmtMoney(razon(tInv, tEnt))}</td>
+        <td class="mono">${fmtMoney(tMf - tMi > 0 ? tInv / (tMf - tMi) : null)}</td>
+        <td class="mono">${fmtPct(razon(tBajas, tEnt, 100))}</td>
+      </tr>` : '';
+
   return `<div class="filters">
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
@@ -392,7 +417,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
         <th>Trigger entregados</th><th>Entradas al flow</th><th>Entradas / conversaciones</th>
         <th>Mi</th><th>Mf</th><th>Crecimiento neto</th><th>Bajas est.</th>
         <th>Costo por entrada al flow</th><th>Costo por miembro neto</th><th>Tasa de fuga</th>
-      </tr></thead><tbody>${rows}</tbody></table></div>
+      </tr></thead><tbody>${rows}${filaTotal}</tbody></table></div>
     </div>`;
 }
 
