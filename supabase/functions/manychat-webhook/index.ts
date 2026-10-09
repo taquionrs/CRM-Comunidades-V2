@@ -140,10 +140,20 @@ export function nombreDeContacto(contact: Record<string, unknown> | null): strin
   return nombre;
 }
 
-// El flow marca el aviso de inicio con "evento": "trigger" (también se acepta "trigger_entregado").
-export function esAvisoTrigger(valor: unknown): boolean {
-  const v = textoLimpio(valor)?.toLowerCase();
-  return v === "trigger" || v === "trigger_entregado";
+// Tipo de aviso que manda el flow, según el campo "evento" del body:
+//   (sin evento)   contacto normal: el POST de entrada al flow (evento_crudo)
+//   "trigger"      se entregó el primer mensaje del flow (trigger_entregado, db/011)
+//   "clic_me_sumo" la persona tocó el botón "Me sumo" (clic_me_sumo, db/013)
+//   otro valor     "desconocido": se rechaza, para que un aviso nuevo mal escrito NO se cuente como entrada.
+export type TipoAviso = "contacto" | "trigger" | "clic_me_sumo" | "desconocido";
+export function tipoDeAviso(valor: unknown): TipoAviso {
+  if (valor === undefined || valor === null) return "contacto";
+  if (typeof valor !== "string") return "desconocido";
+  const v = valor.trim().toLowerCase();
+  if (v === "") return "contacto";
+  if (v === "trigger" || v === "trigger_entregado") return "trigger";
+  if (v === "clic_me_sumo" || v === "clic-me-sumo") return "clic_me_sumo";
+  return "desconocido";
 }
 
 // Primer campo personalizado "Localidad*" con valor (fallback si el flow no manda community_id).
@@ -272,6 +282,15 @@ Deno.serve(async (req) => {
     return await rechazar(400, "El body tiene que ser un objeto JSON", "El body no es un objeto JSON");
   }
 
+  const tipoAviso = tipoDeAviso(body.evento);
+  if (tipoAviso === "desconocido") {
+    return await rechazar(
+      400,
+      'El campo "evento" tiene un valor desconocido: usar "trigger", "clic_me_sumo" o no mandarlo',
+      `Tipo de aviso desconocido: evento = ${JSON.stringify(body.evento)?.slice(0, 60)}`,
+    );
+  }
+
   // Forma nueva: { community_id, contact: <Full Contact Data> }. Forma plana anterior: { phone, community_id }.
   const contact: Record<string, unknown> | null =
     body.contact && typeof body.contact === "object" ? body.contact : null;
@@ -328,13 +347,15 @@ Deno.serve(async (req) => {
 
   // Aviso de "se entregó el primer mensaje del flow" (db/011): "evento": "trigger" en el body. No es un contacto:
   // va a trigger_entregado, nunca a evento_crudo, así no toca clics únicos, atribución ni Base_Limpia.
-  if (esAvisoTrigger(body.evento)) {
-    const { error: errTrigger } = await admin
+  // Lo mismo para "clic_me_sumo" (db/013): la persona tocó el botón. Tampoco es un contacto nuevo.
+  if (tipoAviso === "trigger" || tipoAviso === "clic_me_sumo") {
+    const tabla = tipoAviso === "trigger" ? "trigger_entregado" : "clic_me_sumo";
+    const { error: errAviso } = await admin
       .schema("crm_comunidades_v2")
-      .from("trigger_entregado")
+      .from(tabla)
       .insert({ cliente_id: cliente.id, comunidad_id: comunidad.id, telefono_id: identificador });
-    if (errTrigger) return await rechazar(500, errTrigger.message, `Error al guardar el aviso de trigger: ${errTrigger.message}`, { comunidad: communityId, telefono: identificador });
-    return json({ ok: true, evento: "trigger", telefono_normalizado: identificador, canal });
+    if (errAviso) return await rechazar(500, errAviso.message, `Error al guardar el aviso (${tipoAviso}): ${errAviso.message}`, { comunidad: communityId, telefono: identificador });
+    return json({ ok: true, evento: tipoAviso, telefono_normalizado: identificador, canal });
   }
 
   // recibido_en: hora del servidor (default de la tabla). El payload completo queda tal cual llegó.
