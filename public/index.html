@@ -63,6 +63,23 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .filters label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
 .filters input, .filters select{background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
+.th-grupo{display:block; font-size:8.5px; letter-spacing:.06em; margin-bottom:3px; opacity:.85}
+.col-wrap{position:relative}
+.col-panel{position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:380px; max-height:70vh; overflow:auto; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:var(--r-card); box-shadow:0 12px 32px rgba(0,0,0,.5); padding:10px}
+.col-panel-head{display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap}
+.col-panel-head b{color:var(--text-strong); font-size:13px}
+.col-panel-head span{font-size:10.5px; color:var(--text-faint); flex:1}
+.col-panel ul{list-style:none; margin:0; padding:0}
+.col-panel li{display:flex; align-items:center; gap:8px; padding:6px 6px; border-radius:var(--r-in); border:1px solid transparent; font-size:12px}
+.col-panel li:hover{background:var(--panel-sunken)}
+.col-panel li.arrastrando{opacity:.4}
+.col-panel li.sobre{border-color:var(--accent); background:var(--accent-dim)}
+.col-panel li label{display:flex; flex-direction:row; align-items:center; gap:7px; flex:1; font-size:12px; color:var(--text-body); cursor:pointer}
+.col-panel li input[type=checkbox]{width:auto; padding:0; margin:0; background:none; border:0; accent-color:var(--accent)}
+.col-panel li small{font-size:9.5px; white-space:nowrap}
+.col-panel .grip{cursor:grab; color:var(--text-faint); user-select:none; letter-spacing:-2px}
+.btn-mini{padding:3px 8px; font-size:11px}
+
 .form-row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; padding:14px; background:var(--panel-raised); border:1px solid var(--border); border-radius:var(--r-in)}
 .form-row label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
@@ -126,7 +143,7 @@ const TAB_SUB = {
   dedup:'Log técnico de atribución — primer evento por teléfono',
   crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
 };
-let state = { tab:'overview', entered:false, clienteId:null, clientes:[] };
+let state = { tab:'overview', entered:false, clienteId:null, clientes:[], columnasControl:null, columnasAbierto:false };
 
 /* ---------- selector de cliente ---------- */
 function leerClienteGuardado(){
@@ -351,81 +368,168 @@ async function refrescarOverview(){
 }
 
 /* ================= TAB 2: Control_Comunidades ================= */
+// Columnas de la matriz. Cada una dice cómo se pinta en una fila de comunidad y en la fila "Total del cliente".
+// El usuario puede ocultarlas y reordenarlas (como "Columnas" en el Administrador de anuncios de Meta): la
+// preferencia se guarda en este navegador (localStorage), sin tocar la base. "Comunidad" siempre va primera.
+const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001)';
+const celdaNum = (html) => `<td class="mono">${html}</td>`;
+const celdaTrigger = (n) => n > 0 ? `<td><span class="mono">${fmtInt(n)}</span></td>` : `<td>${naCell(NA_TRIGGER)}</td>`;
+const COLUMNAS_CONTROL = [
+  { id:'inversion',        grupo:'Meta Ads',          etiqueta:'Inversión',                       celda:(c)=>celdaNum(fmtMoney(c.inversion)),                 total:(t)=>celdaNum(fmtMoney(t.inv)) },
+  { id:'conversaciones',   grupo:'Meta Ads',          etiqueta:'Conversaciones',                  celda:(c)=>celdaNum(fmtInt(c.conversaciones_meta)),         total:(t)=>celdaNum(fmtInt(t.conv)) },
+  { id:'cpl',              grupo:'Meta Ads',          etiqueta:'CPL',                             celda:(c)=>celdaNum(fmtMoney(c.cpl)),                       total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.conv))) },
+  { id:'leads',            grupo:'Meta Ads',          etiqueta:'Clientes potenciales (Meta)',     celda:(c)=>celdaNum(fmtInt(c.leads_meta)),                  total:(t)=>celdaNum(fmtInt(t.leads)) },
+  { id:'costo_lead',       grupo:'Meta Ads',          etiqueta:'Costo por cliente potencial',     celda:(c)=>celdaNum(fmtMoney(c.costo_por_lead)),            total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.leads))) },
+  { id:'ctr',              grupo:'Meta Ads',          etiqueta:'CTR (todos los clics)',           celda:(c)=>celdaNum(fmtPct(c.ctr_anuncio_pct)),             total:(t)=>celdaNum(fmtPct(t.razon(t.clics, t.impresiones, 100))) },
+  { id:'trigger',          grupo:'ManyChat Bot',      etiqueta:'Trigger entregados',              celda:(c)=>celdaTrigger(c.triggers_entregados),             total:(t)=>celdaTrigger(t.trig) },
+  { id:'entradas',         grupo:'CRM / Conversión',  etiqueta:'Entradas al flow',                celda:(c)=>celdaNum(fmtInt(c.clics_unicos)),                total:(t)=>celdaNum(fmtInt(t.ent)) },
+  { id:'entradas_conv',    grupo:'CRM / Conversión',  etiqueta:'Entradas / conversaciones',       celda:(c)=>celdaNum(fmtPct(c.clics_unicos && c.conversaciones_meta ? (c.clics_unicos/c.conversaciones_meta*100) : null)), total:(t)=>celdaNum(fmtPct(t.razon(t.ent, t.conv, 100))) },
+  { id:'mi',               grupo:'WhatsApp & Salud',  etiqueta:'Mi',                              celda:(c)=>celdaNum(fmtInt(c.miembros_iniciales)),          total:(t)=>celdaNum(fmtInt(t.mi)) },
+  { id:'mf',               grupo:'WhatsApp & Salud',  etiqueta:'Mf',                              celda:(c)=>celdaNum(fmtInt(c.miembros_finales)),            total:(t)=>celdaNum(fmtInt(t.mf)) },
+  { id:'crecimiento',      grupo:'WhatsApp & Salud',  etiqueta:'Crecimiento neto',                celda:(c)=>celdaNum(fmtInt(c.crecimiento_neto)),            total:(t)=>celdaNum(fmtInt(t.mf - t.mi)) },
+  { id:'bajas',            grupo:'WhatsApp & Salud',  etiqueta:'Bajas est.',                      celda:(c)=>celdaNum(fmtInt(c.bajas_estimadas)),             total:(t)=>celdaNum(fmtInt(t.bajas)) },
+  { id:'costo_entrada',    grupo:'Financiera',        etiqueta:'Costo por entrada al flow',       celda:(c)=>celdaNum(fmtMoney(c.cpcu)),                      total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.ent))) },
+  { id:'cpmn',             grupo:'Financiera',        etiqueta:'Costo por miembro neto',          celda:(c)=>celdaNum(fmtMoney(c.cpmn)),                      total:(t)=>celdaNum(fmtMoney(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null)) },
+  { id:'fuga',             grupo:'Financiera',        etiqueta:'Tasa de fuga',                    celda:(c)=>celdaNum(fmtPct(c.tasa_fuga_pct)),               total:(t)=>celdaNum(fmtPct(t.razon(t.bajas, t.ent, 100))) },
+];
+const COLOR_GRUPO = { 'Meta Ads':'var(--accent)', 'ManyChat Bot':'var(--warn)' };
+const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas';
+
+// Orden y ocultas guardados. Ignora ids que ya no existen y agrega al final las columnas nuevas.
+function leerColumnasControl(){
+  let g = {};
+  try { g = JSON.parse(localStorage.getItem(CLAVE_COLUMNAS_CONTROL) || '{}') || {}; } catch (_) { g = {}; }
+  const ids = COLUMNAS_CONTROL.map(c => c.id);
+  const orden = (Array.isArray(g.orden) ? g.orden : []).filter((id, i, a) => ids.includes(id) && a.indexOf(id) === i);
+  for (const id of ids) if (!orden.includes(id)) orden.push(id);
+  const ocultas = (Array.isArray(g.ocultas) ? g.ocultas : []).filter(id => ids.includes(id));
+  return { orden, ocultas };
+}
+function guardarColumnasControl(cfg){
+  state.columnasControl = cfg;
+  try { localStorage.setItem(CLAVE_COLUMNAS_CONTROL, JSON.stringify(cfg)); } catch (_) { /* sin almacenamiento: vale solo para esta sesión */ }
+}
+// Mueve la columna `id` justo antes de `antesDe` (o al final si es null).
+function moverColumnaControl(orden, id, antesDe){
+  const sin = orden.filter(x => x !== id);
+  const i = antesDe == null ? sin.length : sin.indexOf(antesDe);
+  sin.splice(i < 0 ? sin.length : i, 0, id);
+  return sin;
+}
+
 function renderControl(comunidades, filtroComunidad, desde, hasta){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
-  const rows = porComunidad.length
-    ? porComunidad.map(c => `<tr>
-        <td>${esc(c.nombre)}</td>
-        <td class="mono">${fmtMoney(c.inversion)}</td>
-        <td class="mono">${fmtInt(c.conversaciones_meta)}</td>
-        <td class="mono">${fmtMoney(c.cpl)}</td>
-        <td class="mono">${fmtInt(c.leads_meta)}</td>
-        <td class="mono">${fmtMoney(c.costo_por_lead)}</td>
-        <td class="mono">${fmtPct(c.ctr_anuncio_pct)}</td>
-        <td>${c.triggers_entregados > 0 ? `<span class="mono">${fmtInt(c.triggers_entregados)}</span>` : naCell('Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001)')}</td>
-        <td class="mono">${fmtInt(c.clics_unicos)}</td>
-        <td class="mono">${fmtPct(c.clics_unicos && c.conversaciones_meta ? (c.clics_unicos/c.conversaciones_meta*100) : null)}</td>
-        <td class="mono">${fmtInt(c.miembros_iniciales)}</td>
-        <td class="mono">${fmtInt(c.miembros_finales)}</td>
-        <td class="mono">${fmtInt(c.crecimiento_neto)}</td>
-        <td class="mono">${fmtInt(c.bajas_estimadas)}</td>
-        <td class="mono">${fmtMoney(c.cpcu)}</td>
-        <td class="mono">${fmtMoney(c.cpmn)}</td>
-        <td class="mono">${fmtPct(c.tasa_fuga_pct)}</td>
-      </tr>`).join('')
-    : `<tr class="empty-row"><td colspan="17">Sin datos todavía.</td></tr>`;
+  const cfg = state.columnasControl || (state.columnasControl = leerColumnasControl());
+  const porId = Object.fromEntries(COLUMNAS_CONTROL.map(c => [c.id, c]));
+  const visibles = cfg.orden.filter(id => !cfg.ocultas.includes(id)).map(id => porId[id]);
 
   // Total del cliente: suma de TODAS las comunidades (aunque haya una elegida en el filtro) y razones recalculadas
   // con esos totales, no promediando las filas. Las entradas no se duplican: la atribución es por primer contacto.
   const suma = (campo) => comunidades.reduce((s, c) => s + (Number(c[campo]) || 0), 0);
-  const razon = (num, den, factor = 1) => (den > 0 ? (num / den) * factor : null);
-  const tInv = suma('inversion'), tConv = suma('conversaciones_meta'), tEnt = suma('clics_unicos');
-  const tMi = suma('miembros_iniciales'), tMf = suma('miembros_finales'), tBajas = suma('bajas_estimadas');
-  const tTrig = suma('triggers_entregados'), tLeads = suma('leads_meta');
-  const filaTotal = comunidades.length ? `<tr class="totales">
-        <td>Total del cliente</td>
-        <td class="mono">${fmtMoney(tInv)}</td>
-        <td class="mono">${fmtInt(tConv)}</td>
-        <td class="mono">${fmtMoney(razon(tInv, tConv))}</td>
-        <td class="mono">${fmtInt(tLeads)}</td>
-        <td class="mono">${fmtMoney(razon(tInv, tLeads))}</td>
-        <td class="mono">${fmtPct(razon(suma('clics'), suma('impresiones'), 100))}</td>
-        <td>${tTrig > 0 ? `<span class="mono">${fmtInt(tTrig)}</span>` : naCell('Todavía no llegó ningún aviso de inicio de flow')}</td>
-        <td class="mono">${fmtInt(tEnt)}</td>
-        <td class="mono">${fmtPct(razon(tEnt, tConv, 100))}</td>
-        <td class="mono">${fmtInt(tMi)}</td>
-        <td class="mono">${fmtInt(tMf)}</td>
-        <td class="mono">${fmtInt(tMf - tMi)}</td>
-        <td class="mono">${fmtInt(tBajas)}</td>
-        <td class="mono">${fmtMoney(razon(tInv, tEnt))}</td>
-        <td class="mono">${fmtMoney(tMf - tMi > 0 ? tInv / (tMf - tMi) : null)}</td>
-        <td class="mono">${fmtPct(razon(tBajas, tEnt, 100))}</td>
-      </tr>` : '';
+  const t = {
+    razon: (num, den, factor = 1) => (den > 0 ? (num / den) * factor : null),
+    inv: suma('inversion'), conv: suma('conversaciones_meta'), ent: suma('clics_unicos'), leads: suma('leads_meta'),
+    mi: suma('miembros_iniciales'), mf: suma('miembros_finales'), bajas: suma('bajas_estimadas'), trig: suma('triggers_entregados'),
+    clics: suma('clics'), impresiones: suma('impresiones'),
+  };
+
+  const filas = porComunidad.length
+    ? porComunidad.map(c => `<tr><td>${esc(c.nombre)}</td>${visibles.map(col => col.celda(c)).join('')}</tr>`).join('')
+    : `<tr class="empty-row"><td colspan="${visibles.length + 1}">Sin datos todavía.</td></tr>`;
+  const filaTotal = comunidades.length
+    ? `<tr class="totales"><td>Total del cliente</td>${visibles.map(col => col.total(t)).join('')}</tr>`
+    : '';
+  const encabezados = visibles.map(col => `<th><span class="th-grupo" style="color:${COLOR_GRUPO[col.grupo] || 'var(--text-faint)'}">${esc(col.grupo)}</span>${esc(col.etiqueta)}</th>`).join('');
+
+  const panelColumnas = state.columnasAbierto ? `<div class="col-panel" id="panelColumnas">
+      <div class="col-panel-head"><b>Columnas</b><span>${visibles.length} de ${COLUMNAS_CONTROL.length} visibles · arrastrá para reordenar</span>
+        <button class="btn btn-mini" id="btnColumnasReset" type="button">Restablecer</button></div>
+      <ul>${cfg.orden.map((id, i) => {
+        const col = porId[id];
+        return `<li draggable="true" data-col-id="${id}">
+          <span class="grip" title="Arrastrar">⋮⋮</span>
+          <label><input type="checkbox" data-col-vis="${id}" ${cfg.ocultas.includes(id) ? '' : 'checked'}> ${esc(col.etiqueta)}</label>
+          <small style="color:${COLOR_GRUPO[col.grupo] || 'var(--text-faint)'}">${esc(col.grupo)}</small>
+          <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
+          <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="1" ${i === cfg.orden.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
+        </li>`;
+      }).join('')}</ul>
+    </div>` : '';
 
   return `<div class="filters">
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
       <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
       <button class="btn" id="btnFechasLimpiar" type="button">Todo el histórico</button>
+      <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       <button class="btn" id="btnWindsorSync" type="button">Sincronizar Windsor.ai</button>
       <div id="windsorResultado" style="margin-left:6px; font-size:12px; align-self:center"></div>
     </div>
     <div class="card"><h3>Matriz de atribución multi-plataforma</h3>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican.</div>
-      <div class="tbl-wrap"><table><thead><tr>
-        <th></th><th colspan="6" style="color:var(--accent)">Meta Ads</th><th style="color:var(--warn)">ManyChat Bot</th><th colspan="2">CRM / Conversión</th><th colspan="4">WhatsApp &amp; Salud</th><th colspan="3">Financiera</th>
-      </tr><tr>
-        <th>Comunidad</th><th>Inversión</th><th>Conversaciones</th><th>CPL</th><th>Clientes potenciales (Meta)</th><th>Costo por cliente potencial</th><th>CTR (todos los clics)</th>
-        <th>Trigger entregados</th><th>Entradas al flow</th><th>Entradas / conversaciones</th>
-        <th>Mi</th><th>Mf</th><th>Crecimiento neto</th><th>Bajas est.</th>
-        <th>Costo por entrada al flow</th><th>Costo por miembro neto</th><th>Tasa de fuga</th>
-      </tr></thead><tbody>${rows}${filaTotal}</tbody></table></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>`;
 }
 
+// Panel "Columnas": mostrar/ocultar, reordenar con ↑ ↓ o arrastrando, restablecer.
+function wireColumnasControl(){
+  const cfgActual = () => state.columnasControl || (state.columnasControl = leerColumnasControl());
+  const aplicar = (cfg) => { guardarColumnasControl(cfg); renderAll(); };
+
+  const btn = document.getElementById('btnColumnas');
+  if (btn) btn.onclick = (ev) => { ev.stopPropagation(); state.columnasAbierto = !state.columnasAbierto; renderAll(); };
+
+  const panel = document.getElementById('panelColumnas');
+  if (!panel) return;
+  panel.onclick = (ev) => ev.stopPropagation();
+
+  panel.querySelectorAll('[data-col-vis]').forEach(chk => {
+    chk.onchange = () => {
+      const cfg = cfgActual(), id = chk.dataset.colVis;
+      const ocultas = chk.checked ? cfg.ocultas.filter(x => x !== id) : [...cfg.ocultas.filter(x => x !== id), id];
+      aplicar({ orden: cfg.orden, ocultas });
+    };
+  });
+  panel.querySelectorAll('[data-col-mover]').forEach(b => {
+    b.onclick = () => {
+      const cfg = cfgActual(), id = b.dataset.colMover, dir = Number(b.dataset.dir);
+      const i = cfg.orden.indexOf(id), j = i + dir;
+      if (i < 0 || j < 0 || j >= cfg.orden.length) return;
+      const orden = cfg.orden.slice();
+      [orden[i], orden[j]] = [orden[j], orden[i]];
+      aplicar({ orden, ocultas: cfg.ocultas });
+    };
+  });
+  const reset = document.getElementById('btnColumnasReset');
+  if (reset) reset.onclick = () => { try { localStorage.removeItem(CLAVE_COLUMNAS_CONTROL); } catch (_) {} state.columnasControl = null; renderAll(); };
+
+  let arrastrando = null;
+  panel.querySelectorAll('li[data-col-id]').forEach(li => {
+    li.ondragstart = (ev) => { arrastrando = li.dataset.colId; li.classList.add('arrastrando'); ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setData('text/plain', arrastrando); } catch (_) {} };
+    li.ondragend = () => { arrastrando = null; li.classList.remove('arrastrando'); panel.querySelectorAll('li.sobre').forEach(x => x.classList.remove('sobre')); };
+    li.ondragover = (ev) => { if (arrastrando) { ev.preventDefault(); li.classList.add('sobre'); } };
+    li.ondragleave = () => li.classList.remove('sobre');
+    li.ondrop = (ev) => {
+      ev.preventDefault();
+      const destino = li.dataset.colId;
+      if (!arrastrando || arrastrando === destino) return;
+      const cfg = cfgActual();
+      aplicar({ orden: moverColumnaControl(cfg.orden, arrastrando, destino), ocultas: cfg.ocultas });
+    };
+  });
+}
+
 function wireControl(){
+  wireColumnasControl();
+  // Cerrar el panel de columnas al hacer clic afuera o con Escape (se registra una sola vez).
+  if (!window.__panelColumnasCierre) {
+    window.__panelColumnasCierre = true;
+    const cerrar = () => { if (state.columnasAbierto) { state.columnasAbierto = false; renderAll(); } };
+    document.addEventListener('click', cerrar);
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') cerrar(); });
+  }
   const sel = document.getElementById('selFiltroComunidad');
   if (sel) sel.onchange = () => { state.filtroComunidad = sel.value || null; renderAll(); };
   const desde = document.getElementById('inpFechaDesde');

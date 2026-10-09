@@ -569,3 +569,11 @@ La columna "CTR anuncio" de Control_Comunidades pasa a llamarse **"CTR (todos lo
 - **Importador:** lee la columna y la guarda por upsert; 18 pruebas. **Panel:** columnas "Clientes potenciales (Meta)" y "Costo por cliente potencial" (también en el total del cliente). Total Todo un País 6–7/10: 158 leads, $732,65 por lead, igual al de Ads Manager.
 - **Importación del CSV (1 al 7/10):** también actualizó la inversión a los valores vigentes de Meta ($55.171,70 Cortado WhatsApp y $115.758,22 Todo un País, iguales a Ads Manager).
 - **Observación abierta:** Cortado WhatsApp muestra 0 leads en Meta pero 23 entradas al flow en el CRM; el flow de Todo un País sí coincide (158 vs 162). Pendiente revisar en Events Manager si el evento de ManyChat llega a Meta desde la cuenta de Cortado.
+
+## 3 sexvicies. PR #20 — Columnas personalizables en Control_Comunidades (2026-10-08)
+
+- Botón **"Columnas"** junto a los filtros, como en el Administrador de anuncios de Meta: se puede **ocultar y mostrar** cada columna, **reordenarlas** (arrastrando o con ↑ ↓) y **restablecer** el orden original. "Comunidad" siempre va primera.
+- La preferencia se guarda **en el navegador de cada persona** (localStorage), sin tocar la base: cada usuario ve su propia configuración. Si el navegador no permite guardar, vale solo para esa sesión.
+- La fila "Total del cliente" sigue las mismas columnas que se ven. Las columnas nuevas que se agreguen en el futuro aparecen al final automáticamente.
+- Los encabezados de grupo (Meta Ads / ManyChat Bot / …) pasaron a una etiqueta chica sobre cada título, porque con el reordenamiento los grupos ya no quedan contiguos.
+- Probado en el navegador con datos reales de Cortado: ocultar, reordenar con botones y arrastrando, restablecer, cierre con Escape y con clic afuera, y persistencia al recargar. No cambia datos ni base.
