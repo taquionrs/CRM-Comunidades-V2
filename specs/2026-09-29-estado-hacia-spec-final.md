@@ -577,3 +577,12 @@ La columna "CTR anuncio" de Control_Comunidades pasa a llamarse **"CTR (todos lo
 - La fila "Total del cliente" sigue las mismas columnas que se ven. Las columnas nuevas que se agreguen en el futuro aparecen al final automáticamente.
 - Los encabezados de grupo (Meta Ads / ManyChat Bot / …) pasaron a una etiqueta chica sobre cada título, porque con el reordenamiento los grupos ya no quedan contiguos.
 - Probado en el navegador con datos reales de Cortado: ocultar, reordenar con botones y arrastrando, restablecer, cierre con Escape y con clic afuera, y persistencia al recargar. No cambia datos ni base.
+
+## 3 septvicies. PR #21 — Clics en "Me sumo" (2026-10-09)
+
+- **Hallazgo en ManyChat (2026-10-08):** el botón "Me sumo" tiene una **salida propia** (círculo a la derecha del botón) que se activa solo cuando la persona lo toca. Conectada a un nodo de Acciones con una solicitud externa permite medir el clic real sin cambiar lo que ve la persona. Es la medición que faltaba: hasta ahora el POST salía solo tras el primer mensaje y no distinguía toques.
+- **Webhook:** nuevo `"evento": "clic_me_sumo"` → tabla `clic_me_sumo` (db/013), igual que el trigger: no entra a `evento_crudo`. **Regla nueva: un `evento` desconocido se rechaza** (antes se contaba como entrada y habría duplicado a cada persona).
+- **Panel:** columnas "Clics en Me sumo", "Clic en Me sumo / entradas" y "Costo por clic en Me sumo" (personas distintas, por comunidad y rango de fechas; "sin fuente" mientras el flow no mande el aviso).
+- **Simulador:** `--evento clic_me_sumo`, limpia las dos tablas.
+- **Verificado:** `tipoDeAviso` con 15 casos; migración con rollback (4 avisos de 3 personas dan 3 en el histórico y 2 en 7 días, las entradas no cambian); simulación en producción con limpieza (0 filas). Webhook desplegado antes de que el flow publique el aviso.
+- **Observación abierta:** desde la noche del 8/10 todo el tráfico real de Cortado entró por **Instagram** (12 eventos, todos `ig:`), cada uno precedido de un aviso de trigger rechazado con cuerpo vacío: la solicitud externa del flow de Instagram está sin cuerpo.

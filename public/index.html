@@ -374,6 +374,8 @@ async function refrescarOverview(){
 const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001)';
 const celdaNum = (html) => `<td class="mono">${html}</td>`;
 const celdaTrigger = (n) => n > 0 ? `<td><span class="mono">${fmtInt(n)}</span></td>` : `<td>${naCell(NA_TRIGGER)}</td>`;
+const NA_CLIC = 'Todavía no llegó ningún aviso de clic: falta la acción de salida del botón "Me sumo" en el flow de ManyChat';
+const celdaClic = (n) => n > 0 ? `<td><span class="mono">${fmtInt(n)}</span></td>` : `<td>${naCell(NA_CLIC)}</td>`;
 const COLUMNAS_CONTROL = [
   { id:'inversion',        grupo:'Meta Ads',          etiqueta:'Inversión',                       celda:(c)=>celdaNum(fmtMoney(c.inversion)),                 total:(t)=>celdaNum(fmtMoney(t.inv)) },
   { id:'conversaciones',   grupo:'Meta Ads',          etiqueta:'Conversaciones',                  celda:(c)=>celdaNum(fmtInt(c.conversaciones_meta)),         total:(t)=>celdaNum(fmtInt(t.conv)) },
@@ -384,11 +386,14 @@ const COLUMNAS_CONTROL = [
   { id:'trigger',          grupo:'ManyChat Bot',      etiqueta:'Trigger entregados',              celda:(c)=>celdaTrigger(c.triggers_entregados),             total:(t)=>celdaTrigger(t.trig) },
   { id:'entradas',         grupo:'CRM / Conversión',  etiqueta:'Entradas al flow',                celda:(c)=>celdaNum(fmtInt(c.clics_unicos)),                total:(t)=>celdaNum(fmtInt(t.ent)) },
   { id:'entradas_conv',    grupo:'CRM / Conversión',  etiqueta:'Entradas / conversaciones',       celda:(c)=>celdaNum(fmtPct(c.clics_unicos && c.conversaciones_meta ? (c.clics_unicos/c.conversaciones_meta*100) : null)), total:(t)=>celdaNum(fmtPct(t.razon(t.ent, t.conv, 100))) },
+  { id:'clics_me_sumo',   grupo:'ManyChat Bot',      etiqueta:'Clics en "Me sumo"',              celda:(c)=>celdaClic(c.clics_me_sumo),                      total:(t)=>celdaClic(t.clicsms) },
+  { id:'tasa_me_sumo',    grupo:'CRM / Conversión',  etiqueta:'Clic en "Me sumo" / entradas',    celda:(c)=>celdaNum(fmtPct(c.clics_me_sumo > 0 && c.clics_unicos ? c.clics_me_sumo/c.clics_unicos*100 : null)), total:(t)=>celdaNum(fmtPct(t.clicsms > 0 ? t.razon(t.clicsms, t.ent, 100) : null)) },
   { id:'mi',               grupo:'WhatsApp & Salud',  etiqueta:'Mi',                              celda:(c)=>celdaNum(fmtInt(c.miembros_iniciales)),          total:(t)=>celdaNum(fmtInt(t.mi)) },
   { id:'mf',               grupo:'WhatsApp & Salud',  etiqueta:'Mf',                              celda:(c)=>celdaNum(fmtInt(c.miembros_finales)),            total:(t)=>celdaNum(fmtInt(t.mf)) },
   { id:'crecimiento',      grupo:'WhatsApp & Salud',  etiqueta:'Crecimiento neto',                celda:(c)=>celdaNum(fmtInt(c.crecimiento_neto)),            total:(t)=>celdaNum(fmtInt(t.mf - t.mi)) },
   { id:'bajas',            grupo:'WhatsApp & Salud',  etiqueta:'Bajas est.',                      celda:(c)=>celdaNum(fmtInt(c.bajas_estimadas)),             total:(t)=>celdaNum(fmtInt(t.bajas)) },
   { id:'costo_entrada',    grupo:'Financiera',        etiqueta:'Costo por entrada al flow',       celda:(c)=>celdaNum(fmtMoney(c.cpcu)),                      total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.ent))) },
+  { id:'costo_clic',      grupo:'Financiera',        etiqueta:'Costo por clic en "Me sumo"',     celda:(c)=>celdaNum(fmtMoney(c.costo_por_clic_me_sumo)),     total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.clicsms))) },
   { id:'cpmn',             grupo:'Financiera',        etiqueta:'Costo por miembro neto',          celda:(c)=>celdaNum(fmtMoney(c.cpmn)),                      total:(t)=>celdaNum(fmtMoney(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null)) },
   { id:'fuga',             grupo:'Financiera',        etiqueta:'Tasa de fuga',                    celda:(c)=>celdaNum(fmtPct(c.tasa_fuga_pct)),               total:(t)=>celdaNum(fmtPct(t.razon(t.bajas, t.ent, 100))) },
 ];
@@ -432,7 +437,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
     razon: (num, den, factor = 1) => (den > 0 ? (num / den) * factor : null),
     inv: suma('inversion'), conv: suma('conversaciones_meta'), ent: suma('clics_unicos'), leads: suma('leads_meta'),
     mi: suma('miembros_iniciales'), mf: suma('miembros_finales'), bajas: suma('bajas_estimadas'), trig: suma('triggers_entregados'),
-    clics: suma('clics'), impresiones: suma('impresiones'),
+    clics: suma('clics'), impresiones: suma('impresiones'), clicsms: suma('clics_me_sumo'),
   };
 
   const filas = porComunidad.length

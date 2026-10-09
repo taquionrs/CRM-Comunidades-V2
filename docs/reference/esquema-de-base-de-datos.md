@@ -131,6 +131,9 @@ Avisos "se entregó el primer mensaje del flow" que manda ManyChat al empezar (`
 
 Lectura abierta temporal; solo el webhook (service_role) escribe. `comunidad_performance_rango` devuelve además `triggers_entregados` (011).
 
+### `clic_me_sumo` (013)
+Avisos "la persona tocó el botón Me sumo" que manda ManyChat desde la salida propia del botón (`"evento": "clic_me_sumo"`). No son contactos: no entran a `evento_crudo` ni a la atribución. Una fila por aviso; el panel cuenta personas distintas. Misma forma que `trigger_entregado` (`cliente_id`, `comunidad_id`, `telefono_id`, `recibido_en`). `comunidad_performance_rango` devuelve además `clics_me_sumo` y `costo_por_clic_me_sumo`.
+
 ### `usuario_cliente` (005)
 `(user_id, cliente_id)`: qué usuario ve qué cliente. Alimenta el selector de cliente cuando haya login.
 

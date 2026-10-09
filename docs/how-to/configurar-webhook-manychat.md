@@ -83,3 +83,19 @@ node scripts/simular-trigger.mjs --limpiar
 - **Modo base** (por defecto): inserta directo en la base con el Supabase CLI. No usa secretos.
 - **Modo `--webhook`**: manda POST reales a la Edge Function (prueba secreto, comunidad y guardado). El secreto se toma de la variable de entorno `WEBHOOK_SECRET` y no se imprime.
 - La columna cuenta **personas distintas**: 3 personas × 2 avisos = 3 en el panel.
+
+## Aviso de clic en "Me sumo" (mide quién toca el botón)
+
+El botón "Me sumo" es un botón de enlace. En el editor de ManyChat tiene, a la derecha, un **círculo de salida propio** (junto al ícono de enlace) que se activa **solo cuando la persona toca el botón**. Se conecta a un nodo de Acciones con una solicitud externa, por ejemplo `Boedo_clic_me_sumo`:
+
+- **Tipo:** `POST`. **URL, `x-cliente` y `x-webhook-secret`:** los mismos del nodo final.
+- **Cuerpo:**
+  `{"evento": "clic_me_sumo", "community_id": "<pastilla Localidad_CABA>", "contact": <pastilla Full Contact Data>}`
+  El `community_id` usa el campo `Localidad_…` de ese flow (cuando la persona toca el botón, el nodo de Acciones ya fijó su barrio). `"clic_me_sumo"` va como texto fijo.
+- **No hay que quitar ni cambiar nada del flow:** la conexión "Siguiente paso" del mensaje sigue como estaba.
+
+Qué hace el webhook: lo guarda en `clic_me_sumo` (db/013), **no** en `evento_crudo`: no es un contacto nuevo y no toca entradas ni atribución. El panel cuenta **personas distintas** que tocaron el botón y calcula "Clic en Me sumo / entradas" y "Costo por clic en Me sumo".
+
+**Regla nueva del webhook:** si el campo `evento` trae cualquier valor que no sea `trigger` o `clic_me_sumo`, el aviso se **rechaza** (aparece en Data_Cruda → Rechazados) en lugar de contarse como una entrada. Así un nombre mal escrito no duplica a las personas.
+
+Se repite en **cada flow y cada canal** (WhatsApp e Instagram de Cortado y de Todo un País). Para simular avisos sin ManyChat: `node scripts/simular-trigger.mjs --evento clic_me_sumo --comunidad Palermo`.
