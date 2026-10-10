@@ -586,3 +586,12 @@ La columna "CTR anuncio" de Control_Comunidades pasa a llamarse **"CTR (todos lo
 - **Simulador:** `--evento clic_me_sumo`, limpia las dos tablas.
 - **Verificado:** `tipoDeAviso` con 15 casos; migración con rollback (4 avisos de 3 personas dan 3 en el histórico y 2 en 7 días, las entradas no cambian); simulación en producción con limpieza (0 filas). Webhook desplegado antes de que el flow publique el aviso.
 - **Observación abierta:** desde la noche del 8/10 todo el tráfico real de Cortado entró por **Instagram** (12 eventos, todos `ig:`), cada uno precedido de un aviso de trigger rechazado con cuerpo vacío: la solicitud externa del flow de Instagram está sin cuerpo.
+
+## 3 octovicies. PR #22 — Documento de definiciones y líneas de base v0 (2026-10-10)
+
+Entregable R4 del roadmap: `docs/reference/definiciones-y-lineas-de-base-v0.html` (y `.pdf`). Borrador para revisión del manager.
+- **"Ingreso" en tres niveles:** I1 entrada al flow (medido desde el 05/10), I2 clic en "Me sumo" (desde el 09/10), I3 ingreso al grupo (la definición de la carta oferta; sin fuente todavía). Mientras no exista I3 ningún reporte dice "ingresos" a secas.
+- **Líneas de base v0:** in toque humano 69,9 % de personas (253 de 362; desde el 08/10, 100 % con 175 de 175; los 133 eventos recuperados son un único episodio de Todo un País del 06 y 07/10); tasa de triaje 44 % a 50 % por comunidad (6 y 7/10), cota superior porque el numerador es entrada al flow; horas de carga manual: sin línea de base, con plantilla de registro de minutos.
+- **Hallazgo:** de 362 personas, 360 son de Instagram y 2 de WhatsApp.
+- **Decisiones pendientes del manager:** nivel de ingreso del reporte oficial, ventana de la línea de base, significado de TRG y contra qué nivel se evalúa la meta de más de 50 %.
+- Todas las cifras se reproducen con las consultas del apéndice A.

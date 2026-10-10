@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Definiciones y líneas de base v0 · CRM de Comunidades V2</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm;
+    @bottom-left { content: "Definiciones y líneas de base · v0 (borrador)"; font: 8pt 'Segoe UI', Arial, sans-serif; color: #7a8594; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 8pt 'Segoe UI', Arial, sans-serif; color: #7a8594; } }
+  :root { --ink:#1b2430; --muted:#5b6675; --line:#d9dee5; --brand:#0b6b63; --brand-soft:#e6f3f1; --warn:#9a5b00; --warn-soft:#fff4e0; --bad:#a32b2b; --bad-soft:#fdeaea; --code:#f3f5f8; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9.8pt; line-height: 1.45; color: var(--ink); margin: 0; }
+  h1 { font-size: 19pt; margin: 0 0 4px; color: var(--brand); line-height: 1.15; }
+  h2 { font-size: 13pt; margin: 20px 0 6px; padding-bottom: 4px; border-bottom: 2px solid var(--brand); break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 12px 0 4px; color: var(--brand); break-after: avoid; }
+  p { margin: 5px 0; }
+  .meta { color: var(--muted); font-size: 9pt; margin-bottom: 10px; }
+  .meta b { color: var(--ink); }
+  ul, ol { margin: 4px 0 6px 20px; padding: 0; }
+  li { margin: 3px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 8px; font-size: 9pt; }
+  th { background: var(--brand-soft); text-align: left; padding: 5px 7px; border: 1px solid var(--line); }
+  td { padding: 5px 7px; border: 1px solid var(--line); vertical-align: top; }
+  tr { break-inside: avoid; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 8.6pt; background: var(--code); padding: 1px 4px; border-radius: 3px; }
+  pre { font-family: Consolas, 'Courier New', monospace; font-size: 8pt; background: var(--code); border: 1px solid var(--line); border-left: 3px solid var(--brand); padding: 8px 10px; margin: 6px 0 8px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  .box { border-radius: 5px; padding: 7px 10px; margin: 8px 0; font-size: 9.4pt; break-inside: avoid; }
+  .tip { background: var(--brand-soft); border-left: 4px solid var(--brand); }
+  .warn { background: var(--warn-soft); border-left: 4px solid var(--warn); }
+  .stop { background: var(--bad-soft); border-left: 4px solid var(--bad); }
+  .box b.t { display: block; margin-bottom: 2px; }
+  .ok { color: #1c7a3d; font-weight: 700; }
+  .no { color: var(--bad); font-weight: 700; }
+  .mid { color: var(--warn); font-weight: 700; }
+  .firma td { height: 34px; }
+</style>
+</head>
+<body>
+
+<h1>Definiciones y líneas de base · v0</h1>
+<div class="meta"><b>Estado:</b> BORRADOR para revisión &nbsp;·&nbsp; <b>Fecha de corte de los datos:</b> 10 de octubre de 2026, 00:06 (hora de Argentina) &nbsp;·&nbsp; <b>Fuente:</b> CRM de Comunidades V2, producción &nbsp;·&nbsp; <b>Responsable:</b> Growth Systems</div>
+
+<div class="box warn"><b class="t">Cómo leer este documento</b>Ninguna cifra de acá es un logro. Son <b>líneas de base declaradas antes de cualquier resultado</b>, con su definición, su fuente y sus límites. Donde un número todavía no se puede medir bien, lo dice. La versión definitiva necesita la aprobación del manager (ver sección 8).</div>
+
+<h2>1. Resumen: los tres números del mes 3</h2>
+<table>
+  <tr><th style="width:24%">Número</th><th style="width:30%">Definición v0</th><th style="width:26%">Línea de base v0</th><th>Estado</th></tr>
+  <tr><td><b>1. % de ingresos sin toque humano</b></td><td>Personas cuyo primer evento llegó solo por el webhook, sin recuperarlo a mano.</td><td><b>69,9 %</b> (253 de 362 personas). Desde el 08/10: <b>100 %</b> (175 de 175)</td><td><span class="mid">Calculable.</span> Mide sobre todo un episodio pasado de recuperación (ver 3.1)</td></tr>
+  <tr><td><b>2. Tasa de triaje</b></td><td>Personas que entran al flow ÷ conversaciones iniciadas en Meta, por comunidad, nunca promediada.</td><td><b>44 % a 50 %</b> según la comunidad (6 y 7 de octubre)</td><td><span class="mid">Cota superior.</span> El numerador es entrada al flow, no miembro (ver 3.2)</td></tr>
+  <tr><td><b>3. Horas de carga manual eliminadas</b></td><td>Minutos por semana de carga manual del tablero, antes y después.</td><td><b>Sin medir</b></td><td><span class="no">Sin línea de base.</span> Plantilla de registro en la sección 7</td></tr>
+</table>
+
+<h2>2. Definiciones</h2>
+<h3>2.1 Unidades y reglas generales</h3>
+<ul>
+  <li><b>Persona:</b> identificador único dentro de un cliente. WhatsApp: el teléfono, solo dígitos. Instagram: <code>ig:&lt;id&gt;</code>. La misma persona en dos canales cuenta como <b>dos</b> personas (no hay cruce).</li>
+  <li><b>Comunidad:</b> un barrio o localidad de un cliente (por ejemplo, Palermo de Cortado en Jarrito). Existen además comunidades "(general)" que reciben la inversión de campañas que no distinguen barrio.</li>
+  <li><b>Atribución:</b> por <b>primer contacto</b>, dentro de cada cliente. Una persona pertenece a la comunidad de su primer evento.</li>
+  <li><b>Nunca promediado:</b> toda tasa se calcula con las sumas de numerador y denominador de la comunidad (o del cliente). No se promedian tasas de comunidades distintas. La fila "Total del cliente" del panel recalcula la razón con los totales.</li>
+  <li><b>Fechas:</b> hora de Buenos Aires. Un período es un rango de días completos.</li>
+</ul>
+
+<h3>2.2 "Ingreso": tres niveles</h3>
+<p>La carta oferta define el ingreso como la <b>entrada al grupo</b>. El CRM hoy no puede ver eso. Para no decir más de lo que se sabe, el ingreso se reporta siempre en tres niveles:</p>
+<table>
+  <tr><th style="width:22%">Nivel</th><th style="width:38%">Qué es</th><th style="width:22%">Fuente</th><th>Estado</th></tr>
+  <tr><td><b>I1 · Entrada al flow</b></td><td>La persona recibió el primer mensaje del flow de la comunidad. El POST sale solo, sin esperar ningún toque.</td><td><code>evento_crudo</code> → <code>evento_deduplicado</code></td><td><span class="ok">Medido</span> desde el 05/10</td></tr>
+  <tr><td><b>I2 · Clic en "Me sumo"</b></td><td>La persona tocó el botón. Se registra desde la salida propia del botón en ManyChat.</td><td><code>clic_me_sumo</code></td><td><span class="mid">Medido desde el 09/10</span>, con poca historia</td></tr>
+  <tr><td><b>I3 · Ingreso al grupo</b></td><td>La persona está dentro del grupo de WhatsApp. Es la definición de la carta.</td><td>Lista de miembros (sin fuente aún)</td><td><span class="no">No medible hoy</span></td></tr>
+</table>
+<div class="box tip"><b class="t">Regla de uso</b>Mientras I3 no exista, ningún reporte dice "ingresos" a secas: dice "entradas al flow" (I1) o "clics en Me sumo" (I2). La relación es I3 ≤ I2 ≤ I1 solo en condiciones normales, y no está garantizada con la medición actual.</div>
+
+<h3>2.3 Toque humano</h3>
+<p>Un ingreso tiene <b>toque humano</b> si hubo una intervención manual para que la persona quedara en el CRM. En v0 se mide una sola forma, porque es la única que deja rastro:</p>
+<ul>
+  <li><b>Evento recuperado a mano</b> desde los rechazos del webhook (marca <code>_recuperado</code> en el contenido del evento).</li>
+</ul>
+<p>Quedan <b>sin medir</b>: correcciones manuales de estado o etiquetas, y cargas manuales de MI y MF. Por eso el 69,9 % es una cota superior del ingreso sin toque humano.</p>
+
+<h3>2.4 Tasa de triaje</h3>
+<p>Fórmula: <b>personas que ingresan (por comunidad y período) ÷ conversaciones iniciadas en Meta (misma comunidad y período)</b>. La carta fija una meta de <b>más de 50 %</b> para el paso <i>chat iniciado → miembro</i>.</p>
+<ul>
+  <li><b>Denominador:</b> "conversaciones con mensajes iniciadas" de Meta (campo <code>actions_onsite_conversion_messaging_conversation_started_7d</code>, ventana de atribución de 7 días), asignadas a la comunidad por campaña y conjunto de anuncios.</li>
+  <li><b>Numerador v0:</b> entradas al flow (I1). Cuando existan I2 e I3 se reportan los tres.</li>
+</ul>
+
+<h2>3. Líneas de base v0</h2>
+<h3>3.1 % de ingresos sin toque humano</h3>
+<table>
+  <tr><th>Corte</th><th class="n">Personas</th><th class="n">Automáticas</th><th class="n">%</th></tr>
+  <tr><td>Todo el período (desde el 05/10)</td><td class="n">362</td><td class="n">253</td><td class="n"><b>69,9 %</b></td></tr>
+  <tr><td>Todo un País</td><td class="n">305</td><td class="n">196</td><td class="n">64,3 %</td></tr>
+  <tr><td>Cortado en Jarrito</td><td class="n">57</td><td class="n">57</td><td class="n">100 %</td></tr>
+  <tr><td>Desde el 08/10 (flow estable)</td><td class="n">175</td><td class="n">175</td><td class="n">100 %</td></tr>
+</table>
+<p>Por eventos (no por personas): 446 totales, 133 recuperados a mano, <b>70,2 %</b> automáticos.</p>
+<div class="box warn"><b class="t">Cómo interpretarlo</b>Los 133 eventos recuperados vienen de un único episodio, los días 6 y 7 de octubre y todos de Todo un País: el flow estaba mal copiado y el webhook rechazó los primeros contactos (que se recuperaron desde los rechazos guardados). Por eso <b>esta línea de base mide ese episodio, no la productividad del sistema</b>. La referencia útil hacia adelante es "desde el 08/10", y hay que decidir si la línea de base oficial se levanta sobre esa ventana (ver sección 8). El valor que el roadmap daba como candidato (52,2 %) quedó viejo: se movió porque entraron 175 personas nuevas, todas automáticas.</div>
+
+<h3>3.2 Tasa de triaje por comunidad (6 y 7 de octubre)</h3>
+<p>Son los únicos días con denominador y numerador para los barrios (sus campañas empezaron el 06/10).</p>
+<table>
+  <tr><th>Cliente · comunidad</th><th class="n">Conversaciones (Meta)</th><th class="n">Entradas al flow</th><th class="n">Tasa v0</th></tr>
+  <tr><td>Cortado · Palermo</td><td class="n">31</td><td class="n">15</td><td class="n">48,4 %</td></tr>
+  <tr><td>Cortado · Villa Devoto</td><td class="n">14</td><td class="n">7</td><td class="n">50,0 %</td></tr>
+  <tr><td>Cortado · Boedo</td><td class="n">0</td><td class="n">1</td><td class="n">no medible</td></tr>
+  <tr><td>Todo un País · La Toma</td><td class="n">84</td><td class="n">39</td><td class="n">46,4 %</td></tr>
+  <tr><td>Todo un País · Quines</td><td class="n">159</td><td class="n">76</td><td class="n">47,8 %</td></tr>
+  <tr><td>Todo un País · San Luis Capital</td><td class="n">107</td><td class="n">47</td><td class="n">43,9 %</td></tr>
+  <tr><td><b>Cortado, total del cliente</b></td><td class="n">46</td><td class="n">23</td><td class="n"><b>50,0 %</b></td></tr>
+  <tr><td><b>Todo un País, total del cliente</b></td><td class="n">350</td><td class="n">162</td><td class="n"><b>46,3 %</b></td></tr>
+</table>
+<ul>
+  <li><b>Comunidades con numerador y denominador: 5 de 6.</b> Boedo no tiene conversaciones todavía. Las comunidades "(general)" no tienen entradas propias: la gente se atribuye al barrio.</li>
+  <li><b>Contra la meta de la carta (más de 50 %):</b> ninguna comunidad la supera con este numerador.</li>
+  <li><b>Por qué es una cota superior:</b> el numerador es la entrada al flow (I1). Los miembros reales (I3) son, en condiciones normales, menos que las entradas. Si la cota ya queda por debajo de 50 %, el valor real también lo está.</li>
+</ul>
+
+<h3>3.3 Horas de carga manual eliminadas</h3>
+<p><b>Sin línea de base.</b> No hay registro de minutos. Las tareas manuales que existen hoy y que entrarían en la medición:</p>
+<ul>
+  <li>Exportar el CSV de Windsor e importarlo (inversión, conversaciones, leads por comunidad).</li>
+  <li>Contar los miembros de cada grupo y cargar MI y MF.</li>
+  <li>Limpiar los datos de prueba después de cada ensayo.</li>
+  <li>Alta de un cliente nuevo y copia de flows (SOP-001).</li>
+</ul>
+<p>Para levantar la línea de base hay que registrar los minutos durante <b>5 días hábiles</b> (plantilla en la sección 7).</p>
+
+<h2>4. Fuentes y regla de agrupación</h2>
+<table>
+  <tr><th style="width:22%">Dato</th><th style="width:30%">Dónde vive</th><th style="width:24%">Quién lo carga</th><th>Frecuencia</th></tr>
+  <tr><td>Entradas al flow (I1)</td><td><code>evento_crudo</code> / <code>evento_deduplicado</code></td><td>ManyChat → webhook</td><td>Tiempo real</td></tr>
+  <tr><td>Trigger entregado</td><td><code>trigger_entregado</code></td><td>ManyChat → webhook</td><td>Tiempo real</td></tr>
+  <tr><td>Clic en "Me sumo" (I2)</td><td><code>clic_me_sumo</code></td><td>ManyChat → webhook</td><td>Tiempo real</td></tr>
+  <tr><td>Inversión, impresiones, clics, conversaciones, leads</td><td><code>meta_ads_metrica</code></td><td>Importador (<code>windsor-importar.mjs</code>) con CSV de Windsor</td><td><b>Manual</b>, hoy hasta el 07/10</td></tr>
+  <tr><td>MI y MF</td><td><code>comunidad</code></td><td>Carga manual en el panel</td><td><b>Manual</b>, sin cargar</td></tr>
+  <tr><td>Ingreso al grupo (I3)</td><td>—</td><td>—</td><td>Sin fuente</td></tr>
+</table>
+
+<h2>5. Limitaciones conocidas</h2>
+<ol>
+  <li><b>Casi todo el tráfico entra por Instagram.</b> De 362 personas, <b>360 son de Instagram y 2 de WhatsApp</b>, ambas de Cortado (una es la prueba del 09/10 y la otra es del 05/10). Los números de WhatsApp no tienen base suficiente.</li>
+  <li><b>La misma persona en dos canales cuenta dos veces</b> (no hay cruce entre teléfono e identificador de Instagram).</li>
+  <li><b>Ruteo de mensajes escritos a mano:</b> un texto que no es la frase exacta del anuncio cae en Villa Devoto (Cortado). Distorsiona la comunidad de origen hasta que se corrijan las condiciones de los flows.</li>
+  <li><b>Los datos de Meta se restablecen:</b> Windsor puede corregir cifras de días anteriores (ocurrió con la inversión). Cada importación reemplaza los valores del día.</li>
+  <li><b>El denominador de los barrios es corto:</b> existe desde el 06/10 (los barrios) y no hay datos de Meta después del 07/10.</li>
+  <li><b>Datos de prueba:</b> los ensayos del equipo se borran después de cada prueba, pero pueden quedar entradas de prueba si no se limpian.</li>
+  <li><b>Sin consentimiento ni política de retención definidos</b> para los datos personales (teléfonos, identificadores de Instagram y nombres). Es un requisito del rol y está pendiente con Legal y Tecnología.</li>
+</ol>
+
+<h2>6. Para pasar de v0 a la línea de base definitiva</h2>
+<table>
+  <tr><th style="width:44%">Qué falta</th><th style="width:22%">Quién</th><th>Estimación</th></tr>
+  <tr><td>Fuente del ingreso al grupo (I3): listas de miembros o enlace con redireccionador</td><td>Growth Systems + equipo de cuentas</td><td>10–16 h</td></tr>
+  <tr><td>Registro de minutos de carga manual (5 días hábiles)</td><td>Growth Systems</td><td>1 h + una semana</td></tr>
+  <tr><td>Vistas SQL por comunidad con pruebas (ingreso, triaje, sin toque humano)</td><td>Growth Systems</td><td>6–8 h</td></tr>
+  <tr><td>Importar datos de Meta con continuidad, y conversaciones de Boedo</td><td>Growth Systems + Cuentas</td><td>2 h por importación</td></tr>
+  <tr><td>Corregir el ruteo de los flows y repetir las pruebas</td><td>Cuentas (ManyChat) + Growth Systems</td><td>3–4 h</td></tr>
+</table>
+
+<h2>7. Registro de minutos (plantilla)</h2>
+<p>Una fila por tarea, durante 5 días hábiles seguidos.</p>
+<table>
+  <tr><th style="width:14%">Fecha</th><th style="width:34%">Tarea manual</th><th style="width:14%" class="n">Minutos</th><th style="width:18%">Comunidad / cliente</th><th>Se podría automatizar</th></tr>
+  <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+  <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+  <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table>
+
+<h2>8. Decisiones y aprobación</h2>
+<ol>
+  <li><b>¿"Ingreso" para el reporte oficial es I3 (entrada al grupo)?</b> Propuesta: sí, y mientras no exista se reporta I1 e I2 con ese nombre.</li>
+  <li><b>¿La línea de base de "sin toque humano" se levanta sobre todo el período o desde el 08/10?</b> Propuesta: desde el 08/10, y el episodio del 06 y 07/10 queda documentado como antecedente.</li>
+  <li><b>¿Qué significa TRG?</b> Se asumió "tasa de retención por grupo". Confirmar.</li>
+  <li><b>Meta de la tasa de triaje (más de 50 %):</b> ¿se evalúa contra I3, como dice la carta?</li>
+</ol>
+<table class="firma">
+  <tr><th style="width:34%">Aprobación</th><th style="width:33%">Nombre</th><th>Fecha</th></tr>
+  <tr><td>Manager</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table>
+
+<h2>Apéndice A. Consultas para reproducir las cifras</h2>
+<p>Todas son de solo lectura. Se corren con <code>supabase db query --linked</code>.</p>
+<h3>A.1 Ingresos sin toque humano</h3>
+<pre>select count(*) as personas,
+       count(*) filter (where not (payload ? '_recuperado')) as automaticas
+from crm_comunidades_v2.evento_deduplicado;
+-- Ventana estable, desde el 08/10:
+--   ... where fecha_primer_contacto &gt;= timestamptz '2026-10-08 00:00:00-03'</pre>
+<h3>A.2 Tasa de triaje por comunidad y período</h3>
+<pre>select c.slug, p.nombre, p.conversaciones_meta, p.clics_unicos as entradas,
+       round(p.clics_unicos::numeric / nullif(p.conversaciones_meta, 0) * 100, 1) as triaje_pct
+from crm_comunidades_v2.cliente c,
+     lateral crm_comunidades_v2.comunidad_performance_rango(c.id, date '2026-10-06', date '2026-10-07') p
+order by c.slug, p.nombre;</pre>
+<h3>A.3 Niveles de ingreso I1 e I2 por comunidad</h3>
+<pre>select p.nombre, p.clics_unicos as i1_entradas, p.clics_me_sumo as i2_clics
+from crm_comunidades_v2.comunidad_performance_rango(&lt;id del cliente&gt;, null, null) p;</pre>
+
+</body>
+</html>
