@@ -84,6 +84,10 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .form-row label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
+.atajos{display:flex; gap:6px; flex-wrap:wrap}
+.atajo{border:1px solid var(--border-strong); background:transparent; color:var(--text-body); border-radius:var(--r-in); padding:7px 11px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap}
+.atajo:hover{background:var(--panel-raised)}
+.atajo.on{background:var(--accent-dim); border-color:var(--accent); color:#fff}
 .pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
 .pill-ig{color:#e879b9; border-color:rgba(232,121,185,.45); background:rgba(232,121,185,.1)}
 .pill-ok{color:#3ddc97; border-color:rgba(61,220,151,.4); background:rgba(61,220,151,.08)}
@@ -422,6 +426,24 @@ function moverColumnaControl(orden, id, antesDe){
   return sin;
 }
 
+/* ATAJOS-FECHAS:INICIO */
+// Atajos de período de Control_Comunidades. Siempre en hora de Buenos Aires (la misma zona con que el CRM fecha las entradas).
+// "Últimos N días" incluye HOY y los N-1 anteriores. "Ayer" es un solo día.
+const ZONA_AR = 'America/Argentina/Buenos_Aires';
+function hoyAR(ahora = new Date()){ return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_AR }).format(ahora); }
+function sumarDias(fecha, n){
+  const [a, m, d] = fecha.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+}
+const ATAJOS_FECHAS = [
+  { id: 'ayer', etiqueta: 'Ayer',           rango: (hoy) => ({ desde: sumarDias(hoy, -1),  hasta: sumarDias(hoy, -1) }) },
+  { id: '7',    etiqueta: 'Últimos 7 días',  rango: (hoy) => ({ desde: sumarDias(hoy, -6),  hasta: hoy }) },
+  { id: '10',   etiqueta: 'Últimos 10 días', rango: (hoy) => ({ desde: sumarDias(hoy, -9),  hasta: hoy }) },
+  { id: '15',   etiqueta: 'Últimos 15 días', rango: (hoy) => ({ desde: sumarDias(hoy, -14), hasta: hoy }) },
+  { id: '30',   etiqueta: 'Últimos 30 días', rango: (hoy) => ({ desde: sumarDias(hoy, -29), hasta: hoy }) },
+];
+/* ATAJOS-FECHAS:FIN */
+
 function renderControl(comunidades, filtroComunidad, desde, hasta){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
@@ -467,6 +489,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
       <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
+      <label>Período rápido<div class="atajos" role="group" aria-label="Períodos rápidos">${ATAJOS_FECHAS.map(a => { const r = a.rango(hoyAR()); const activo = desde === r.desde && hasta === r.hasta;
+        return `<button type="button" class="atajo ${activo ? 'on' : ''}" data-atajo="${a.id}" title="${r.desde === r.hasta ? r.desde : r.desde + ' a ' + r.hasta}">${a.etiqueta}</button>`; }).join('')}</div></label>
       <button class="btn" id="btnFechasLimpiar" type="button">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       <button class="btn" id="btnWindsorSync" type="button">Sincronizar Windsor.ai</button>
@@ -474,6 +498,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
     </div>
     <div class="card"><h3>Matriz de atribución multi-plataforma</h3>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican.</div>
+      ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
       <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>`;
 }
@@ -541,6 +566,15 @@ function wireControl(){
   const hasta = document.getElementById('inpFechaHasta');
   if (desde) desde.onchange = () => { state.fechaDesde = desde.value || null; renderAll(); };
   if (hasta) hasta.onchange = () => { state.fechaHasta = hasta.value || null; renderAll(); };
+  document.querySelectorAll('[data-atajo]').forEach(b => {
+    b.onclick = () => {
+      const a = ATAJOS_FECHAS.find(x => x.id === b.dataset.atajo);
+      if (!a) return;
+      const r = a.rango(hoyAR());
+      state.fechaDesde = r.desde; state.fechaHasta = r.hasta;
+      renderAll();
+    };
+  });
   const limpiar = document.getElementById('btnFechasLimpiar');
   if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   const btn = document.getElementById('btnWindsorSync');
