@@ -22,9 +22,19 @@ En Supabase → **Connect** → pestaña **Session pooler** (usá el pooler: ace
 | Esquema | `windsor_raw` |
 | SSL | activado |
 
-## 3. Crear el destino en Windsor
-1. Windsor → **Data destinations** → agregar **Supabase** (o PostgreSQL) con los datos de arriba.
-2. Probá la conexión. Si falla, revisá primero el usuario (lleva el `.` y el identificador del proyecto).
+## 3. Crear el destino en Windsor: usar el destino **PostgreSQL**, no "Supabase"
+Windsor ofrece dos destinos y **no son equivalentes**:
+| Destino | Cómo se conecta | Qué le das a Windsor |
+|---|---|---|
+| **Supabase** | Botón "Connect Supabase": autorizás a Windsor con tu cuenta de Supabase (OAuth) y elegís cuenta y proyecto | Acceso a **tu cuenta de Supabase**, que es mucho más amplio que una sola tabla. Según su guía, además pide la contraseña de PostgreSQL |
+| **PostgreSQL** (recomendado) | Usuario, contraseña, host, puerto y base de datos | **Solo** lo que le damos al usuario aislado `windsor_escritor` (db/014): crear y escribir tablas en `windsor_raw` |
+
+Por eso se usa el **destino PostgreSQL** con el usuario aislado. Con el destino Supabase el aislamiento de la db/014 no serviría de nada.
+
+1. Windsor → **Data destinations** → **PostgreSQL** → agregar tarea.
+2. Completar: **User name** `windsor_escritor.zyyxsammrryhfrgfwlxr`, **Host** `aws-0-us-east-2.pooler.supabase.com`, **Port** `5432`, **Password** la del paso 1, **Database name** `postgres`, **Table name** `facebook_ads` (sin esquema: el usuario tiene `windsor_raw` como esquema por defecto, db/016).
+3. Probá la conexión. Si falla, revisá primero el usuario (lleva el punto y el identificador del proyecto).
+4. Si dejaste autorizado a Windsor con el botón "Connect Supabase" (OAuth) en algún momento, **revocá esa autorización** desde tu cuenta de Supabase si no la vas a usar.
 
 ## 4. Crear la tarea de datos
 - **Fuente:** Facebook Ads.
@@ -33,7 +43,7 @@ En Supabase → **Connect** → pestaña **Session pooler** (usá el pooler: ace
   `date`, `account_id`, `account_name`, `campaign`, `adset_name`, `spend`, `impressions`, `clicks`, `actions_onsite_conversion_messaging_conversation_started_7d`, `actions_onsite_conversion_lead_grouped`
 - **Rango de fechas:** últimos 90 días (Windsor corrige cifras de días anteriores, por eso conviene que vuelva a traer los últimos días en cada corrida).
 - **Frecuencia:** una vez al día como mínimo.
-- **Destino:** el de arriba, tabla `facebook_ads`, esquema `windsor_raw`. Si Windsor da a elegir el modo de escritura, elegí **actualizar/reemplazar por fecha** y no "agregar siempre", para no duplicar filas.
+- **Destino:** el de PostgreSQL de arriba, tabla `facebook_ads` (queda en el esquema `windsor_raw`). Si Windsor da a elegir el modo de escritura, elegí **actualizar/reemplazar por fecha** y no "agregar siempre", para no duplicar filas.
 
 ## 5. Primera corrida
 Ejecutá la tarea una vez a mano y avisame. Con la tabla ya creada reviso sus columnas (cada destino nombra los campos a su manera) y escribo la función de db/015 que la convierte a `meta_ads_metrica`.
