@@ -72,6 +72,26 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .filters label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
 .filters input, .filters select{background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
+.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+.tabla-metricas{border-collapse:separate; border-spacing:0; min-width:100%}
+.tabla-metricas th, .tabla-metricas td{text-transform:none; letter-spacing:0}
+.tabla-metricas .th-gr{padding:0; border-bottom:none; background:color-mix(in srgb, var(--gc) 12%, var(--panel))}
+.tabla-metricas .th-gr-in{display:flex; align-items:center; gap:7px; padding:9px 12px; color:var(--gc); font-size:11.5px; font-weight:800; border-top:2px solid var(--gc); border-radius:6px 6px 0 0}
+.tabla-metricas .th-col{vertical-align:bottom; white-space:normal; min-width:104px; max-width:150px; padding:8px 10px 9px; font-size:11.5px; line-height:1.3; font-weight:700; color:var(--text-strong); background:color-mix(in srgb, var(--gc) 8%, var(--panel)); border-bottom:1px solid var(--border-strong); text-align:right}
+.tabla-metricas .th-txt{margin-right:4px}
+.tabla-metricas td.num{text-align:right; white-space:nowrap; background:color-mix(in srgb, var(--gc) 4%, transparent); font-variant-numeric:tabular-nums}
+.tabla-metricas .g-ini{border-left:1px solid color-mix(in srgb, var(--gc) 55%, transparent)}
+.tabla-metricas .th-com, .tabla-metricas .td-com{position:sticky; left:0; z-index:2; background:var(--panel); text-align:left; font-size:12px; font-weight:700; color:var(--text-strong); padding:10px 14px; border-bottom:1px solid var(--border); white-space:nowrap}
+.tabla-metricas .th-com{z-index:3; vertical-align:bottom; font-size:11.5px; border-bottom:1px solid var(--border-strong)}
+.tabla-metricas tbody tr:hover td.num, .tabla-metricas tbody tr:hover .td-com{background:color-mix(in srgb, var(--gc, var(--accent)) 10%, var(--panel-raised))}
+.tabla-metricas tbody tr.totales td, .tabla-metricas tbody tr.totales .td-com{border-top:1px solid var(--border-strong); font-weight:800; color:#fff}
+.tabla-metricas .moneda, .tabla-metricas .entero{color:var(--text-strong); font-weight:600}
+.tabla-metricas .pct{display:inline-block; padding:2px 9px; border-radius:99px; font-weight:800; font-size:11.5px; color:#fff; background:rgba(76,126,255,.28); border:1px solid rgba(120,160,255,.55)}
+.tabla-metricas .vacio{display:inline-block; padding:2px 9px; border-radius:99px; font-size:10.5px; font-weight:600; color:var(--text-muted); background:rgba(255,255,255,.05); border:1px dashed var(--border-strong); cursor:help; white-space:nowrap}
+.info-btn{width:15px; height:15px; padding:0; border-radius:50%; border:1px solid var(--border-strong); background:transparent; color:var(--text-muted); font-size:10px; font-weight:800; font-style:italic; font-family:Georgia,serif; line-height:1; cursor:help; vertical-align:middle}
+.info-btn:hover, .info-btn:focus-visible{color:#fff; border-color:#fff; background:rgba(255,255,255,.12)}
+.info-btn:focus-visible, .tabla-metricas .vacio:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+#tipFlotante{position:fixed; z-index:50; max-width:280px; padding:9px 11px; border-radius:var(--r-in); background:#222736; border:1px solid var(--border-strong); color:#fff; font-size:11.5px; line-height:1.45; font-weight:500; box-shadow:0 6px 24px rgba(0,0,0,.5); pointer-events:none}
 .th-grupo{display:block; font-size:8.5px; letter-spacing:.06em; margin-bottom:3px; opacity:.85}
 .col-wrap{position:relative}
 .col-panel{position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:380px; max-height:70vh; overflow:auto; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:var(--r-card); box-shadow:0 12px 32px rgba(0,0,0,.5); padding:10px}
@@ -205,6 +225,31 @@ function iniciarMenuLateral(){
 }
 /* MENU-LATERAL:FIN */
 iniciarMenuLateral();
+
+/* TOOLTIP-INFO:INICIO */
+// Un solo globo flotante para todos los botones "i" y los estados vacíos de la tabla: así no lo recorta el scroll horizontal.
+(function(){
+  let tip = null;
+  const cerrar = () => { if (tip) { tip.remove(); tip = null; } };
+  const abrir = (el) => {
+    const texto = el.dataset.info || el.dataset.ayuda; if (!texto) return;
+    cerrar();
+    tip = document.createElement('div'); tip.id = 'tipFlotante'; tip.setAttribute('role', 'tooltip'); tip.textContent = texto;
+    document.body.appendChild(tip);
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth;
+    tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    tip.style.top = (r.bottom + 8) + 'px';
+    if (tip.getBoundingClientRect().bottom > window.innerHeight - 8) tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + 'px';
+  };
+  const esInfo = (e) => e.target && e.target.closest ? e.target.closest('.info-btn, .vacio[data-ayuda]') : null;
+  document.addEventListener('mouseover', e => { const b = esInfo(e); if (b) abrir(b); });
+  document.addEventListener('mouseout', e => { if (esInfo(e)) cerrar(); });
+  document.addEventListener('focusin', e => { const b = esInfo(e); if (b) abrir(b); });
+  document.addEventListener('focusout', cerrar);
+  document.addEventListener('click', e => { const b = esInfo(e); if (b) abrir(b); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrar(); });
+})();
+/* TOOLTIP-INFO:FIN */
 
 let state = { tab:'overview', entered:false, clienteId:null, clientes:[], columnasControl:null, columnasAbierto:false };
 
@@ -434,33 +479,113 @@ async function refrescarOverview(){
 // Columnas de la matriz. Cada una dice cómo se pinta en una fila de comunidad y en la fila "Total del cliente".
 // El usuario puede ocultarlas y reordenarlas (como "Columnas" en el Administrador de anuncios de Meta): la
 // preferencia se guarda en este navegador (localStorage), sin tocar la base. "Comunidad" siempre va primera.
-const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001)';
-const celdaNum = (html) => `<td class="mono">${html}</td>`;
-const celdaTrigger = (n) => n > 0 ? `<td><span class="mono">${fmtInt(n)}</span></td>` : `<td>${naCell(NA_TRIGGER)}</td>`;
-const NA_CLIC = 'Todavía no llegó ningún aviso de clic: falta la acción de salida del botón "Me sumo" en el flow de ManyChat';
-const celdaClic = (n) => n > 0 ? `<td><span class="mono">${fmtInt(n)}</span></td>` : `<td>${naCell(NA_CLIC)}</td>`;
+/* TABLA-METRICAS:INICIO */
+// Presentación de la tabla "Métricas por comunidad". Funciones puras (se prueban en tests/panel-tabla.test.mjs).
+const ICONO = (trazos) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${trazos}</svg>`;
+const GRUPOS_TABLA = {
+  'Meta Ads':         { k: 'meta',     color: '#6E9BFF', icono: ICONO('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>') },
+  'ManyChat':         { k: 'manychat', color: '#FFB35C', icono: ICONO('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>') },
+  'CRM':              { k: 'crm',      color: '#4FD39A', icono: ICONO('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.2a5 5 0 0 1 4.5 4.8"/>') },
+  'WhatsApp & Salud': { k: 'wa',       color: '#B79CFF', icono: ICONO('<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>') },
+  'Financiera':       { k: 'fin',      color: '#F58FB8', icono: ICONO('<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>') },
+};
+const esNumero = (v) => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+// Dinero con siempre dos decimales y separadores argentinos: $5.401,40 · $7.844.266,43
+const fmtMonedaTabla = (v) => '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPctTabla = (v) => Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+const fmtEnteroTabla = (v) => Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+
+// Estados de una celda sin valor: cada uno dice POR QUÉ no hay número.
+const ESTADOS_VACIO = {
+  sin_dato:   { texto: 'Sin dato',      ayuda: 'No hay base para calcularlo en este período (por ejemplo, no hubo conversaciones).' },
+  sin_fuente: { texto: 'Sin fuente',    ayuda: 'Este dato todavía no llega al CRM: la integración aún no lo envía.' },
+  no_disp:    { texto: 'No disponible', ayuda: 'Depende de los miembros iniciales y finales (MI y MF), que todavía no están cargados.' },
+};
+const vacio = (clave, ayuda) => `<span class="vacio" tabindex="0" data-ayuda="${esc(ayuda || ESTADOS_VACIO[clave].ayuda)}">${ESTADOS_VACIO[clave].texto}</span>`;
+const vMoneda = (v) => esNumero(v) ? `<span class="moneda">${fmtMonedaTabla(v)}</span>` : vacio('sin_dato');
+const vPct    = (v) => esNumero(v) ? `<span class="pct">${fmtPctTabla(v)}</span>` : vacio('sin_dato');
+const vEntero = (v) => esNumero(v) ? `<span class="entero">${fmtEnteroTabla(v)}</span>` : vacio('sin_dato');
+// MI y MF sin cargar (ambos en 0): todo lo que depende de ellos no se puede calcular.
+const sinMembresia = (mi, mf) => Number(mi) === 0 && Number(mf) === 0;
+
+// Tramos consecutivos de un mismo grupo, para el encabezado de grupos. Respeta el orden elegido por la persona:
+// si dos columnas de un grupo quedan separadas, el grupo aparece dos veces.
+function tramosDeGrupos(columnas){
+  const tramos = [];
+  for (const col of columnas) {
+    const ultimo = tramos[tramos.length - 1];
+    if (ultimo && ultimo.grupo === col.grupo) ultimo.n++;
+    else tramos.push({ grupo: col.grupo, n: 1 });
+  }
+  return tramos;
+}
+// Para cada columna: ¿es la primera de su tramo? (se usa para dibujar la separación entre grupos)
+const iniciosDeTramo = (columnas) => columnas.map((col, i) => i === 0 || columnas[i - 1].grupo !== col.grupo);
+/* TABLA-METRICAS:FIN */
+
+const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001).';
+const NA_CLIC = 'Todavía no llegó ningún aviso de clic: falta la acción de salida del botón "Me sumo" en el flow de ManyChat.';
+const NO_MIEMBROS = 'Faltan los miembros iniciales y finales (MI y MF). Se cargan en la sección Overview, tabla "Comunidades".';
 const COLUMNAS_CONTROL = [
-  { id:'inversion',        grupo:'Meta Ads',          etiqueta:'Inversión',                       celda:(c)=>celdaNum(fmtMoney(c.inversion)),                 total:(t)=>celdaNum(fmtMoney(t.inv)) },
-  { id:'conversaciones',   grupo:'Meta Ads',          etiqueta:'Conversaciones',                  celda:(c)=>celdaNum(fmtInt(c.conversaciones_meta)),         total:(t)=>celdaNum(fmtInt(t.conv)) },
-  { id:'cpl',              grupo:'Meta Ads',          etiqueta:'CPL',                             celda:(c)=>celdaNum(fmtMoney(c.cpl)),                       total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.conv))) },
-  { id:'leads',            grupo:'Meta Ads',          etiqueta:'Clientes potenciales (Meta)',     celda:(c)=>celdaNum(fmtInt(c.leads_meta)),                  total:(t)=>celdaNum(fmtInt(t.leads)) },
-  { id:'costo_lead',       grupo:'Meta Ads',          etiqueta:'Costo por cliente potencial',     celda:(c)=>celdaNum(fmtMoney(c.costo_por_lead)),            total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.leads))) },
-  { id:'ctr',              grupo:'Meta Ads',          etiqueta:'CTR (todos los clics)',           celda:(c)=>celdaNum(fmtPct(c.ctr_anuncio_pct)),             total:(t)=>celdaNum(fmtPct(t.razon(t.clics, t.impresiones, 100))) },
-  { id:'trigger',          grupo:'ManyChat Bot',      etiqueta:'Trigger entregados',              celda:(c)=>celdaTrigger(c.triggers_entregados),             total:(t)=>celdaTrigger(t.trig) },
-  { id:'entradas',         grupo:'CRM / Conversión',  etiqueta:'Entradas al flow',                celda:(c)=>celdaNum(fmtInt(c.clics_unicos)),                total:(t)=>celdaNum(fmtInt(t.ent)) },
-  { id:'entradas_conv',    grupo:'CRM / Conversión',  etiqueta:'Entradas / conversaciones',       celda:(c)=>celdaNum(fmtPct(c.clics_unicos && c.conversaciones_meta ? (c.clics_unicos/c.conversaciones_meta*100) : null)), total:(t)=>celdaNum(fmtPct(t.razon(t.ent, t.conv, 100))) },
-  { id:'clics_me_sumo',   grupo:'ManyChat Bot',      etiqueta:'Clics en "Me sumo"',              celda:(c)=>celdaClic(c.clics_me_sumo),                      total:(t)=>celdaClic(t.clicsms) },
-  { id:'tasa_me_sumo',    grupo:'CRM / Conversión',  etiqueta:'Clic en "Me sumo" / entradas',    celda:(c)=>celdaNum(fmtPct(c.clics_me_sumo > 0 && c.clics_unicos ? c.clics_me_sumo/c.clics_unicos*100 : null)), total:(t)=>celdaNum(fmtPct(t.clicsms > 0 ? t.razon(t.clicsms, t.ent, 100) : null)) },
-  { id:'mi',               grupo:'WhatsApp & Salud',  etiqueta:'Mi',                              celda:(c)=>celdaNum(fmtInt(c.miembros_iniciales)),          total:(t)=>celdaNum(fmtInt(t.mi)) },
-  { id:'mf',               grupo:'WhatsApp & Salud',  etiqueta:'Mf',                              celda:(c)=>celdaNum(fmtInt(c.miembros_finales)),            total:(t)=>celdaNum(fmtInt(t.mf)) },
-  { id:'crecimiento',      grupo:'WhatsApp & Salud',  etiqueta:'Crecimiento neto',                celda:(c)=>celdaNum(fmtInt(c.crecimiento_neto)),            total:(t)=>celdaNum(fmtInt(t.mf - t.mi)) },
-  { id:'bajas',            grupo:'WhatsApp & Salud',  etiqueta:'Bajas est.',                      celda:(c)=>celdaNum(fmtInt(c.bajas_estimadas)),             total:(t)=>celdaNum(fmtInt(t.bajas)) },
-  { id:'costo_entrada',    grupo:'Financiera',        etiqueta:'Costo por entrada al flow',       celda:(c)=>celdaNum(fmtMoney(c.cpcu)),                      total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.ent))) },
-  { id:'costo_clic',      grupo:'Financiera',        etiqueta:'Costo por clic en "Me sumo"',     celda:(c)=>celdaNum(fmtMoney(c.costo_por_clic_me_sumo)),     total:(t)=>celdaNum(fmtMoney(t.razon(t.inv, t.clicsms))) },
-  { id:'cpmn',             grupo:'Financiera',        etiqueta:'Costo por miembro neto',          celda:(c)=>celdaNum(fmtMoney(c.cpmn)),                      total:(t)=>celdaNum(fmtMoney(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null)) },
-  { id:'fuga',             grupo:'Financiera',        etiqueta:'Tasa de fuga',                    celda:(c)=>celdaNum(fmtPct(c.tasa_fuga_pct)),               total:(t)=>celdaNum(fmtPct(t.razon(t.bajas, t.ent, 100))) },
+  { id:'inversion', grupo:'Meta Ads', etiqueta:'Inversión',
+    info:'Gasto de Meta Ads asignado a la comunidad en el período. Viene de Windsor y se actualiza una vez al día, con un día de retraso. Se asigna por el nombre de la campaña y del conjunto de anuncios.',
+    celda:(c)=>vMoneda(c.inversion), total:(t)=>vMoneda(t.inv) },
+  { id:'conversaciones', grupo:'Meta Ads', etiqueta:'Conversaciones',
+    info:'Conversaciones de mensajería iniciadas desde los anuncios, con la ventana de atribución de 7 días de Meta. No es lo mismo que las entradas al flow.',
+    celda:(c)=>vEntero(c.conversaciones_meta), total:(t)=>vEntero(t.conv) },
+  { id:'cpl', grupo:'Meta Ads', etiqueta:'CPL',
+    info:'Costo por conversación: Inversión ÷ Conversaciones. Sin dato si no hubo conversaciones en el período.',
+    celda:(c)=>vMoneda(c.cpl), total:(t)=>vMoneda(t.razon(t.inv, t.conv)) },
+  { id:'leads', grupo:'Meta Ads', etiqueta:'Clientes potenciales (Meta)',
+    info:'Clientes potenciales que Meta informa para la campaña. Es otra métrica distinta de las conversaciones y no todas las campañas la informan.',
+    celda:(c)=>vEntero(c.leads_meta), total:(t)=>vEntero(t.leads) },
+  { id:'costo_lead', grupo:'Meta Ads', etiqueta:'Costo por cliente potencial',
+    info:'Inversión ÷ Clientes potenciales de Meta. Sin dato si no hubo clientes potenciales.',
+    celda:(c)=>vMoneda(c.costo_por_lead), total:(t)=>vMoneda(t.razon(t.inv, t.leads)) },
+  { id:'ctr', grupo:'Meta Ads', etiqueta:'CTR (todos los clics)',
+    info:'Clics totales ÷ Impresiones. Cuenta todos los clics del anuncio, no solo los que van al enlace, por eso suele ser mayor que el CTR de enlace de Ads Manager.',
+    celda:(c)=>vPct(c.ctr_anuncio_pct), total:(t)=>vPct(t.razon(t.clics, t.impresiones, 100)) },
+  { id:'trigger', grupo:'ManyChat', etiqueta:'Trigger entregados',
+    info:'Personas distintas que recibieron el primer mensaje del flow. Lo informa ManyChat con un aviso al empezar el flow.',
+    celda:(c)=>c.triggers_entregados > 0 ? vEntero(c.triggers_entregados) : vacio('sin_fuente', NA_TRIGGER), total:(t)=>t.trig > 0 ? vEntero(t.trig) : vacio('sin_fuente', NA_TRIGGER) },
+  { id:'clics_me_sumo', grupo:'ManyChat', etiqueta:'Clics en "Me sumo"',
+    info:'Personas distintas que tocaron el botón "Me sumo". Se registra desde la salida propia del botón en ManyChat, desde el 09/10.',
+    celda:(c)=>c.clics_me_sumo > 0 ? vEntero(c.clics_me_sumo) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vEntero(t.clicsms) : vacio('sin_fuente', NA_CLIC) },
+  { id:'entradas', grupo:'CRM', etiqueta:'Entradas al flow',
+    info:'Personas nuevas que entraron al flow en el período, contadas por su primer contacto. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta: no distingue el origen.',
+    celda:(c)=>vEntero(c.clics_unicos), total:(t)=>vEntero(t.ent) },
+  { id:'entradas_conv', grupo:'CRM', etiqueta:'Entradas / conversaciones',
+    info:'Entradas al flow ÷ Conversaciones de Meta (tasa de triaje). Es un tope: entrar al flow no es lo mismo que unirse al grupo.',
+    celda:(c)=>vPct(c.conversaciones_meta > 0 ? c.clics_unicos / c.conversaciones_meta * 100 : null), total:(t)=>vPct(t.razon(t.ent, t.conv, 100)) },
+  { id:'tasa_me_sumo', grupo:'CRM', etiqueta:'Clic en "Me sumo" / entradas',
+    info:'Clics en "Me sumo" ÷ Entradas al flow: de cada 100 personas que entran, cuántas tocan el botón.',
+    celda:(c)=>c.clics_me_sumo > 0 ? vPct(c.clics_unicos > 0 ? c.clics_me_sumo / c.clics_unicos * 100 : null) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vPct(t.razon(t.clicsms, t.ent, 100)) : vacio('sin_fuente', NA_CLIC) },
+  { id:'mi', grupo:'WhatsApp & Salud', etiqueta:'Miembros iniciales (MI)',
+    info:'Miembros del grupo al empezar. Hoy es una carga manual en la sección Overview.',
+    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.miembros_iniciales), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mi) },
+  { id:'mf', grupo:'WhatsApp & Salud', etiqueta:'Miembros finales (MF)',
+    info:'Miembros del grupo hoy. Carga manual en la sección Overview: sin MI y MF no se pueden calcular las métricas de crecimiento, bajas y fuga.',
+    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.miembros_finales), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mf) },
+  { id:'crecimiento', grupo:'WhatsApp & Salud', etiqueta:'Crecimiento neto',
+    info:'MF − MI: cuánto creció el grupo. Requiere MI y MF cargados.',
+    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.crecimiento_neto), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mf - t.mi) },
+  { id:'bajas', grupo:'WhatsApp & Salud', etiqueta:'Bajas estimadas',
+    info:'Estimación: MI + Entradas al flow − MF. Es una estimación: supone que todas las entradas se unieron al grupo. Requiere MI y MF cargados.',
+    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.bajas_estimadas), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.bajas) },
+  { id:'costo_entrada', grupo:'Financiera', etiqueta:'Costo por entrada al flow',
+    info:'Inversión ÷ Entradas al flow. La inversión es la de Meta; las entradas incluyen a quienes llegan sin pasar por la pauta.',
+    celda:(c)=>vMoneda(c.cpcu), total:(t)=>vMoneda(t.razon(t.inv, t.ent)) },
+  { id:'costo_clic', grupo:'Financiera', etiqueta:'Costo por clic en "Me sumo"',
+    info:'Inversión ÷ Clics en "Me sumo".',
+    celda:(c)=>c.clics_me_sumo > 0 ? vMoneda(c.costo_por_clic_me_sumo) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vMoneda(t.razon(t.inv, t.clicsms)) : vacio('sin_fuente', NA_CLIC) },
+  { id:'cpmn', grupo:'Financiera', etiqueta:'Costo por miembro neto',
+    info:'Inversión ÷ (MF − MI): cuánto costó cada miembro que sumó el grupo. Requiere MI y MF cargados.',
+    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(c.cpmn), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null) },
+  { id:'fuga', grupo:'Financiera', etiqueta:'Tasa de fuga',
+    info:'Bajas estimadas ÷ Entradas al flow. Requiere MI y MF cargados; hasta entonces no se puede calcular.',
+    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vPct(c.tasa_fuga_pct), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vPct(t.razon(t.bajas, t.ent, 100)) },
 ];
-const COLOR_GRUPO = { 'Meta Ads':'var(--accent)', 'ManyChat Bot':'var(--warn)' };
+const COLOR_GRUPO = Object.fromEntries(Object.entries(GRUPOS_TABLA).map(([nombre, g]) => [nombre, g.color]));
 const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas';
 
 // Orden y ocultas guardados. Ignora ids que ya no existen y agrega al final las columnas nuevas.
@@ -521,13 +646,22 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
     clics: suma('clics'), impresiones: suma('impresiones'), clicsms: suma('clics_me_sumo'),
   };
 
+  const inicios = iniciosDeTramo(visibles);
+  const claseGrupo = (col, k) => 'g-' + (GRUPOS_TABLA[col.grupo] ? GRUPOS_TABLA[col.grupo].k : 'otro') + (inicios[k] ? ' g-ini' : '');
+  const tramos = tramosDeGrupos(visibles);
+  const encabezadoGrupos = tramos.map(tr => { const g = GRUPOS_TABLA[tr.grupo] || { k:'otro', color:'#8B90A0', icono:'' };
+    return `<th colspan="${tr.n}" scope="colgroup" class="th-gr g-${g.k} g-ini" style="--gc:${g.color}"><span class="th-gr-in">${g.icono}${esc(tr.grupo)}</span></th>`; }).join('');
+  const encabezados = visibles.map((col, k) => { const g = GRUPOS_TABLA[col.grupo] || { color:'#8B90A0' };
+    return `<th scope="col" class="th-col ${claseGrupo(col, k)}" style="--gc:${g.color}"><span class="th-txt">${esc(col.etiqueta)}</span><button type="button" class="info-btn" data-info="${esc(col.info || '')}" aria-label="Qué significa: ${esc(col.etiqueta)}">i</button></th>`; }).join('');
+  const celdas = (fn) => visibles.map((col, k) => { const g = GRUPOS_TABLA[col.grupo] || { color:'#8B90A0' };
+    return `<td class="num ${claseGrupo(col, k)}" style="--gc:${g.color}">${fn(col)}</td>`; }).join('');
+
   const filas = porComunidad.length
-    ? porComunidad.map(c => `<tr><td>${esc(c.nombre)}</td>${visibles.map(col => col.celda(c)).join('')}</tr>`).join('')
+    ? porComunidad.map(c => `<tr><th scope="row" class="td-com">${esc(c.nombre)}</th>${celdas(col => col.celda(c))}</tr>`).join('')
     : `<tr class="empty-row"><td colspan="${visibles.length + 1}">Sin datos todavía.</td></tr>`;
   const filaTotal = comunidades.length
-    ? `<tr class="totales"><td>Total del cliente</td>${visibles.map(col => col.total(t)).join('')}</tr>`
+    ? `<tr class="totales"><th scope="row" class="td-com">Total del cliente</th>${celdas(col => col.total(t))}</tr>`
     : '';
-  const encabezados = visibles.map(col => `<th><span class="th-grupo" style="color:${COLOR_GRUPO[col.grupo] || 'var(--text-faint)'}">${esc(col.grupo)}</span>${esc(col.etiqueta)}</th>`).join('');
 
   const panelColumnas = state.columnasAbierto ? `<div class="col-panel" id="panelColumnas">
       <div class="col-panel-head"><b>Columnas</b><span>${visibles.length} de ${COLUMNAS_CONTROL.length} visibles · arrastrá para reordenar</span>
@@ -562,7 +696,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
       <div class="sub">Meta Ads · ManyChat · CRM</div>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion).</div>
       ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
-      <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
+      <div class="tbl-wrap"><table class="tabla-metricas"><caption class="sr-only">Métricas por comunidad, agrupadas por fuente: ${tramosDeGrupos(visibles).map(x => x.grupo).join(', ')}</caption><thead><tr class="fila-grupos"><th rowspan="2" scope="col" class="th-com">Comunidad</th>${encabezadoGrupos}</tr><tr>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>`;
 }
 

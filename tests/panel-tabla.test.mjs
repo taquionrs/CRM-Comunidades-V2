@@ -1,0 +1,62 @@
+// Pruebas de la presentación de la tabla "Métricas por comunidad". Se extrae el bloque marcado TABLA-METRICAS de
+// public/index.html (el panel no tiene build) y se evalúa acá. Correr: npm test
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8").split(String.fromCharCode(13)).join("");
+const ini = html.indexOf("/* TABLA-METRICAS:INICIO */");
+const fin = html.indexOf("/* TABLA-METRICAS:FIN */");
+assert.ok(ini >= 0 && fin > ini, "no se encontró el bloque TABLA-METRICAS en public/index.html");
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+const api = new Function("esc", html.slice(ini, fin) +
+  "\nreturn { fmtMonedaTabla, fmtPctTabla, vMoneda, vPct, vEntero, vacio, sinMembresia, tramosDeGrupos, iniciosDeTramo, GRUPOS_TABLA };")(esc);
+
+test("dinero: siempre dos decimales y separadores argentinos", () => {
+  assert.equal(api.fmtMonedaTabla(5401.4), "$5.401,40");
+  assert.equal(api.fmtMonedaTabla(7844266.43), "$7.844.266,43");
+  assert.equal(api.fmtMonedaTabla(0), "$0,00");
+});
+
+test("porcentajes: un decimal y coma", () => {
+  assert.equal(api.fmtPctTabla(66.666), "66,7%");
+  assert.equal(api.fmtPctTabla(100), "100,0%");
+});
+
+test("valores vacíos: dicen por qué no hay número", () => {
+  assert.match(api.vMoneda(null), /Sin dato/);
+  assert.match(api.vPct(undefined), /Sin dato/);
+  assert.match(api.vEntero(""), /Sin dato/);
+  assert.match(api.vacio("sin_fuente"), /Sin fuente/);
+  assert.match(api.vacio("no_disp"), /No disponible/);
+});
+
+test("el cero es un dato real, no un vacío", () => {
+  assert.match(api.vEntero(0), /^<span class="entero">0<\/span>$/);
+  assert.match(api.vMoneda(0), /\$0,00/);
+});
+
+test("el texto de ayuda de un estado vacío se escapa", () => {
+  assert.ok(!api.vacio("sin_dato", 'dice "hola" <b>').includes("<b>"));
+});
+
+test("miembros sin cargar: solo cuando MI y MF están ambos en cero", () => {
+  assert.equal(api.sinMembresia(0, 0), true);
+  assert.equal(api.sinMembresia("0", "0"), true);
+  assert.equal(api.sinMembresia(100, 140), false);
+  assert.equal(api.sinMembresia(0, 40), false);
+});
+
+test("tramos de grupo: respeta el orden elegido y repite un grupo si queda partido", () => {
+  const cols = [{ grupo: "A" }, { grupo: "A" }, { grupo: "B" }, { grupo: "A" }];
+  assert.deepEqual(api.tramosDeGrupos(cols), [{ grupo: "A", n: 2 }, { grupo: "B", n: 1 }, { grupo: "A", n: 1 }]);
+  assert.deepEqual(api.iniciosDeTramo(cols), [true, false, true, true]);
+  assert.deepEqual(api.tramosDeGrupos([]), []);
+});
+
+test("cada grupo tiene color e ícono", () => {
+  for (const [nombre, g] of Object.entries(api.GRUPOS_TABLA)) {
+    assert.match(g.color, /^#[0-9A-Fa-f]{6}$/, nombre);
+    assert.match(g.icono, /^<svg /, nombre);
+  }
+});
