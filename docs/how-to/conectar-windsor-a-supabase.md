@@ -42,3 +42,19 @@ Ejecutá la tarea una vez a mano y avisame. Con la tabla ya creada reviso sus co
 - Si dejás de usar Windsor, desactivá el usuario: `alter role windsor_escritor nologin;`.
 - Si se filtra la contraseña, cambiala con el mismo `alter role` del paso 1.
 - `windsor_raw` no está expuesto por la API del panel: solo se lee desde la base.
+
+## 6. Convertir lo aterrizado en las columnas del CRM (db/015)
+La función `sincronizar_meta_desde_windsor` convierte la tabla cruda en `meta_ads_metrica` por comunidad, con la misma regla que el importador por CSV: la campaña define el cliente, el conjunto de anuncios define la comunidad, los nombres se comparan sin tildes ni mayúsculas, y si el cliente tiene cuenta publicitaria definida, la fila tiene que ser de esa cuenta. Se puede correr todas las veces que haga falta (guarda por comunidad y día).
+
+Con la primera tabla ya aterrizada (se asume `windsor_raw.facebook_ads`; si Windsor usa otro nombre, se pasa como parámetro):
+```sql
+-- Convertir:
+select * from crm_comunidades_v2.sincronizar_meta_desde_windsor('windsor_raw.facebook_ads');
+-- Ver qué conjuntos de anuncios no tienen comunidad (su gasto NO se asignó):
+select * from crm_comunidades_v2.meta_sin_comunidad('windsor_raw.facebook_ads');
+```
+Si aparece un conjunto sin comunidad, se agrega una fila a `comunidad_meta_origen` (modelo: `db/mantenimiento/2026-10-08_cargar_mapeo_meta.sql`) y se vuelve a correr. Cada corrida deja una fila en `crm_comunidades_v2.windsor_sync_log`.
+
+**Programarla para que corra sola** (con `pg_cron`) se hace después de verificar la primera corrida contra Ads Manager, cuando ya se conoce el nombre real de la tabla de Windsor.
+
+**Prueba sin rastros:** `node scripts/probar-sincronizacion-windsor.mjs <csv de Windsor>` corre la función dentro de una transacción que se anula y muestra el resultado.
