@@ -595,3 +595,7 @@ Entregable R4 del roadmap: `docs/reference/definiciones-y-lineas-de-base-v0.html
 - **Hallazgo:** de 362 personas, 360 son de Instagram y 2 de WhatsApp.
 - **Decisiones pendientes del manager:** nivel de ingreso del reporte oficial, ventana de la línea de base, significado de TRG y contra qué nivel se evalúa la meta de más de 50 %.
 - Todas las cifras se reproducen con las consultas del apéndice A.
+
+## 4 vicies. PR #24 — Windsor.ai como destino de la base: zona de aterrizaje (2026-10-13)
+
+Decisión: integrar Windsor con el **destino Supabase** (la tarea corre sola, sin CSV ni scripts), en lugar de la API con una tarea programada. `db/014` crea el esquema `windsor_raw` y el usuario `windsor_escritor`, que **solo puede crear y escribir tablas en ese esquema** (verificado: sin acceso a `crm_comunidades_v2` ni a `public`, hasta 3 conexiones, sin contraseña ni login hasta que quien configura Windsor se la ponga). `windsor_raw` no está expuesto por la API del panel. El usuario principal es miembro de `windsor_escritor` para poder leer lo que Windsor aterriza. Guía en `docs/how-to/conectar-windsor-a-supabase.md`. **Siguiente (db/015):** función que convierte lo aterrizado en `meta_ads_metrica` por comunidad con `comunidad_meta_origen`, programada con pg_cron; se escribe cuando exista la primera tabla de Windsor para ver sus columnas reales.
