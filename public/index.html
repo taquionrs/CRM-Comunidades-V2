@@ -165,6 +165,7 @@ const supabase = (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY)
 const TABS = [
   { key:'overview', label:'Overview' },
   { key:'control', label:'Control_Comunidades' },
+  { key:'atribucion', label:'Atribucion' },
   { key:'base_limpia', label:'Base_Limpia' },
   { key:'dedup', label:'Data_Deduplicada' },
   { key:'crudo', label:'Data_Cruda' },
@@ -172,6 +173,7 @@ const TABS = [
 const TAB_SUB = {
   overview:'Panel ejecutivo macro — KPIs globales y distribución por comunidad',
   control:'Métricas de performance por plataforma (Meta Ads · ManyChat · WhatsApp)',
+  atribucion:'Modelo de atribución: qué anuncio o canal trajo a cada persona — en construcción',
   base_limpia:'Gestor de usuarios nominados — vista de cliente',
   dedup:'Log técnico de atribución — primer evento por teléfono',
   crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
@@ -556,8 +558,9 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
     </div>
-    <div class="card"><h3>Matriz de atribución multi-plataforma</h3>
-      <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican.</div>
+    <div class="card"><h3>Métricas por comunidad</h3>
+      <div class="sub">Meta Ads · ManyChat · CRM</div>
+      <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion).</div>
       ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
       <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>`;
@@ -756,6 +759,31 @@ async function abrirConsultasWindsor(){
   await cargar();
 }
 
+
+/* ================= Atribucion (sección en construcción) ================= */
+// Esta sección va a mostrar a qué anuncio, campaña o canal se atribuye cada persona. Hoy el CRM NO tiene ese dato: lo único que
+// existe es la regla de "primer contacto" (qué comunidad se queda con una persona que escribió a varias) y la asignación del gasto
+// de Meta a cada comunidad por nombre de campaña. La lista de abajo es lo que hace falta para construir el modelo.
+const REQUISITOS_ATRIBUCION = [
+  { requisito: 'Anuncio o campaña de origen de cada persona', estado: 'No disponible', detalle: 'El contacto de ManyChat no trae el anuncio. Hay que verificar qué señales llegan por canal (el campo user_refs, last_growth_tool y, en WhatsApp, el identificador del clic en el anuncio).' },
+  { requisito: 'Regla de atribución definida', estado: 'Pendiente de decidir', detalle: 'Primer o último contacto, y ventana de tiempo en días. Hoy solo existe "primer contacto" entre comunidades de un mismo cliente.' },
+  { requisito: 'Identidad de la persona entre canales', estado: 'No disponible', detalle: 'Una misma persona por WhatsApp (teléfono) y por Instagram (identificador) cuenta como dos personas distintas.' },
+  { requisito: 'Ingreso real al grupo', estado: 'Sin fuente', detalle: 'Sin saber quién entra al grupo, la atribución llega hasta la entrada al flow y no hasta el miembro.' },
+  { requisito: 'Uso de datos personales', estado: 'Pendiente', detalle: 'Consentimiento y política de retención, a definir con Legal antes de cruzar datos de personas con anuncios.' },
+];
+function renderAtribucion(){
+  const clase = (e) => e === 'No disponible' || e === 'Sin fuente' ? 'mal' : 'medio';
+  return `<div class="card"><h3>Modelo de atribución <span class="pill" style="margin-left:8px">En construcción</span></h3>
+      <div class="sub">Esta sección todavía no tiene contenido. Va a mostrar qué anuncio, campaña o canal trajo a cada persona, y cuánto aportó cada uno a las entradas y a los miembros.</div>
+      <div class="sub" style="margin-top:8px">Hoy el CRM <b>no</b> hace atribución de personas a anuncios. Control_Comunidades asigna el gasto de Meta a cada comunidad por el nombre de la campaña, y la única regla de atribución que existe es "primer contacto" (qué comunidad se queda con una persona que escribió a varias).</div>
+    </div>
+    <div class="card"><h3>Qué hace falta para construirlo</h3>
+      <div class="sub">Revisión del 14/10/2026. Cuando estos puntos estén resueltos se completa la sección.</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Requisito</th><th>Estado hoy</th><th>Detalle</th></tr></thead><tbody>
+        ${REQUISITOS_ATRIBUCION.map(r => `<tr><td>${esc(r.requisito)}</td><td><span class="est ${clase(r.estado)}">${esc(r.estado)}</span></td><td style="color:var(--text-muted)">${esc(r.detalle)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`;
+}
 
 /* ================= TAB 3: Base_Limpia ================= */
 function renderBaseLimpia(usuarios, comunidades, filtro){
@@ -1046,6 +1074,9 @@ async function renderAll(){
       const comunidades = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null);
       content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '');
       wireControl();
+
+    } else if (state.tab === 'atribucion') {
+      content.innerHTML = renderAtribucion();
 
     } else if (state.tab === 'base_limpia') {
       state.baseLimpiaFiltro = state.baseLimpiaFiltro || { comunidad:null, busqueda:'', pagina:1 };
