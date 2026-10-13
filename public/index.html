@@ -27,6 +27,14 @@ button,input,select{font-family:inherit}
 
 .app{display:grid; grid-template-columns:230px 1fr; min-height:100vh}
 .sidebar{background:var(--panel-sunken); border-right:1px solid var(--border); padding:20px 14px; display:flex; flex-direction:column}
+.sidebar-head{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:20px}
+.sidebar-head .brand-sub{margin-bottom:0}
+.icono-btn{width:30px; height:30px; flex-shrink:0; border:1px solid var(--border-strong); background:transparent; color:var(--text-body); border-radius:var(--r-in); cursor:pointer; font-size:15px; line-height:1; display:inline-flex; align-items:center; justify-content:center}
+.icono-btn:hover{background:var(--panel-raised); color:#fff}
+.main-head-fila{display:flex; align-items:flex-start; gap:12px}
+.app.menu-oculto{grid-template-columns:1fr}
+.app.menu-oculto .sidebar{display:none}
+.app.menu-oculto .main{max-width:none}
 .brand{font-size:14px; font-weight:700; color:#fff; margin-bottom:2px}
 .brand-sub{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:20px}
 .navlist{display:flex; flex-direction:column; gap:2px; margin-bottom:auto}
@@ -118,9 +126,14 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 <body>
 
 <div class="app" id="app">
-  <aside class="sidebar">
-    <div class="brand">Comunidades V2</div>
-    <div class="brand-sub">CRM interno · Taquión</div>
+  <aside class="sidebar" id="menuLateral">
+    <div class="sidebar-head">
+      <div>
+        <div class="brand">Comunidades V2</div>
+        <div class="brand-sub">CRM interno · Taquión</div>
+      </div>
+      <button type="button" class="icono-btn" id="btnMenuCerrar" title="Ocultar el menú" aria-label="Ocultar el menú" aria-controls="menuLateral" aria-expanded="true">«</button>
+    </div>
     <label class="cliente-sel">Cliente<select id="selCliente" aria-label="Cliente"></select></label>
     <nav class="navlist" id="nav"></nav>
     <div class="sidebar-foot">
@@ -129,8 +142,13 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
   </aside>
   <main class="main">
     <div class="main-head">
-      <h2 id="hTitle">—</h2>
-      <div class="sub" id="hSub">—</div>
+      <div class="main-head-fila">
+        <button type="button" class="icono-btn" id="btnMenuAbrir" title="Mostrar el menú" aria-label="Mostrar el menú" aria-controls="menuLateral" aria-expanded="false" hidden>☰</button>
+        <div>
+          <h2 id="hTitle">—</h2>
+          <div class="sub" id="hSub">—</div>
+        </div>
+      </div>
     </div>
     <div id="configError" class="card" style="display:none; border-color:var(--danger)"></div>
     <div id="content"></div>
@@ -161,6 +179,34 @@ const TAB_SUB = {
   dedup:'Log técnico de atribución — primer evento por teléfono',
   crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
 };
+/* MENU-LATERAL:INICIO */
+// El menú lateral se puede ocultar para ganar ancho (útil en la matriz de Control_Comunidades). La preferencia queda en este
+// navegador; si no hay almacenamiento disponible, vale solo para la sesión.
+const CLAVE_MENU_OCULTO = 'crm_v2_menu_oculto';
+function leerMenuOculto(){
+  try { return localStorage.getItem(CLAVE_MENU_OCULTO) === '1'; } catch (_) { return false; }
+}
+function aplicarMenuOculto(oculto, guardar = true){
+  document.getElementById('app').classList.toggle('menu-oculto', oculto);
+  document.getElementById('btnMenuAbrir').hidden = !oculto;
+  document.getElementById('btnMenuAbrir').setAttribute('aria-expanded', String(!oculto));
+  document.getElementById('btnMenuCerrar').setAttribute('aria-expanded', String(!oculto));
+  if (guardar) { try { localStorage.setItem(CLAVE_MENU_OCULTO, oculto ? '1' : '0'); } catch (_) { /* sin almacenamiento */ } }
+  if (oculto) document.getElementById('btnMenuAbrir').focus(); else document.getElementById('btnMenuCerrar').focus();
+}
+function iniciarMenuLateral(){
+  document.getElementById('btnMenuCerrar').onclick = () => aplicarMenuOculto(true);
+  document.getElementById('btnMenuAbrir').onclick = () => aplicarMenuOculto(false);
+  if (leerMenuOculto()) {
+    document.getElementById('app').classList.add('menu-oculto');
+    document.getElementById('btnMenuAbrir').hidden = false;
+    document.getElementById('btnMenuAbrir').setAttribute('aria-expanded', 'false');
+    document.getElementById('btnMenuCerrar').setAttribute('aria-expanded', 'false');
+  }
+}
+/* MENU-LATERAL:FIN */
+iniciarMenuLateral();
+
 let state = { tab:'overview', entered:false, clienteId:null, clientes:[], columnasControl:null, columnasAbierto:false };
 
 /* ---------- selector de cliente ---------- */
