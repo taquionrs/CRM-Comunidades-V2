@@ -17,7 +17,7 @@ Hermano de [`crm-comunidades`](https://github.com/MarketingTaquion/CRM-Comunidad
 - **Clientes**: **Cortado en Jarrito**, probado de punta a punta por WhatsApp e Instagram, y **Todo un País**, configurado pero sin tráfico (su WhatsApp no está activo).
 - **Frontend**: `public/index.html` — HTML/CSS/JS estático, sin build ni framework. Selector de cliente, filtro por fechas en Control_Comunidades, Data_Cruda como registro de eventos con filtro Aceptados / Rechazados y exportación a CSV de toda la historia del cliente, etiqueta de canal (WhatsApp / Instagram) y todo el HTML dinámico escapado.
 - **Login**: **todavía no tiene**; se agrega al final del proyecto. Hasta entonces el panel lee con la lectura abierta de `db/003`: quien tenga la URL ve teléfonos y nombres. No compartirla fuera del equipo.
-- **Base de datos**: schema `crm_comunidades_v2`, en el **mismo proyecto Supabase que V1**. Migraciones `001` a `004` y `006` a `013` aplicadas; `005` (acceso por usuario, con el login) **escrita y sin aplicar**. Ver [`docs/reference/esquema-de-base-de-datos.md`](docs/reference/esquema-de-base-de-datos.md).
+- **Base de datos**: schema `crm_comunidades_v2`, en el **mismo proyecto Supabase que V1**. Migraciones `001` a `004` y `006` a `014` aplicadas; `005` (acceso por usuario, con el login) **escrita y sin aplicar**. Ver [`docs/reference/esquema-de-base-de-datos.md`](docs/reference/esquema-de-base-de-datos.md).
 - **Edge Functions**:
   - `manychat-webhook` — deployada. Recibe el contacto completo de ManyChat (WhatsApp o Instagram), valida el secreto del cliente, guarda el evento y registra los rechazos.
   - `windsor-sync` — deployada, **sin `WINDSOR_API_KEY` cargada**: todavía no trae gasto, clics ni conversaciones de Meta Ads.
