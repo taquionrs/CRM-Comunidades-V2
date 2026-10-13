@@ -595,3 +595,7 @@ Entregable R4 del roadmap: `docs/reference/definiciones-y-lineas-de-base-v0.html
 - **Hallazgo:** de 362 personas, 360 son de Instagram y 2 de WhatsApp.
 - **Decisiones pendientes del manager:** nivel de ingreso del reporte oficial, ventana de la línea de base, significado de TRG y contra qué nivel se evalúa la meta de más de 50 %.
 - Todas las cifras se reproducen con las consultas del apéndice A.
+
+## 3 novovicies. PR #23 — Pulsos de retención: guía de configuración en ManyChat (2026-10-13)
+
+Decisión: la retención se mide sin carga manual con un flow nuevo en ManyChat que pregunta a los 7 y 30 días si la persona sigue en el grupo. Guía paso a paso en `docs/how-to/configurar-pulso-retencion-manychat.md` (también agregada al roadmap como sección 14, M6). Restricciones verificadas: WhatsApp exige plantilla aprobada y paga fuera de las 24 h; Instagram exige notificaciones recurrentes con permiso (disponibilidad por confirmar en la cuenta). Falta construir la recepción en el CRM (tipo de aviso `pulso_retencion`); hasta entonces no se publican los nodos. El conteo de miembros por planilla queda como carga manual provisoria.
