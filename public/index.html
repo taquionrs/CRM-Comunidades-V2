@@ -106,10 +106,6 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .form-row label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
-.atajos{display:flex; gap:6px; flex-wrap:wrap}
-.atajo{border:1px solid var(--border-strong); background:transparent; color:var(--text-body); border-radius:var(--r-in); padding:7px 11px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap}
-.atajo:hover{background:var(--panel-raised)}
-.atajo.on{background:var(--accent-dim); border-color:var(--accent); color:#fff}
 .pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
 .pill-ig{color:#e879b9; border-color:rgba(232,121,185,.45); background:rgba(232,121,185,.1)}
 .pill-ok{color:#3ddc97; border-color:rgba(61,220,151,.4); background:rgba(61,220,151,.08)}
@@ -549,8 +545,12 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
       <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
-      <label>Período rápido<div class="atajos" role="group" aria-label="Períodos rápidos">${ATAJOS_FECHAS.map(a => { const r = a.rango(hoyAR()); const activo = desde === r.desde && hasta === r.hasta;
-        return `<button type="button" class="atajo ${activo ? 'on' : ''}" data-atajo="${a.id}" title="${r.desde === r.hasta ? r.desde : r.desde + ' a ' + r.hasta}">${a.etiqueta}</button>`; }).join('')}</div></label>
+      <label>Período rápido<select id="selAtajo" aria-label="Período rápido">${(() => {
+          const hoy = hoyAR();
+          const activo = ATAJOS_FECHAS.find(a => { const r = a.rango(hoy); return desde === r.desde && hasta === r.hasta; });
+          const vacio = (desde || hasta) && !activo ? 'Personalizado' : 'Elegir…';
+          return `<option value="" ${activo ? '' : 'selected'}>${vacio}</option>` + ATAJOS_FECHAS.map(a => `<option value="${a.id}" ${activo && activo.id === a.id ? 'selected' : ''}>${a.etiqueta}</option>`).join('');
+        })()}</select></label>
       <button class="btn" id="btnFechasLimpiar" type="button">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
@@ -625,15 +625,14 @@ function wireControl(){
   const hasta = document.getElementById('inpFechaHasta');
   if (desde) desde.onchange = () => { state.fechaDesde = desde.value || null; renderAll(); };
   if (hasta) hasta.onchange = () => { state.fechaHasta = hasta.value || null; renderAll(); };
-  document.querySelectorAll('[data-atajo]').forEach(b => {
-    b.onclick = () => {
-      const a = ATAJOS_FECHAS.find(x => x.id === b.dataset.atajo);
-      if (!a) return;
-      const r = a.rango(hoyAR());
-      state.fechaDesde = r.desde; state.fechaHasta = r.hasta;
-      renderAll();
-    };
-  });
+  const selAtajo = document.getElementById('selAtajo');
+  if (selAtajo) selAtajo.onchange = () => {
+    const a = ATAJOS_FECHAS.find(x => x.id === selAtajo.value);
+    if (!a) { renderAll(); return; }   // volvió a "Elegir…": se vuelve a mostrar el período que sigue vigente
+    const r = a.rango(hoyAR());
+    state.fechaDesde = r.desde; state.fechaHasta = r.hasta;
+    renderAll();
+  };
   const limpiar = document.getElementById('btnFechasLimpiar');
   if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   const consultas = document.getElementById('btnConsultas');
