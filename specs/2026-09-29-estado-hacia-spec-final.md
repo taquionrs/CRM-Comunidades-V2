@@ -635,3 +635,7 @@ Botón **«** arriba a la derecha del menú lateral (junto a "Comunidades V2") p
 ## 4 septvicies. PR #31 — Período rápido en un solo desplegable (2026-10-14)
 
 Los cinco botones de período (Ayer, 7, 10, 15 y 30 días) pasan a **un único desplegable** compacto, "Período rápido", que ocupa mucho menos lugar en la barra de filtros. Muestra el período vigente (o "Personalizado" si se eligieron fechas a mano, o "Elegir…" si no hay fechas) y las fechas se ven en "Desde" y "Hasta". Mismas reglas de la PR #29 (incluye hoy, hora de Argentina, aviso de Meta con un día de retraso) y mismas funciones de fecha con sus pruebas. Se quitan los estilos de los botones. Probado en el navegador.
+
+## 4 octovicies. PR #32 — "Todo el histórico" resaltado cuando está activo (2026-10-14)
+
+El botón **Todo el histórico** de Control_Comunidades se resalta (mismo azul suave de los demás controles activos) cuando no hay fechas elegidas, es decir, cuando eso es lo que se está viendo; con un período elegido o fechas a mano vuelve al aspecto normal. Incluye `aria-pressed` para lectores de pantalla. Al abrir la sección sin fechas ya aparece resaltado, porque es el estado inicial. Probado en el navegador.

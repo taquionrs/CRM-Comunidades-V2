@@ -23,6 +23,7 @@ button,input,select{font-family:inherit}
 
 .btn{display:inline-flex; align-items:center; gap:6px; border-radius:var(--r-in); border:1px solid var(--border-strong); background:transparent; color:var(--text-strong); padding:9px 14px; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap}
 .btn:hover{background:var(--panel-raised)}
+.btn.on{background:var(--accent-dim); border-color:var(--accent); color:#fff}
 .btn[disabled]{opacity:.4; cursor:not-allowed}
 
 .app{display:grid; grid-template-columns:230px 1fr; min-height:100vh}
@@ -551,7 +552,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
           const vacio = (desde || hasta) && !activo ? 'Personalizado' : 'Elegir…';
           return `<option value="" ${activo ? '' : 'selected'}>${vacio}</option>` + ATAJOS_FECHAS.map(a => `<option value="${a.id}" ${activo && activo.id === a.id ? 'selected' : ''}>${a.etiqueta}</option>`).join('');
         })()}</select></label>
-      <button class="btn" id="btnFechasLimpiar" type="button">Todo el histórico</button>
+      <button class="btn ${!desde && !hasta ? 'on' : ''}" id="btnFechasLimpiar" type="button" aria-pressed="${!desde && !hasta ? 'true' : 'false'}">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
     </div>
