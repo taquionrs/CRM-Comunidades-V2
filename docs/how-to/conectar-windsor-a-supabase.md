@@ -31,8 +31,8 @@ En Supabase → **Connect** → pestaña **Session pooler** (usá el pooler: ace
 - **Cuenta:** **solo `TQN - Growing 2 - LC`** (ID `1669338306456901`). Si Windsor trae las otras cuentas, aterrizan en tu base datos de otros clientes.
 - **Campos:**
   `date`, `account_id`, `account_name`, `campaign`, `adset_name`, `spend`, `impressions`, `clicks`, `actions_onsite_conversion_messaging_conversation_started_7d`, `actions_onsite_conversion_lead_grouped`
-- **Rango de fechas:** últimos 90 días (Windsor corrige cifras de días anteriores, por eso conviene que vuelva a traer los últimos días en cada corrida).
-- **Frecuencia:** una vez al día como mínimo.
+- **Rango de fechas:** **últimos 30 días**. Windsor no permite más de 30 días por corrida en una tarea programada (con 90 muestra el error "Max date range is 30 days"); el historial más viejo se trae con **Backfill: 3 meses**. Cada día se vuelven a traer los últimos 30, así se corrigen las cifras que Meta ajusta después.
+- **Frecuencia:** diaria, a las **09:00 UTC** (06:00 de Argentina). **Columns to Match: `date`**, para que cada corrida reemplace las filas de esos días en lugar de agregarlas.
 - **Destino:** el de arriba, tabla `facebook_ads`, esquema `windsor_raw`. Si Windsor da a elegir el modo de escritura, elegí **actualizar/reemplazar por fecha** y no "agregar siempre", para no duplicar filas.
 
 ## 5. Primera corrida
@@ -55,6 +55,9 @@ select * from crm_comunidades_v2.meta_sin_comunidad('windsor_raw.facebook_ads');
 ```
 Si aparece un conjunto sin comunidad, se agrega una fila a `comunidad_meta_origen` (modelo: `db/mantenimiento/2026-10-08_cargar_mapeo_meta.sql`) y se vuelve a correr. Cada corrida deja una fila en `crm_comunidades_v2.windsor_sync_log`.
 
-**Programarla para que corra sola** (con `pg_cron`) se hace después de verificar la primera corrida contra Ads Manager, cuando ya se conoce el nombre real de la tabla de Windsor.
+**Programada (db/017):** `pg_cron` corre la conversión todos los días a las **09:30 UTC**, media hora después de Windsor. Ver el trabajo: `select * from cron.job where jobname = 'sincronizar-meta-windsor';`. El resultado de cada corrida queda en `crm_comunidades_v2.windsor_sync_log`; si falla, el error queda en `cron.job_run_details`.
 
 **Prueba sin rastros:** `node scripts/probar-sincronizacion-windsor.mjs <csv de Windsor>` corre la función dentro de una transacción que se anula y muestra el resultado.
+
+## Seguridad de la clave de Windsor
+La dirección de consulta que Windsor muestra al configurar la tarea incluye la **clave de API** (`api_key=…`). No la compartas en capturas ni en chats; si se expuso, regenerala desde tu cuenta de Windsor.
