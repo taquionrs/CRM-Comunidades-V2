@@ -639,3 +639,9 @@ Los cinco botones de período (Ayer, 7, 10, 15 y 30 días) pasan a **un único d
 ## 4 octovicies. PR #32 — "Todo el histórico" resaltado cuando está activo (2026-10-14)
 
 El botón **Todo el histórico** de Control_Comunidades se resalta (mismo azul suave de los demás controles activos) cuando no hay fechas elegidas, es decir, cuando eso es lo que se está viendo; con un período elegido o fechas a mano vuelve al aspecto normal. Incluye `aria-pressed` para lectores de pantalla. Al abrir la sección sin fechas ya aparece resaltado, porque es el estado inicial. Probado en el navegador.
+
+## 4 novovicies. PR #33 — "Métricas por comunidad" y sección Atribucion (2026-10-14)
+
+- **Título:** la tarjeta de Control_Comunidades "Matriz de atribución multi-plataforma" pasa a **"Métricas por comunidad"**, con el subtítulo "Meta Ads · ManyChat · CRM". El CRM no tiene un modelo de atribución de personas a anuncios: lo que existe es (1) la regla de **primer contacto** entre comunidades de un mismo cliente y (2) la asignación del gasto y las conversaciones de Meta a cada comunidad por nombre de campaña y de conjunto de anuncios. El nombre viejo venía del documento original de Jaz y daba a entender otra cosa. La nota de la tarjeta lo aclara.
+- **Sección nueva "Atribucion"** en el menú (después de Control_Comunidades), solo con estructura: estado "En construcción" y la lista de lo que hace falta para construir el modelo (anuncio o campaña de origen por persona, regla de atribución, identidad entre canales, ingreso real al grupo y uso de datos personales), cada punto con su estado. El contenido se completa cuando esos puntos estén resueltos.
+- Sin cambios en datos ni en la base. Probado: sintaxis, orden del menú, enrutado y vista en el navegador.
