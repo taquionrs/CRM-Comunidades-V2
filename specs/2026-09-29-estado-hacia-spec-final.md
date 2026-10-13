@@ -631,3 +631,7 @@ Botones **Ayer**, **Últimos 7 días**, **Últimos 10 días**, **Últimos 15 dí
 ## 4 sexvicies. PR #30 — Menú lateral retraíble (2026-10-14)
 
 Botón **«** arriba a la derecha del menú lateral (junto a "Comunidades V2") para ocultarlo, y botón **☰** junto al título de la sección para volver a abrirlo. Al ocultarlo, el contenido ocupa todo el ancho (útil para la matriz de Control_Comunidades: de 1280 a todo el ancho disponible). La preferencia queda guardada en el navegador de cada persona y se mantiene al recargar; si el navegador no permite guardar, vale solo para la sesión. Accesible: etiquetas, `aria-expanded` y el foco pasa al botón contrario. Con el menú oculto no está a la vista el selector de cliente: hay que volver a abrirlo para cambiar de cliente. Probado en el navegador con el HTML y los estilos reales (ocultar, mostrar, foco, preferencia, recarga). No cambia datos ni base.
+
+## 4 septvicies. PR #31 — Período rápido en un solo desplegable (2026-10-14)
+
+Los cinco botones de período (Ayer, 7, 10, 15 y 30 días) pasan a **un único desplegable** compacto, "Período rápido", que ocupa mucho menos lugar en la barra de filtros. Muestra el período vigente (o "Personalizado" si se eligieron fechas a mano, o "Elegir…" si no hay fechas) y las fechas se ven en "Desde" y "Hasta". Mismas reglas de la PR #29 (incluye hoy, hora de Argentina, aviso de Meta con un día de retraso) y mismas funciones de fecha con sus pruebas. Se quitan los estilos de los botones. Probado en el navegador.
