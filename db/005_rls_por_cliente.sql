@@ -119,6 +119,9 @@ revoke insert, update, delete on crm_comunidades_v2.usuario_estado_historial fro
 revoke insert, update, delete on crm_comunidades_v2.evento_crudo from authenticated;
 revoke insert, update, delete on crm_comunidades_v2.webhook_intento from authenticated;
 revoke insert, update, delete on crm_comunidades_v2.comunidad_meta_origen from authenticated;
+
+-- 018: la línea de tiempo de Windsor (consultas_windsor) queda solo para usuarios con sesión.
+revoke execute on function crm_comunidades_v2.consultas_windsor(int) from anon;
 revoke insert, update, delete on crm_comunidades_v2.trigger_entregado from authenticated;
 
 -- ----------------------------------------------------------------------------

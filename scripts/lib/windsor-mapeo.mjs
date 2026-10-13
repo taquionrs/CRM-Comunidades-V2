@@ -170,4 +170,17 @@ export function construirSqlUpsert(registros, tamanoLote = 400) {
   return sentencias;
 }
 
+/**
+ * SQL que deja constancia de una importación manual en windsor_sync_log (se ve en el botón "Consultas" del panel).
+ * La etiqueta es el nombre del archivo: solo se aceptan letras, números, espacios y . _ - ( ) para no interpolar texto libre.
+ */
+export function construirSqlRegistroImportacion({ etiqueta, filasOrigen, registrosEscritos, filasSinComunidad = 0, gastoSinComunidad = 0 }) {
+  const limpia = String(etiqueta ?? "").replace(/[^A-Za-z0-9 ._()\-]/g, "_").slice(0, 120) || "sin nombre";
+  for (const [k, v] of Object.entries({ filasOrigen, registrosEscritos, filasSinComunidad, gastoSinComunidad })) {
+    if (!Number.isFinite(v) || v < 0) throw new Error(`Valor inválido en ${k}: ${v}`);
+  }
+  return "insert into crm_comunidades_v2.windsor_sync_log (tabla, filas_origen, registros_escritos, filas_sin_comunidad, gasto_sin_comunidad) values (" +
+    `'CSV: ${limpia}', ${Math.round(filasOrigen)}, ${Math.round(registrosEscritos)}, ${Math.round(filasSinComunidad)}, ${Number(gastoSinComunidad).toFixed(2)});`;
+}
+
 export { CAMPO_CONVERSACIONES, CAMPO_LEADS };
