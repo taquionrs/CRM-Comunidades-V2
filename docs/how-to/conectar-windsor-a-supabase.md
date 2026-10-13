@@ -71,3 +71,19 @@ Si aparece un conjunto sin comunidad, se agrega una fila a `comunidad_meta_orige
 
 ## Seguridad de la clave de Windsor
 La dirección de consulta que Windsor muestra al configurar la tarea incluye la **clave de API** (`api_key=…`). No la compartas en capturas ni en chats; si se expuso, regenerala desde tu cuenta de Windsor.
+
+## 7. Trazabilidad: el botón "Consultas" del panel
+En Control_Comunidades, el botón **Consultas** abre (a pantalla completa) la línea de tiempo de todo lo que pasa entre Windsor y el CRM. Reemplaza al antiguo botón "Sincronizar Windsor.ai".
+
+| Tipo | Qué es | De dónde sale |
+|---|---|---|
+| **Entrega de Windsor** | Windsor escribió o reemplazó filas en `windsor_raw.facebook_ads` (cuántas filas y de qué fechas) | `windsor_entrega_log`, que llena un trigger sobre la tabla de Windsor |
+| **Conversión** | Se pasó lo recibido a `meta_ads_metrica` por comunidad: filas recibidas, asignadas, registros escritos y gasto sin comunidad | `windsor_sync_log` |
+| **Programada** | El trabajo diario de `pg_cron`, con su estado y duración | `cron.job_run_details` |
+| **CSV manual** | Una importación con `scripts/windsor-importar.mjs`, con el nombre del archivo | `windsor_sync_log` |
+
+Se puede filtrar por tipo y actualizar. No muestra datos personales: solo fechas, cantidades y estados.
+
+**Qué no muestra:** las llamadas internas de Windsor a Meta ni los intentos de Windsor que no llegan a escribir en la base (esos se ven en el panel de Windsor). Si Windsor vuelve a crear la tabla, la próxima conversión reinstala el registro de entregas.
+
+Para consultarlo desde SQL: `select * from crm_comunidades_v2.consultas_windsor(100);`

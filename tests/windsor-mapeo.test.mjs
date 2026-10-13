@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  normalizarNombre, parsearCsv, normalizarFilasWindsor, mapearFilas, resumirPorComunidad, construirSqlUpsert, CAMPO_CONVERSACIONES,
+  normalizarNombre, parsearCsv, normalizarFilasWindsor, mapearFilas, resumirPorComunidad, construirSqlUpsert, CAMPO_CONVERSACIONES, construirSqlRegistroImportacion,
 } from "../scripts/lib/windsor-mapeo.mjs";
 
 const U = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -235,4 +235,16 @@ test("leads de Meta: la columna actions_onsite_conversion_lead_grouped se import
   assert.deepEqual(toma.map((r) => r.leads), [8, 30]);
   assert.equal(registros.find((r) => r.comunidad_nombre !== toma[0].comunidad_nombre).leads, 0, "celda vacía = 0");
   assert.equal(resumirPorComunidad(toma)[0].leads, 38);
+});
+
+test("construirSqlRegistroImportacion: deja constancia de la importación con el nombre del archivo y sin texto libre", () => {
+  const sql = construirSqlRegistroImportacion({ etiqueta: "data (4).csv", filasOrigen: 994, registrosEscritos: 102, filasSinComunidad: 2, gastoSinComunidad: 5100 });
+  assert.equal(sql, "insert into crm_comunidades_v2.windsor_sync_log (tabla, filas_origen, registros_escritos, filas_sin_comunidad, gasto_sin_comunidad) values ('CSV: data (4).csv', 994, 102, 2, 5100.00);");
+  // un nombre de archivo con comillas o punto y coma no puede romper ni inyectar nada
+  const raro = construirSqlRegistroImportacion({ etiqueta: "x'); drop table comunidad;--.csv", filasOrigen: 1, registrosEscritos: 1 });
+  assert.ok(!raro.includes("'); drop"), "las comillas del nombre se reemplazan");
+  assert.ok(!raro.includes(";--"), "el punto y coma del nombre se reemplaza");
+  assert.match(raro, /^insert into crm_comunidades_v2\.windsor_sync_log \(tabla,[^;]*\);$/, "una sola sentencia");
+  assert.throws(() => construirSqlRegistroImportacion({ etiqueta: "a.csv", filasOrigen: -1, registrosEscritos: 0 }), /filasOrigen/);
+  assert.throws(() => construirSqlRegistroImportacion({ etiqueta: "a.csv", filasOrigen: 1, registrosEscritos: NaN }), /registrosEscritos/);
 });

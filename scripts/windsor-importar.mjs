@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  parsearCsv, normalizarFilasWindsor, mapearFilas, resumirPorComunidad, construirSqlUpsert, CAMPO_CONVERSACIONES, CAMPO_LEADS,
+  parsearCsv, normalizarFilasWindsor, mapearFilas, resumirPorComunidad, construirSqlUpsert, construirSqlRegistroImportacion, CAMPO_CONVERSACIONES, CAMPO_LEADS,
 } from "./lib/windsor-mapeo.mjs";
 
 const AYUDA = `Uso:
@@ -132,7 +132,7 @@ async function main() {
   const mapeo = leerMapeo(cli, a.cliente);
   if (!mapeo.length) throw new Error("No hay filas en comunidad_meta_origen (¿se aplicó db/010 y el mapeo?). Nada para importar.");
 
-  const { registros, ignoradas, advertencias } = mapearFilas(filas, mapeo, { cuentaNombre: a.cuenta });
+  const { registros, ignoradas, desconocidos, advertencias } = mapearFilas(filas, mapeo, { cuentaNombre: a.cuenta });
   console.log(`\nMapeo cargado: ${mapeo.length} reglas, ${new Set(mapeo.map((m) => m.comunidad_id)).size} comunidades.`);
 
   console.log("\n=== Lo que se importaría (por comunidad) ===");
@@ -147,6 +147,13 @@ async function main() {
   if (!registros.length) { console.log("\nNo hay registros para guardar."); return; }
 
   for (const sql of construirSqlUpsert(registros)) ejecutarSql(cli, sql);
+  // Constancia para el botón "Consultas" del panel: qué se importó, cuándo y cuánto gasto quedó sin comunidad.
+  const sinCom = Object.values(desconocidos ?? {});
+  ejecutarSql(cli, construirSqlRegistroImportacion({
+    etiqueta: a.csv ? path.basename(a.csv) : `API Windsor ${a.desde ?? ""} a ${a.hasta ?? ""}`,
+    filasOrigen: crudas.length, registrosEscritos: registros.length,
+    filasSinComunidad: sinCom.reduce((s, d) => s + d.filas, 0), gastoSinComunidad: sinCom.reduce((s, d) => s + d.inversion, 0),
+  }));
   const [v] = ejecutarSql(cli, "select count(*)::int as filas, min(fecha)::text as desde, max(fecha)::text as hasta, round(sum(inversion),2)::text as inversion_total from crm_comunidades_v2.meta_ads_metrica;");
   console.log(`\n✅ Guardado. meta_ads_metrica ahora tiene ${v.filas} filas (${v.desde} → ${v.hasta}), inversión total ${v.inversion_total}.`);
 }
