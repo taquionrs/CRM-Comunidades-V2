@@ -615,3 +615,12 @@ Primera corrida real de Windsor (destino PostgreSQL, usuario aislado): `windsor_
 ## 4 duovicies. PR #26 — Windsor: usar el destino PostgreSQL con el usuario aislado (2026-10-13)
 
 Al abrir el destino **Supabase** de Windsor se vio que se conecta por OAuth con la cuenta de Supabase (cuenta, proyecto, esquema y tabla; según su guía, además pide la contraseña de PostgreSQL): le daría acceso a la **cuenta**, no a una tabla, y anularía el aislamiento de `db/014`. Decisión: usar el destino **PostgreSQL** de Windsor (usuario, contraseña, host, puerto, base y tabla) con `windsor_escritor` por el Session pooler. `db/016` fija `windsor_raw` como esquema por defecto del usuario, porque ese destino no pide esquema. Guía actualizada. Pendiente: comprobar que Windsor crea la tabla y que el mismo destino acepta actualizar por fecha sin duplicar.
+
+## 4 quatervicies. PR #28 — Trazabilidad de Windsor: botón "Consultas" (2026-10-13)
+
+- **Panel:** se quita el botón "Sincronizar Windsor.ai" (llamaba a la función vieja `windsor-sync`, que nunca tuvo clave) y se agrega **Consultas**, que abre a pantalla completa la línea de tiempo de todo lo que pasa entre Windsor y el CRM, con resumen, filtros por tipo y estados.
+- **Base (`db/018`):** `windsor_entrega_log` (un trigger sobre `windsor_raw.facebook_ads` anota cada INSERT o DELETE de Windsor con filas y fechas; la conversión lo reinstala si Windsor recrea la tabla) y `consultas_windsor(limite)`, que junta entregas, conversiones (`windsor_sync_log`), corridas de `pg_cron` y CSV manuales. Sin datos personales. Lectura abierta temporal para el panel; `db/005` la retira.
+- **Importador por CSV:** ahora deja constancia de cada importación (archivo, filas y gasto sin comunidad). 19 pruebas.
+- **Verificado:** los triggers registran una inserción y un borrado de prueba (con rollback, sin rastros); el modal se probó en el navegador con datos reales y casos sintéticos (abrir, filtrar, Escape, botón, scroll).
+- **Límite:** no muestra las llamadas internas de Windsor a Meta ni los intentos que no llegan a escribir en la base.
+- **Decisiones del 13/10:** la clave de API de Windsor no se regenera por ahora; los campos extra de Windsor se dejan (las columnas que sobren se ocultan desde "Columnas"); la verificación en dos pasos de Supabase no es necesaria por ahora.

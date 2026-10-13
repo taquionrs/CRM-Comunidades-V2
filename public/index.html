@@ -80,6 +80,20 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .col-panel .grip{cursor:grab; color:var(--text-faint); user-select:none; letter-spacing:-2px}
 .btn-mini{padding:3px 8px; font-size:11px}
 
+.chips{display:flex; gap:6px; flex-wrap:wrap}
+.chip{border:1px solid var(--border-strong); background:transparent; color:var(--text-body); border-radius:99px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer}
+.chip:hover{background:var(--panel-raised)}
+.chip.on{background:var(--accent-dim); border-color:var(--accent); color:#fff}
+.chip .n{color:var(--text-faint); margin-left:4px; font-weight:400}
+.est{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; white-space:nowrap}
+.est.ok{background:rgba(63,185,120,.15); color:#5fd39a}
+.est.mal{background:rgba(255,92,122,.16); color:var(--danger)}
+.est.medio{background:rgba(255,157,61,.16); color:var(--warn)}
+.modal-full{position:fixed; inset:0; z-index:1000; background:var(--bg); display:flex; flex-direction:column}
+.modal-full-head{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 24px; border-bottom:1px solid var(--border); background:var(--panel)}
+.modal-full-acciones{display:flex; gap:8px; flex-shrink:0}
+.modal-full-cuerpo{flex:1; overflow:auto; padding:20px 24px 32px}
+
 .form-row{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; padding:14px; background:var(--panel-raised); border:1px solid var(--border); border-radius:var(--r-in)}
 .form-row label{display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint)}
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
@@ -469,8 +483,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
       <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
       <button class="btn" id="btnFechasLimpiar" type="button">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
-      <button class="btn" id="btnWindsorSync" type="button">Sincronizar Windsor.ai</button>
-      <div id="windsorResultado" style="margin-left:6px; font-size:12px; align-self:center"></div>
+      <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
     </div>
     <div class="card"><h3>Matriz de atribución multi-plataforma</h3>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican.</div>
@@ -543,22 +556,126 @@ function wireControl(){
   if (hasta) hasta.onchange = () => { state.fechaHasta = hasta.value || null; renderAll(); };
   const limpiar = document.getElementById('btnFechasLimpiar');
   if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
-  const btn = document.getElementById('btnWindsorSync');
-  if (btn) btn.onclick = async () => {
-    const resultado = document.getElementById('windsorResultado');
-    btn.disabled = true; btn.textContent = 'Sincronizando…';
+  const consultas = document.getElementById('btnConsultas');
+  if (consultas) consultas.onclick = abrirConsultasWindsor;
+}
+
+/* ================= Botón "Consultas": trazabilidad de Windsor (pantalla completa) ================= */
+const TIPOS_CONSULTA = {
+  entrega:    { etiqueta: 'Entrega de Windsor', ayuda: 'Windsor escribió o reemplazó filas en la base' },
+  conversion: { etiqueta: 'Conversión',         ayuda: 'Se pasó lo recibido a las métricas por comunidad' },
+  programada: { etiqueta: 'Programada',         ayuda: 'Trabajo diario automático (pg_cron)' },
+  csv:        { etiqueta: 'CSV manual',         ayuda: 'Importación manual desde un archivo' },
+};
+const fmtFechaAR = (d) => d ? new Date(d).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+function haceCuantoConsulta(d){
+  if (!d) return 'nunca';
+  const min = Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 60000));
+  if (min < 1) return 'hace instantes';
+  if (min < 60) return `hace ${min} min`;
+  if (min < 48 * 60) return `hace ${Math.round(min / 60)} h`;
+  return `hace ${Math.round(min / 1440)} días`;
+}
+const claseEstado = (e) => (e === 'ok' || e === 'succeeded') ? 'ok' : (e === 'error' || e === 'failed') ? 'mal' : 'medio';
+const textoEstado = (e) => ({ ok: 'Correcto', succeeded: 'Correcto', error: 'Con error', failed: 'Con error', running: 'En curso', starting: 'Iniciando' }[e] || e);
+
+// Contenido del modal. Función pura: recibe las filas de consultas_windsor y el filtro elegido.
+function renderConsultasWindsor(filas, filtro){
+  const ultimo = (tipo) => filas.find(f => f.tipo === tipo);
+  const errores = filas.filter(f => claseEstado(f.estado) === 'mal').length;
+  const tarjeta = (titulo, f, extra) => `<div class="kpi"><div class="v" style="font-size:15px">${f ? esc(haceCuantoConsulta(f.ocurrio_en)) : 'sin registros'}</div>
+      <div class="l">${esc(titulo)}</div><div class="sub" style="margin-top:4px">${f ? esc(fmtFechaAR(f.ocurrio_en)) : ''}${extra ? ' · ' + esc(extra) : ''}</div></div>`;
+  const resumen = `<div class="kpi-grid" style="margin-bottom:14px">
+      ${tarjeta('Última entrega de Windsor', ultimo('entrega'), ultimo('entrega') ? fmtInt(ultimo('entrega').filas_origen) + ' filas' : '')}
+      ${tarjeta('Última conversión a métricas', ultimo('conversion'), ultimo('conversion') ? fmtInt(ultimo('conversion').registros_escritos) + ' registros' : '')}
+      ${tarjeta('Último trabajo programado', ultimo('programada'), ultimo('programada') ? textoEstado(ultimo('programada').estado) : '')}
+      <div class="kpi"><div class="v" style="font-size:15px;${errores ? 'color:var(--danger)' : ''}">${errores}</div><div class="l">Corridas con error</div><div class="sub" style="margin-top:4px">en este listado</div></div>
+    </div>`;
+
+  const chips = [['todas', 'Todas']].concat(Object.entries(TIPOS_CONSULTA).map(([k, v]) => [k, v.etiqueta])).map(([k, t]) => {
+    const n = k === 'todas' ? filas.length : filas.filter(f => f.tipo === k).length;
+    return `<button type="button" class="chip ${filtro === k ? 'on' : ''}" data-filtro-consulta="${k}">${esc(t)} <span class="n">${n}</span></button>`;
+  }).join('');
+
+  const visibles = filtro === 'todas' ? filas : filas.filter(f => f.tipo === filtro);
+  const cuerpo = visibles.length ? visibles.map(f => {
+    const t = TIPOS_CONSULTA[f.tipo] || { etiqueta: f.tipo, ayuda: '' };
+    const sin = (f.filas_sin_comunidad > 0) ? `${fmtInt(f.filas_sin_comunidad)} filas · ${fmtMoney(f.gasto_sin_comunidad)}` : (f.filas_sin_comunidad === 0 ? '0' : '—');
+    return `<tr>
+      <td class="mono" style="white-space:nowrap">${esc(fmtFechaAR(f.ocurrio_en))}<div style="color:var(--text-faint);font-size:10px">${esc(haceCuantoConsulta(f.ocurrio_en))}</div></td>
+      <td><span class="pill" title="${esc(t.ayuda)}">${esc(t.etiqueta)}</span></td>
+      <td><span class="est ${claseEstado(f.estado)}">${esc(textoEstado(f.estado))}</span></td>
+      <td>${esc(f.titulo)}</td>
+      <td class="mono">${f.filas_origen == null ? '—' : fmtInt(f.filas_origen)}</td>
+      <td class="mono">${f.filas_asignadas == null ? '—' : fmtInt(f.filas_asignadas)}</td>
+      <td class="mono">${f.registros_escritos == null ? '—' : fmtInt(f.registros_escritos)}</td>
+      <td class="mono">${esc(sin)}</td>
+      <td style="max-width:420px;word-break:break-word;color:var(--text-muted)">${esc(f.detalle || '')}</td>
+    </tr>`;
+  }).join('') : `<tr class="empty-row"><td colspan="9">Sin registros para este filtro.</td></tr>`;
+
+  return `${resumen}
+    <div class="chips" style="margin-bottom:10px">${chips}</div>
+    <div class="tbl-wrap"><table><thead><tr>
+      <th>Fecha y hora (Argentina)</th><th>Tipo</th><th>Estado</th><th>Qué pasó</th>
+      <th>Filas</th><th>Asignadas a comunidad</th><th>Registros escritos</th><th>Sin comunidad</th><th>Detalle</th>
+    </tr></thead><tbody>${cuerpo}</tbody></table></div>
+    <div class="sub" style="margin-top:12px">Se muestran las últimas ${fmtInt(filas.length)} líneas. Esta vista registra lo que llega a la base: lo que Windsor escribe, las conversiones, el trabajo programado y las importaciones por CSV.
+      No incluye las llamadas internas de Windsor a Meta ni los intentos que no llegan a escribir en la base: esos se ven en el panel de Windsor.</div>`;
+}
+
+function cerrarConsultasWindsor(){
+  const m = document.getElementById('modalConsultas');
+  if (m) m.remove();
+  document.body.style.overflow = '';
+  if (window.__consultasEsc) { document.removeEventListener('keydown', window.__consultasEsc); window.__consultasEsc = null; }
+}
+
+async function abrirConsultasWindsor(){
+  cerrarConsultasWindsor();
+  const cont = document.createElement('div');
+  cont.id = 'modalConsultas';
+  cont.className = 'modal-full';
+  cont.setAttribute('role', 'dialog');
+  cont.setAttribute('aria-modal', 'true');
+  cont.setAttribute('aria-label', 'Consultas a Windsor');
+  cont.innerHTML = `<div class="modal-full-head">
+      <div><h2>Consultas a Windsor</h2><div class="sub">Trazabilidad de los datos de Meta Ads: qué llegó, cuándo y qué se hizo con eso</div></div>
+      <div class="modal-full-acciones">
+        <button type="button" class="btn" id="btnConsultasActualizar">Actualizar</button>
+        <button type="button" class="btn" id="btnConsultasCerrar">Cerrar ✕</button>
+      </div>
+    </div>
+    <div class="modal-full-cuerpo" id="cuerpoConsultas">Cargando…</div>`;
+  document.body.appendChild(cont);
+  document.body.style.overflow = 'hidden';
+
+  let filas = [], filtro = 'todas';
+  const pintar = () => {
+    const cuerpo = document.getElementById('cuerpoConsultas');
+    if (!cuerpo) return;
+    cuerpo.innerHTML = renderConsultasWindsor(filas, filtro);
+    cuerpo.querySelectorAll('[data-filtro-consulta]').forEach(b => { b.onclick = () => { filtro = b.dataset.filtroConsulta; pintar(); }; });
+  };
+  const cargar = async () => {
+    const cuerpo = document.getElementById('cuerpoConsultas');
+    if (!cuerpo) return;
     try {
-      const { data, error } = await supabase.functions.invoke('windsor-sync', { body: { cliente_id: state.clienteId, ...(state.fechaDesde ? { desde: state.fechaDesde } : {}), ...(state.fechaHasta ? { hasta: state.fechaHasta } : {}) } });
+      const { data, error } = await supabase.rpc('consultas_windsor', { p_limite: 500 });
       if (error) throw error;
-      resultado.textContent = data?.error ? data.error : `Insertadas: ${data?.data?.insertadas ?? 0}. ${data?.aviso || ''}`;
-      await renderAll();
+      filas = data || [];
+      pintar();
     } catch (err) {
-      resultado.innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
-    } finally {
-      btn.disabled = false; btn.textContent = 'Sincronizar Windsor.ai';
+      cuerpo.innerHTML = `<span style="color:var(--danger)">No se pudieron cargar las consultas: ${esc(err.message)}</span>`;
     }
   };
+  document.getElementById('btnConsultasCerrar').onclick = cerrarConsultasWindsor;
+  document.getElementById('btnConsultasActualizar').onclick = cargar;
+  window.__consultasEsc = (ev) => { if (ev.key === 'Escape') cerrarConsultasWindsor(); };
+  document.addEventListener('keydown', window.__consultasEsc);
+  await cargar();
 }
+
 
 /* ================= TAB 3: Base_Limpia ================= */
 function renderBaseLimpia(usuarios, comunidades, filtro){
