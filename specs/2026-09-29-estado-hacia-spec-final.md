@@ -653,3 +653,10 @@ El botón **Todo el histórico** de Control_Comunidades se resalta (mismo azul s
 - **Valores:** dinero siempre con dos decimales y separadores argentinos; porcentajes en pastillas de alto contraste; los vacíos dicen por qué: "Sin dato" (no hay base para calcular), "Sin fuente" (la integración todavía no lo envía) y "No disponible" (faltan los miembros iniciales y finales).
 - **Accesibilidad:** títulos de columna y de fila marcados como tales, descripción de la tabla para lectores de pantalla, foco visible, columna "Comunidad" fija al desplazar.
 - Sin cambios en datos ni en la base. Quedan fuera, por no estar pedidos: paginación y exportar. Pruebas: 8 nuevas (32 en total) y vista en el navegador.
+
+## 4 untricies. PR #35 — n8n: contactos de WhatsApp a una hoja por comunidad (2026-10-14)
+
+- El flujo de n8n se rehace: ahora se dispara con cada entrada nueva (`evento_crudo`) desde un Database Webhook de Supabase, **solo si es WhatsApp con número de teléfono** (los de Instagram se ignoran), y agrega el número en la **pestaña de su comunidad** de la planilla (una pestaña por comunidad).
+- No duplica: si el número ya está en la pestaña, actualiza la fila. Columnas: Fecha, Hora, Teléfono, Nombre, Cliente.
+- Reemplaza al flujo anterior (que registraba un código sin datos personales); esta versión guarda el número y el nombre reales, como se pidió.
+- Guía de armado en `docs/how-to/configurar-n8n-contactos-wsp.md`. Probado: el JSON, las conexiones, el filtro de WhatsApp/Instagram y el armado de la fila. **No probado de punta a punta** (falta crear la planilla, las credenciales y el webhook en Supabase).
