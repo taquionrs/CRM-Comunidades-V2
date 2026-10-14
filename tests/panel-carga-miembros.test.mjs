@@ -8,8 +8,8 @@ const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "
 const ini = html.indexOf("/* CARGA-MIEMBROS:INICIO */");
 const fin = html.indexOf("/* CARGA-MIEMBROS:FIN */");
 assert.ok(ini >= 0 && fin > ini, "no se encontró el bloque CARGA-MIEMBROS en public/index.html");
-const { normalizarTelefono, normalizarFecha, parsearListaMiembros } =
-  new Function(html.slice(ini, fin) + "\nreturn { normalizarTelefono, normalizarFecha, parsearListaMiembros };")();
+const { normalizarTelefono, normalizarFecha, parsearListaMiembros, buscarComunidadPorNombre, repartirPorComunidad } =
+  new Function(html.slice(ini, fin) + "\nreturn { normalizarTelefono, normalizarFecha, parsearListaMiembros, buscarComunidadPorNombre, repartirPorComunidad };")();
 const tels = (r) => r.filas.map((x) => x.t);
 
 test("normalizarTelefono: con +, espacios y guiones", () => {
@@ -88,4 +88,70 @@ test("vacío: no falla", () => {
   assert.deepEqual(parsearListaMiembros("").filas, []);
   assert.deepEqual(parsearListaMiembros(null).filas, []);
   assert.deepEqual(parsearListaMiembros("\n \n").filas, []);
+});
+
+const COMS = [
+  { id: "c-general", nombre: "Cortado en Jarrito (general)" },
+  { id: "c-palermo", nombre: "Palermo" },
+  { id: "c-devoto", nombre: "Villa Devoto" },
+  { id: "c-boedo", nombre: "Boedo" },
+];
+
+test("columna Comunidad: se detecta por el encabezado (Comunidad, Hoja, Localidad o Barrio)", () => {
+  const r = parsearListaMiembros("Comunidad,Fecha,Teléfono\nPalermo,14/10/2026,5491155550001\nBoedo,15/10/2026,5491155550001\n");
+  assert.equal(r.tiene_comunidad, true);
+  assert.deepEqual(r.filas, [
+    { f: "2026-10-14", t: "5491155550001", c: "Palermo" },
+    { f: "2026-10-15", t: "5491155550001", c: "Boedo" },
+  ]);
+  assert.equal(r.repetidos, 0); // el mismo número en dos comunidades no es un repetido
+  assert.equal(parsearListaMiembros("Hoja;Teléfono\nPalermo;5491155550001\n").tiene_comunidad, true);
+  assert.equal(parsearListaMiembros("Fecha,Teléfono\n14/10/2026,5491155550001\n").tiene_comunidad, false);
+});
+
+test("columna Comunidad: el mismo número repetido en la MISMA comunidad cuenta una vez", () => {
+  const r = parsearListaMiembros("Comunidad,Fecha,Teléfono\nPalermo,15/10/2026,5491155550001\nPalermo,01/10/2026,5491155550001\n");
+  assert.deepEqual(r.filas, [{ f: "2026-10-01", t: "5491155550001", c: "Palermo" }]);
+  assert.equal(r.repetidos, 1);
+});
+
+test("buscarComunidadPorNombre: sin importar mayúsculas ni tildes; acepta un nombre contenido si es único", () => {
+  assert.equal(buscarComunidadPorNombre("palermo", COMS).id, "c-palermo");
+  assert.equal(buscarComunidadPorNombre("  VILLA  devoto ", COMS).id, "c-devoto");
+  assert.equal(buscarComunidadPorNombre("Cortado Palermo", COMS).id, "c-palermo");
+  assert.equal(buscarComunidadPorNombre("Cortado en Jarrito (general)", COMS).id, "c-general");
+  assert.equal(buscarComunidadPorNombre("Quines", COMS), null);
+  assert.equal(buscarComunidadPorNombre("", COMS), null);
+});
+
+test("la comunidad general del cliente es una comunidad más: también se puede cargar", () => {
+  const r = repartirPorComunidad([{ f: null, t: "5491155550001", c: "Cortado en Jarrito (general)" }], COMS, null);
+  assert.deepEqual(r.grupos.map((g) => g.comunidad.id), ["c-general"]);
+});
+
+test("repartirPorComunidad (todas): cada fila a su comunidad; las no reconocidas y sin comunidad quedan afuera y se cuentan", () => {
+  const filas = [
+    { f: "2026-10-14", t: "5491155550001", c: "Palermo" },
+    { f: null, t: "5491155550002", c: "Palermo" },
+    { f: null, t: "5491155550003", c: "Boedo" },
+    { f: null, t: "5491155550004", c: "Quines" },
+    { f: null, t: "5491155550005", c: "Quines" },
+    { f: null, t: "5491155550006", c: "" },
+  ];
+  const r = repartirPorComunidad(filas, COMS, null);
+  assert.deepEqual(r.grupos.map((g) => [g.comunidad.id, g.filas.length]), [["c-palermo", 2], ["c-boedo", 1]]);
+  assert.deepEqual(r.desconocidas, [{ nombre: "Quines", n: 2 }]);
+  assert.equal(r.sin_comunidad, 1);
+  assert.deepEqual(r.grupos[0].filas[0], { f: "2026-10-14", t: "5491155550001" }); // al servidor solo viaja fecha y teléfono
+});
+
+test("repartirPorComunidad (una comunidad): sin columna van todas; con columna se ignoran las de otras comunidades", () => {
+  const sinCol = repartirPorComunidad([{ f: null, t: "5491155550001" }, { f: null, t: "5491155550002" }], COMS, "c-palermo");
+  assert.deepEqual(sinCol.grupos.map((g) => [g.comunidad.id, g.filas.length]), [["c-palermo", 2]]);
+  assert.equal(sinCol.ajenas, 0);
+  const conCol = repartirPorComunidad([
+    { f: null, t: "5491155550001", c: "Palermo" }, { f: null, t: "5491155550002", c: "Boedo" }, { f: null, t: "5491155550003", c: "Quines" },
+  ], COMS, "c-palermo");
+  assert.deepEqual(conCol.grupos.map((g) => [g.comunidad.id, g.filas.length]), [["c-palermo", 1]]);
+  assert.equal(conCol.ajenas, 2);
 });
