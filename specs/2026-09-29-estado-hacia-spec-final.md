@@ -688,3 +688,10 @@ El aviso de las celdas "Sin fuente" de **Trigger entregados** y **Clics en "Me s
 - **Duplicados:** la vista previa lista los números ya cargados (fecha actual vs. del archivo); hay que elegir **ignorarlos** o **actualizar su fecha** antes de poder guardar (el servidor también lo exige). Las salidas también se confirman.
 - Migración `db/020_miembros_acumulados.sql` (reemplaza las funciones de 019 y pasa lo ya cargado a la lista acumulada). **Se ensaya con rollback y se aplica antes de fusionar**: las funciones de 019 dejan de existir y el panel anterior no funcionaría con la base nueva.
 - Pruebas del lector: 12 (44 en total). Guía actualizada: `docs/how-to/cargar-miembros-de-un-grupo.md`.
+
+## 4 sexquinquicies. PR #40 — Cargar miembros: elegir cliente y "Todas las comunidades" (2026-10-14)
+
+- **Cliente arriba del formulario:** el modal ahora tiene su propio selector de **Cliente** (todos los clientes; si se suma uno nuevo, aparece solo) y la lista de comunidades cambia con él.
+- **Comunidad:** lista todas las comunidades del cliente, **incluida la "(general)"** (la de Cortado en Jarrito es un grupo real; una versión intermedia la omitía por error y se corrigió antes de subirla).
+- **Opción "Todas las comunidades":** para un CSV que junta las hojas de varias comunidades, con una columna Comunidad (o Hoja, Localidad, Barrio). El panel reparte las filas por nombre (sin importar mayúsculas ni tildes), muestra una vista previa por comunidad y una sola decisión para los duplicados y para las salidas, y guarda comunidad por comunidad. Cada comunidad se guarda por separado: si una falla, se avisa cuáles quedaron guardadas y cuáles no. Las filas con comunidad no reconocida o sin comunidad quedan afuera y se listan.
+- Sin cambios en la base (usa las funciones de `db/020`). Pruebas: 6 nuevas (50 en total).

@@ -4,7 +4,9 @@ Sirve para completar las métricas de salud (miembros finales, crecimiento, baja
 
 ## Cómo se usa
 1. En **Overview**, tarjeta "Comunidades", tocá **Cargar miembros**.
-2. Elegí la comunidad, escribí la **clave de carga** y tu nombre (queda registrado en Consultas).
+2. Elegí el **cliente** (aparecen todos; si se suma uno nuevo, aparece solo) y la **comunidad** (todas las del cliente, incluida la "general" si la tiene). Escribí la **clave de carga** y tu nombre (queda registrado en Consultas).
+   - **Todas las comunidades:** si tu archivo junta las hojas de varias comunidades, elegí esta opción. El archivo necesita una columna **Comunidad** (también sirve Hoja, Localidad o Barrio) con el nombre de cada una: `Comunidad, Fecha, Teléfono`. El panel reparte las filas, muestra la vista previa de cada comunidad y guarda una por una. Las filas con una comunidad que no se reconoce quedan afuera y se listan.
+   - Si elegís una sola comunidad y el archivo trae la columna Comunidad, solo se usan las filas de esa comunidad (las demás se ignoran y se cuentan).
 3. Elegí **qué subís**: la lista completa del grupo, o solo las personas nuevas.
 4. Subí el CSV (Fecha, Teléfono), pegá las filas, o agregá una persona con su fecha y teléfono en el mini formulario.
 5. Tocá **Vista previa**. Muestra cuántos teléfonos son válidos, cuántos son nuevos, cuántos **ya estaban cargados**, cuántos quedarían como salidas y cuántos nuevos coinciden con contactos del CRM.

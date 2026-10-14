@@ -899,8 +899,9 @@ async function abrirConsultasWindsor(){
 
 
 /* CARGA-MIEMBROS:INICIO */
-// Lector de la lista de miembros de un grupo: cada fila trae FECHA y TELÉFONO. La fecha es la de ingreso al grupo si se conoce, o la del
-// registro; si falta, el servidor usa la de hoy. Acepta CSV o texto pegado, con o sin encabezado, en cualquier orden de columnas.
+// Lector de la lista de miembros de un grupo: cada fila trae FECHA y TELÉFONO (y, para cargar varias comunidades de una vez, COMUNIDAD).
+// La fecha es la de ingreso al grupo si se conoce, o la del registro; si falta, el servidor usa la de hoy. Acepta CSV o texto pegado,
+// con o sin encabezado, en cualquier orden de columnas.
 // Teléfonos: con o sin "+", espacios o guiones. Si falta el código de país se asume Argentina (11 5555-1234 → 5491155551234).
 // Fechas: AAAA-MM-DD, DD/MM/AAAA, DD-MM-AAAA o DD/MM/AA (día primero), con hora opcional.
 function normalizarTelefono(texto){
@@ -938,22 +939,25 @@ function partirLineaCsv(linea, sep){
   out.push(cel);
   return out.map(x => x.trim());
 }
-// Devuelve filas únicas [{ f: 'AAAA-MM-DD' | null, t: '549…' }] más los conteos. Un número repetido en el archivo cuenta una vez, con su fecha más antigua.
+// Devuelve filas únicas [{ f: 'AAAA-MM-DD' | null, t: '549…', c?: 'comunidad' }] más los conteos. La propiedad c existe solo si el archivo
+// trae una columna Comunidad (o Hoja, Localidad, Barrio). Un número repetido (en la misma comunidad) cuenta una vez, con su fecha más antigua.
 function parsearListaMiembros(texto){
   const lineas = String(texto ?? '').replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim() !== '');
-  const resultado = { filas_leidas: 0, filas: [], repetidos: 0, invalidos: 0, completados: 0, sin_fecha: 0, encabezado: false };
+  const resultado = { filas_leidas: 0, filas: [], repetidos: 0, invalidos: 0, completados: 0, sin_fecha: 0, encabezado: false, tiene_comunidad: false };
   if (!lineas.length) return resultado;
   const cuenta = (c) => lineas[0].split(c).length - 1;
   const sep = [',', ';', '\t'].sort((a, b) => cuenta(b) - cuenta(a))[0];
   const filas = lineas.map(l => partirLineaCsv(l, sep));
   const tieneDato = (celdas) => celdas.some(c => normalizarFecha(c) || normalizarTelefono(c));
-  let colTel = -1, colFecha = -1, desde = 0;
+  let colTel = -1, colFecha = -1, colCom = -1, desde = 0;
   if (!tieneDato(filas[0])) {
     resultado.encabezado = true; desde = 1;
     colTel = filas[0].findIndex(h => /tel|phone|cel|n[uú]mero|numero|whats|\bwa\b/i.test(h));
     colFecha = filas[0].findIndex(h => /fecha|date|ingreso|d[ií]a/i.test(h));
+    colCom = filas[0].findIndex(h => /comunidad|hoja|localidad|barrio/i.test(h));
+    resultado.tiene_comunidad = colCom >= 0;
   }
-  const porNumero = new Map();
+  const porClave = new Map();
   for (let i = desde; i < filas.length; i++) {
     const celdas = filas[i];
     if (celdas.every(c => c === '')) continue;
@@ -964,16 +968,51 @@ function parsearListaMiembros(texto){
     if (!n) { resultado.invalidos++; continue; }
     if (colFecha >= 0) f = normalizarFecha(celdas[colFecha]);
     else for (const c of celdas) { f = normalizarFecha(c); if (f) break; }
+    const com = colCom >= 0 ? (celdas[colCom] || '').trim() : undefined;
     if (n.completado) resultado.completados++;
     if (!f) resultado.sin_fecha++;
-    const previo = porNumero.get(n.numero);
+    const clave = (com ?? '') + '|' + n.numero;
+    const previo = porClave.get(clave);
     if (previo) {
       resultado.repetidos++;
       if (f && (!previo.f || f < previo.f)) previo.f = f;
-    } else porNumero.set(n.numero, { f, t: n.numero });
+    } else porClave.set(clave, com === undefined ? { f, t: n.numero } : { f, t: n.numero, c: com });
   }
-  resultado.filas = [...porNumero.values()];
+  resultado.filas = [...porClave.values()];
   return resultado;
+}
+const normNombreCom = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+// Busca una comunidad por el nombre que trae el archivo (sin importar mayúsculas ni tildes). Si no hay coincidencia exacta, acepta una única
+// comunidad cuyo nombre esté contenido en el del archivo o al revés (por ejemplo "Cortado Palermo" → Palermo).
+function buscarComunidadPorNombre(nombre, comunidades){
+  const n = normNombreCom(nombre);
+  if (!n) return null;
+  const exacta = comunidades.filter(c => normNombreCom(c.nombre) === n);
+  if (exacta.length === 1) return exacta[0];
+  const parcial = comunidades.filter(c => { const k = normNombreCom(c.nombre); return k && (n.includes(k) || k.includes(n)); });
+  return parcial.length === 1 ? parcial[0] : null;
+}
+// Reparte las filas por comunidad. idSeleccionada = una comunidad (las filas con otra comunidad en el archivo se ignoran y se cuentan) o
+// null = "todas" (cada fila va a la comunidad que dice el archivo; las que no se reconocen quedan afuera y se listan).
+function repartirPorComunidad(filas, comunidades, idSeleccionada){
+  const grupos = new Map(), desconocidas = new Map();
+  let ajenas = 0, sinComunidad = 0;
+  const sel = idSeleccionada ? comunidades.find(c => c.id === idSeleccionada) : null;
+  for (const fila of filas) {
+    let com = null;
+    const tieneNombre = fila.c !== undefined && fila.c !== '';
+    if (sel) {
+      if (tieneNombre) { const m = buscarComunidadPorNombre(fila.c, comunidades); if (!m || m.id !== sel.id) { ajenas++; continue; } }
+      com = sel;
+    } else {
+      if (!tieneNombre) { sinComunidad++; continue; }
+      com = buscarComunidadPorNombre(fila.c, comunidades);
+      if (!com) { desconocidas.set(fila.c, (desconocidas.get(fila.c) || 0) + 1); continue; }
+    }
+    if (!grupos.has(com.id)) grupos.set(com.id, { comunidad: com, filas: [] });
+    grupos.get(com.id).filas.push({ f: fila.f, t: fila.t });
+  }
+  return { grupos: [...grupos.values()], desconocidas: [...desconocidas].map(([nombre, n]) => ({ nombre, n })), ajenas, sin_comunidad: sinComunidad };
 }
 /* CARGA-MIEMBROS:FIN */
 
@@ -991,26 +1030,31 @@ function cerrarCargaMiembros(){
 }
 async function abrirCargaMiembros(){
   cerrarCargaMiembros();
-  let comunidades = [];
-  try {
-    const { data, error } = await supabase.from('comunidad').select('id,nombre,miembros_iniciales,miembros_finales').eq('cliente_id', state.clienteId).order('nombre');
-    if (error) throw error;
-    comunidades = data || [];
-  } catch (err) { alert('No se pudieron leer las comunidades: ' + err.message); return; }
+  const clientes = state.clientes || [];
+  if (!clientes.length) { alert('No hay clientes cargados.'); return; }
   let nombreGuardado = '';
   try { nombreGuardado = localStorage.getItem(CLAVE_NOMBRE_CARGA) || ''; } catch (_) { /* sin almacenamiento */ }
+  const leerComunidades = async (clienteId) => {
+    const { data, error } = await supabase.from('comunidad').select('id,nombre,miembros_iniciales,miembros_finales').eq('cliente_id', clienteId).order('nombre');
+    if (error) throw error;
+    return data || [];
+  };
+  let comunidades = [];
+  try { comunidades = await leerComunidades(state.clienteId || clientes[0].id); }
+  catch (err) { alert('No se pudieron leer las comunidades: ' + err.message); return; }
 
   const cont = document.createElement('div');
   cont.id = 'modalCarga'; cont.className = 'modal-full';
   cont.setAttribute('role', 'dialog'); cont.setAttribute('aria-modal', 'true'); cont.setAttribute('aria-label', 'Cargar miembros de un grupo');
   cont.innerHTML = `<div class="modal-full-head">
-      <div><h2>Cargar miembros de un grupo</h2><div class="sub">Cada fila lleva solo Fecha y Teléfono. Los miembros finales (Mf) son los que siguen en el grupo.</div></div>
+      <div><h2>Cargar miembros de un grupo</h2><div class="sub">Cada fila lleva Fecha y Teléfono. Los miembros finales (Mf) son los que siguen en el grupo.</div></div>
       <div class="modal-full-acciones"><button type="button" class="btn" id="btnCargaCerrar">Cerrar ✕</button></div>
     </div>
     <div class="modal-full-cuerpo">
-      <div class="card" style="max-width:920px">
+      <div class="card" style="max-width:980px">
         <div class="filters" style="align-items:flex-end">
-          <label>Comunidad<select id="cmCom">${comunidades.map(c => `<option value="${c.id}">${esc(c.nombre)} (Mf actual: ${fmtInt(c.miembros_finales)})</option>`).join('')}</select></label>
+          <label>Cliente<select id="cmCli">${clientes.map(c => `<option value="${c.id}" ${c.id === (state.clienteId || clientes[0].id) ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('')}</select></label>
+          <label>Comunidad<select id="cmCom"></select></label>
           <label>Clave de carga<input type="password" id="cmClave" autocomplete="off" value="${esc(claveCarga)}" style="width:190px"></label>
           <label>Cargado por<input type="text" id="cmPor" value="${esc(nombreGuardado)}" placeholder="Tu nombre" style="width:160px"></label>
         </div>
@@ -1020,15 +1064,16 @@ async function abrirCargaMiembros(){
           <label style="display:flex; gap:8px; align-items:center"><input type="radio" name="cmModo" value="nuevos"> Solo las personas nuevas (se suman a las que ya estaban)</label>
         </fieldset>
         <div class="filters" style="align-items:flex-end">
-          <label>Archivo CSV o TXT (Fecha, Teléfono)<input type="file" id="cmArchivo" accept=".csv,.txt,text/csv,text/plain"></label>
+          <label><span>Archivo CSV o TXT (Fecha, Teléfono; con "Todas", también Comunidad)</span><input type="file" id="cmArchivo" accept=".csv,.txt,text/csv,text/plain"></label>
         </div>
         <label style="display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint); margin-bottom:8px">…o pegá las filas (una por línea: fecha, teléfono)
           <textarea id="cmTexto" rows="5" placeholder="14/10/2026, +54 9 11 5555-1234" style="background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:8px 9px; border-radius:var(--r-in); width:100%"></textarea></label>
-        <div class="filters" style="align-items:flex-end">
+        <div class="filters" id="cmUnoWrap" style="align-items:flex-end">
           <label>Agregar una persona: fecha<input type="date" id="cmUnoFecha"></label>
           <label>Teléfono<input type="text" id="cmUnoTel" placeholder="+54 9 11 5555-1234" style="width:190px"></label>
           <button type="button" class="btn" id="cmUnoAgregar">Agregar a la lista</button>
         </div>
+        <div class="sub" id="cmAyudaTodas" hidden style="margin-bottom:10px">Con "Todas las comunidades" el archivo necesita una columna <b>Comunidad</b> (o Hoja, Localidad, Barrio) con el nombre de cada comunidad: <code>Comunidad, Fecha, Teléfono</code>.</div>
         <label style="display:flex; gap:8px; align-items:center; font-size:12px; margin-bottom:12px"><input type="checkbox" id="cmMi"> Usar esta carga también como miembros iniciales (Mi) — para la primera vez</label>
         <div style="display:flex; gap:8px; flex-wrap:wrap">
           <button type="button" class="btn" id="cmVista">Vista previa</button>
@@ -1045,8 +1090,9 @@ async function abrirCargaMiembros(){
   const el = (id) => document.getElementById(id);
   const msg = (html) => { el('cmResultado').innerHTML = html; };
   const rojo = (t) => `<span style="color:var(--danger)">${esc(t)}</span>`;
-  let leido = null, archivo = '', vista = null;
+  let leido = null, archivo = '', vistas = null, reparto = null;
   const modoCompleta = () => document.querySelector('input[name="cmModo"]:checked').value === 'completa';
+  const esTodas = () => el('cmCom').value === '';
   const textoFuente = async () => {
     const f = el('cmArchivo').files[0];
     if (f) { archivo = f.name; return await f.text(); }
@@ -1059,15 +1105,35 @@ async function abrirCargaMiembros(){
     return { clave: claveCarga, por };
   };
   const errorClave = (err) => /Clave de carga/.test(err.message) ? 'La clave de carga no es correcta.' : err.message;
-  const invalidarVista = () => { vista = null; leido = null; el('cmGuardar').disabled = true; };
+  const invalidarVista = () => { vistas = null; leido = null; reparto = null; el('cmGuardar').disabled = true; };
+  const pintarComunidades = () => {
+    el('cmCom').innerHTML = (comunidades.length > 1 ? `<option value="">Todas las comunidades (el archivo trae la columna Comunidad)</option>` : '') +
+      comunidades.map(c => `<option value="${c.id}">${esc(c.nombre)} (Mf actual: ${fmtInt(c.miembros_finales)})</option>`).join('');
+    if (comunidades.length > 1) el('cmCom').value = comunidades[0].id;
+    modoTodas();
+  };
+  const modoTodas = () => {
+    el('cmAyudaTodas').hidden = !esTodas();
+    el('cmUnoWrap').hidden = esTodas();
+    el('cmVer').disabled = esTodas();
+  };
   // El botón de guardar se habilita solo cuando se resolvieron los duplicados y las salidas.
   const actualizarGuardar = () => {
-    if (!vista) { el('cmGuardar').disabled = true; return; }
-    const dupOk = !(vista.duplicados > 0) || !!document.querySelector('input[name="cmDup"]:checked');
-    const salOk = !(vista.salidas > 0) || (el('cmSal') && el('cmSal').checked);
+    if (!vistas) { el('cmGuardar').disabled = true; return; }
+    const dupTotal = vistas.reduce((s, x) => s + (x.v.duplicados || 0), 0);
+    const salTotal = vistas.reduce((s, x) => s + (x.v.salidas || 0), 0);
+    const dupOk = !(dupTotal > 0) || !!document.querySelector('input[name="cmDup"]:checked');
+    const salOk = !(salTotal > 0) || (el('cmSal') && el('cmSal').checked);
     el('cmGuardar').disabled = !(dupOk && salOk);
   };
 
+  pintarComunidades();
+  el('cmCli').onchange = async () => {
+    invalidarVista(); msg('Cargando comunidades…'); el('cmMiembros').innerHTML = '';
+    try { comunidades = await leerComunidades(el('cmCli').value); pintarComunidades(); msg(''); }
+    catch (err) { msg(rojo('No se pudieron leer las comunidades: ' + err.message)); }
+  };
+  el('cmCom').onchange = () => { invalidarVista(); modoTodas(); el('cmMiembros').innerHTML = ''; msg(''); };
   el('cmArchivo').onchange = invalidarVista;
   el('cmTexto').oninput = invalidarVista;
   document.querySelectorAll('input[name="cmModo"]').forEach(r => { r.onchange = invalidarVista; });
@@ -1085,51 +1151,79 @@ async function abrirCargaMiembros(){
     invalidarVista();
     leido = parsearListaMiembros(await textoFuente());
     if (!leido.filas.length) return msg(rojo('No encontré ningún teléfono válido en la lista.'));
+    if (esTodas() && !leido.tiene_comunidad) return msg(rojo('Para cargar todas las comunidades el archivo necesita una columna Comunidad (por ejemplo: Comunidad, Fecha, Teléfono).'));
+    reparto = repartirPorComunidad(leido.filas, comunidades, esTodas() ? null : el('cmCom').value);
+    if (!reparto.grupos.length) {
+      return msg(rojo(esTodas() ? 'Ninguna fila del archivo coincide con una comunidad de este cliente.' : 'Ninguna fila del archivo corresponde a la comunidad elegida.') +
+        (reparto.desconocidas.length ? ` <span class="sub">No reconocidas: ${esc(reparto.desconocidas.map(d => d.nombre).join(', '))}.</span>` : ''));
+    }
     msg('Calculando…');
-    const { data, error } = await supabase.rpc('vista_previa_carga_miembros', { p_clave: clave, p_comunidad: el('cmCom').value, p_filas: leido.filas.map(x => ({ t: x.t, f: x.f })), p_lista_completa: modoCompleta() });
-    if (error) return msg(rojo(errorClave(error)));
-    vista = (data && data[0]) || {};
-    const comNombre = comunidades.find(c => c.id === el('cmCom').value)?.nombre || '';
-    const dup = vista.duplicados_detalle || [];
-    msg(`<div class="kpi-grid" style="margin-bottom:10px">
-        <div class="kpi"><div class="v">${fmtInt(vista.total_archivo)}</div><div class="l">Teléfonos válidos en el archivo</div></div>
-        <div class="kpi"><div class="v">${fmtInt(vista.nuevos)}${vista.reingresos ? ' +' + fmtInt(vista.reingresos) + ' vuelven' : ''}</div><div class="l">Nuevos en el grupo</div></div>
-        <div class="kpi"><div class="v">${fmtInt(vista.duplicados)}</div><div class="l">Ya estaban cargados</div></div>
-        <div class="kpi"><div class="v">${modoCompleta() ? fmtInt(vista.salidas) : '—'}</div><div class="l">Quedarían como salidas</div></div>
-        <div class="kpi"><div class="v">${fmtInt(vista.coincidencias_crm)}</div><div class="l">Nuevos que coinciden con contactos del CRM</div></div>
-      </div>
-      <div class="sub">Filas leídas: ${fmtInt(leido.filas_leidas)} · repetidas en el archivo: ${fmtInt(leido.repetidos)} · inválidas: ${fmtInt(leido.invalidos)}${leido.sin_fecha ? ' · ' + fmtInt(leido.sin_fecha) + ' sin fecha (se usa la de hoy)' : ''}${leido.completados ? ' · ' + fmtInt(leido.completados) + ' sin código de país (se completaron como argentinos, 549…)' : ''}</div>
-      <div class="sub">Al confirmar, los miembros finales de <b>${esc(comNombre)}</b> pasan de ${fmtInt(vista.activos_actuales)} a <b>${fmtInt(vista.activos_resultantes)}</b>.</div>
-      ${vista.duplicados > 0 ? `<div class="card" style="margin:12px 0 0"><h3>${fmtInt(vista.duplicados)} números ya estaban cargados — ¿qué hacemos con ellos?</h3>
-        <div class="tbl-wrap" style="max-height:200px; overflow:auto"><table><thead><tr><th>Teléfono</th><th>Fecha cargada</th><th>Fecha en el archivo</th></tr></thead><tbody>
-          ${dup.slice(0, 100).map(d => `<tr><td class="mono">+${esc(d.telefono)}</td><td class="mono">${fmtDia(d.fecha_actual)}</td><td class="mono">${d.fecha_archivo ? fmtDia(d.fecha_archivo) : '—'}</td></tr>`).join('')}
-        </tbody></table></div>${vista.duplicados > 100 ? `<div class="sub">Se muestran los primeros 100.</div>` : ''}
+    const nuevas = [];
+    for (const g of reparto.grupos) {
+      const { data, error } = await supabase.rpc('vista_previa_carga_miembros', { p_clave: clave, p_comunidad: g.comunidad.id, p_filas: g.filas, p_lista_completa: modoCompleta() });
+      if (error) return msg(rojo(errorClave(error)));
+      nuevas.push({ g, v: (data && data[0]) || {} });
+    }
+    vistas = nuevas;
+    const sum = (k) => vistas.reduce((s, x) => s + (x.v[k] || 0), 0);
+    const dupTotal = sum('duplicados'), salTotal = sum('salidas'), otraFecha = sum('duplicados_otra_fecha');
+    const dups = vistas.flatMap(x => (x.v.duplicados_detalle || []).map(d => ({ ...d, comunidad: x.g.comunidad.nombre })));
+    const avisos = [
+      `Filas leídas: ${fmtInt(leido.filas_leidas)}`, `repetidas en el archivo: ${fmtInt(leido.repetidos)}`, `inválidas: ${fmtInt(leido.invalidos)}`,
+      leido.sin_fecha ? `${fmtInt(leido.sin_fecha)} sin fecha (se usa la de hoy)` : '',
+      leido.completados ? `${fmtInt(leido.completados)} sin código de país (se completaron como argentinos, 549…)` : '',
+      reparto.ajenas ? `${fmtInt(reparto.ajenas)} de otras comunidades (ignoradas)` : '',
+      reparto.sin_comunidad ? `${fmtInt(reparto.sin_comunidad)} sin comunidad (ignoradas)` : '',
+    ].filter(Boolean).join(' · ');
+    msg(`<div class="tbl-wrap"><table><thead><tr><th>Comunidad</th><th>Teléfonos</th><th>Nuevos</th><th>Ya cargados</th><th>Salidas</th><th>Coinciden con el CRM</th><th>Mf: antes → después</th></tr></thead><tbody>
+        ${vistas.map(x => `<tr><td>${esc(x.g.comunidad.nombre)}</td><td class="mono">${fmtInt(x.v.total_archivo)}</td><td class="mono">${fmtInt(x.v.nuevos)}${x.v.reingresos ? ' +' + fmtInt(x.v.reingresos) + ' vuelven' : ''}</td><td class="mono">${fmtInt(x.v.duplicados)}</td><td class="mono">${modoCompleta() ? fmtInt(x.v.salidas) : '—'}</td><td class="mono">${fmtInt(x.v.coincidencias_crm)}</td><td class="mono">${fmtInt(x.v.activos_actuales)} → <b>${fmtInt(x.v.activos_resultantes)}</b></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="sub" style="margin-top:8px">${esc(avisos)}${vistas.length > 1 ? '' : ''}</div>
+      ${reparto.desconocidas.length ? `<div class="sub" style="color:var(--warn)">Comunidades del archivo que no se reconocieron y quedan afuera: ${esc(reparto.desconocidas.map(d => d.nombre + ' (' + d.n + ' filas)').join(', '))}.</div>` : ''}
+      ${dupTotal > 0 ? `<div class="card" style="margin:12px 0 0"><h3>${fmtInt(dupTotal)} números ya estaban cargados — ¿qué hacemos con ellos?</h3>
+        <div class="tbl-wrap" style="max-height:200px; overflow:auto"><table><thead><tr><th>Comunidad</th><th>Teléfono</th><th>Fecha cargada</th><th>Fecha en el archivo</th></tr></thead><tbody>
+          ${dups.slice(0, 100).map(d => `<tr><td>${esc(d.comunidad)}</td><td class="mono">+${esc(d.telefono)}</td><td class="mono">${fmtDia(d.fecha_actual)}</td><td class="mono">${d.fecha_archivo ? fmtDia(d.fecha_archivo) : '—'}</td></tr>`).join('')}
+        </tbody></table></div>${dupTotal > 100 ? `<div class="sub">Se muestran los primeros 100.</div>` : ''}
         <label style="display:flex; gap:8px; align-items:center; margin-top:8px"><input type="radio" name="cmDup" value="ignorar"> Ignorarlos: se queda la fecha que ya tenían</label>
-        <label style="display:flex; gap:8px; align-items:center"><input type="radio" name="cmDup" value="actualizar_fecha"> Actualizar su fecha con la del archivo (${fmtInt(vista.duplicados_otra_fecha)} tienen otra fecha)</label>
+        <label style="display:flex; gap:8px; align-items:center"><input type="radio" name="cmDup" value="actualizar_fecha"> Actualizar su fecha con la del archivo (${fmtInt(otraFecha)} tienen otra fecha)</label>
         <div class="sub" style="margin-top:6px">Elegí una opción para poder guardar. Si preferís revisar el archivo, simplemente no confirmes.</div></div>` : ''}
-      ${modoCompleta() && vista.salidas > 0 ? `<div class="card" style="margin:12px 0 0"><label style="display:flex; gap:8px; align-items:center"><input type="checkbox" id="cmSal"> Confirmo que <b>${fmtInt(vista.salidas)}</b> personas que ya estaban cargadas y no aparecen en este archivo quedan como salidas</label></div>` : ''}`);
+      ${modoCompleta() && salTotal > 0 ? `<div class="card" style="margin:12px 0 0"><label style="display:flex; gap:8px; align-items:center"><input type="checkbox" id="cmSal"> Confirmo que <b>${fmtInt(salTotal)}</b> personas que ya estaban cargadas y no aparecen en este archivo quedan como salidas</label></div>` : ''}`);
     document.querySelectorAll('input[name="cmDup"]').forEach(r => { r.onchange = actualizarGuardar; });
     if (el('cmSal')) el('cmSal').onchange = actualizarGuardar;
     actualizarGuardar();
   };
   el('cmGuardar').onclick = async () => {
-    if (!vista || !leido) return;
+    if (!vistas || !leido) return;
     const { clave, por } = credenciales();
     const dup = document.querySelector('input[name="cmDup"]:checked');
-    el('cmGuardar').disabled = true; msg('Guardando…');
-    const { data, error } = await supabase.rpc('cargar_miembros_grupo', {
-      p_clave: clave, p_comunidad: el('cmCom').value, p_archivo: archivo, p_filas: leido.filas.map(x => ({ t: x.t, f: x.f })), p_cargada_por: por || null,
-      p_filas_leidas: leido.filas_leidas, p_repetidos: leido.repetidos, p_invalidos: leido.invalidos, p_sin_fecha: leido.sin_fecha,
-      p_lista_completa: modoCompleta(), p_duplicados: dup ? dup.value : null, p_confirmo_salidas: !!(el('cmSal') && el('cmSal').checked), p_usar_como_mi: el('cmMi').checked,
-    });
-    if (error) { actualizarGuardar(); return msg(rojo(errorClave(error))); }
-    const r = (data && data[0]) || {};
-    vista = null; leido = null;
-    msg(`<span style="color:#5fd39a">Listo: la comunidad quedó con ${fmtInt(r.activos)} miembros (${fmtInt(r.nuevos)} nuevos${r.reingresos ? ', ' + fmtInt(r.reingresos) + ' que vuelven' : ''}${r.salidas ? ', ' + fmtInt(r.salidas) + ' salidas' : ''}). Quedó registrada en Consultas.</span>`);
+    const confirmaSal = !!(el('cmSal') && el('cmSal').checked);
+    const lote = vistas;
+    el('cmGuardar').disabled = true;
+    const hechas = [];
+    for (let i = 0; i < lote.length; i++) {
+      const { g, v } = lote[i];
+      msg(`Guardando ${esc(g.comunidad.nombre)} (${i + 1} de ${lote.length})…`);
+      const { data, error } = await supabase.rpc('cargar_miembros_grupo', {
+        p_clave: clave, p_comunidad: g.comunidad.id, p_archivo: archivo, p_filas: g.filas, p_cargada_por: por || null,
+        p_filas_leidas: g.filas.length, p_repetidos: i === 0 ? leido.repetidos : 0, p_invalidos: i === 0 ? leido.invalidos : 0,
+        p_sin_fecha: g.filas.filter(x => !x.f).length,
+        p_lista_completa: modoCompleta(), p_duplicados: (v.duplicados > 0 && dup) ? dup.value : null, p_confirmo_salidas: confirmaSal, p_usar_como_mi: el('cmMi').checked,
+      });
+      if (error) {
+        const pendientes = lote.slice(i).map(x => x.g.comunidad.nombre).join(', ');
+        msg(`${hechas.length ? `<div style="color:#5fd39a">Ya guardadas: ${esc(hechas.join('; '))}.</div>` : ''}${rojo('Se detuvo en ' + g.comunidad.nombre + ': ' + errorClave(error))}<div class="sub">Sin guardar: ${esc(pendientes)}. Corregí y volvé a tocar Vista previa (lo ya guardado se mostrará como duplicado).</div>`);
+        vistas = null; leido = null; return;
+      }
+      const r = (data && data[0]) || {};
+      hechas.push(`${g.comunidad.nombre}: ${fmtInt(r.activos)} miembros (${fmtInt(r.nuevos)} nuevos${r.reingresos ? ', ' + fmtInt(r.reingresos) + ' vuelven' : ''}${r.salidas ? ', ' + fmtInt(r.salidas) + ' salidas' : ''})`);
+    }
+    vistas = null; leido = null;
+    msg(`<span style="color:#5fd39a">Listo. ${hechas.map(esc).join(' · ')}. Quedó registrado en Consultas.</span>`);
   };
   el('cmVer').onclick = async () => {
     const { clave } = credenciales();
     if (!clave) return msg(rojo('Ingresá la clave de carga.'));
+    if (esTodas()) return msg(rojo('Elegí una comunidad para ver sus miembros.'));
     el('cmMiembros').innerHTML = '<div class="sub">Cargando…</div>';
     const { data, error } = await supabase.rpc('ver_miembros_grupo', { p_clave: clave, p_comunidad: el('cmCom').value });
     if (error) { el('cmMiembros').innerHTML = ''; return msg(rojo(errorClave(error))); }
