@@ -12,7 +12,7 @@ Flujo para importar: [`docs/n8n/contactos-wsp-a-sheet.workflow.json`](../n8n/con
 - Columnas: `Fecha`, `Hora` (hora de Buenos Aires), `Teléfono` (con `+`), `Nombre`, `Cliente`.
 
 ## Una vez, antes de activarlo
-1. **Google Sheets:** crear una planilla y, por cada comunidad, una pestaña con **el nombre exacto de la comunidad** (por ejemplo `Cortado Palermo`; si el nombre tuviera `[ ] * /  ? :`, que Google no admite en una pestaña, se reemplazan por un espacio). En la fila 1 de cada pestaña, los encabezados: `Fecha`, `Hora`, `Teléfono`, `Nombre`, `Cliente`. Si falta la pestaña, n8n da error y esa persona no queda registrada; si se suma una comunidad nueva, hay que crear su pestaña.
+1. **Google Sheets:** crear una planilla y, por cada comunidad, una pestaña con **el nombre exacto de la comunidad** (por ejemplo `Cortado Palermo`; si el nombre tuviera corchetes, asterisco, barras, signo de pregunta y dos puntos, que Google no admite en una pestaña, se reemplazan por un espacio). En la fila 1 de cada pestaña, los encabezados: `Fecha`, `Hora`, `Teléfono`, `Nombre`, `Cliente`. Si falta la pestaña, n8n da error y esa persona no queda registrada; si se suma una comunidad nueva, hay que crear su pestaña.
 2. **n8n:** importar el flujo. Crear las credenciales (Header Auth para el webhook, Supabase con la clave de servicio, Google Sheets) y pegar el ID de la planilla en el nodo de Google Sheets. Activar el flujo y copiar la URL de producción del webhook.
 3. **Supabase:** en Database → Webhooks, crear uno sobre la tabla `evento_crudo`, evento `Insert`, método `POST`, con la URL de n8n y el mismo encabezado de autenticación.
 
