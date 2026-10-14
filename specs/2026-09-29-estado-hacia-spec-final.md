@@ -660,3 +660,12 @@ El botón **Todo el histórico** de Control_Comunidades se resalta (mismo azul s
 - No duplica: si el número ya está en la pestaña, actualiza la fila. Columnas: Fecha, Hora, Teléfono, Nombre, Cliente.
 - Reemplaza al flujo anterior (que registraba un código sin datos personales); esta versión guarda el número y el nombre reales, como se pidió.
 - Guía de armado en `docs/how-to/configurar-n8n-contactos-wsp.md`. Probado: el JSON, las conexiones, el filtro de WhatsApp/Instagram y el armado de la fila. **No probado de punta a punta** (falta crear la planilla, las credenciales y el webhook en Supabase).
+
+## 4 duotricies. PR #36 — Pendiente anotado: pedir el teléfono en los flows de Instagram (2026-10-14)
+
+**Para más adelante (no se implementa todavía):** agregar un paso extra en **todos los flows de ManyChat de Instagram**, antes del botón "Me sumo", que le pida a la persona su número de WhatsApp y lo guarde junto a su identificador de Instagram.
+
+- **Para qué:** hoy los contactos de Instagram no traen teléfono, así que no se puede saber quién de la pauta entró de verdad al grupo de WhatsApp. Con el número se puede cruzar contra la lista de miembros del grupo (carga manual por ahora) y medir el ingreso real al grupo. Es la base para cerrar el "ingreso al grupo, sin fuente" y para que la planilla de n8n (PR #35) tenga los números de la gente que viene de Instagram.
+- **Qué hace falta:** (1) el paso de pregunta en cada flow de Instagram, con el número validado; (2) que el CRM reciba y guarde ese número asociado al identificador de Instagram (aviso nuevo de ManyChat); (3) cargar la lista de miembros del grupo y cruzarla; (4) mostrarlo en el panel.
+- **Riesgos a resolver antes:** pedir un dato más hace que parte de la gente abandone (medir el efecto en un solo flow, empezando por Cortado Palermo); y hay que avisar para qué se usa el número y validarlo con Legal (uso de datos personales, ya pendiente en la sección Atribucion).
+- Contexto: en Cortado Palermo el grupo tiene 34 miembros y el CRM solo conoce 1 contacto de WhatsApp; el resto entró por Instagram.
