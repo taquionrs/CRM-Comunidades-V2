@@ -699,3 +699,10 @@ El aviso de las celdas "Sin fuente" de **Trigger entregados** y **Clics en "Me s
 ## 4 septquinquicies. PR #41 — Cargar miembros: se ve por qué no se puede guardar (2026-10-14)
 
 Al usar el botón con un CSV real (11 teléfonos válidos), "Confirmar y guardar" parecía "nunca habilitarse": el botón solo se habilita después de "Vista previa", pero el resultado (o el error) aparecía debajo de los botones, fuera de la pantalla. Ahora: (1) la pantalla baja sola hasta el resultado y (2) junto al botón hay un aviso que dice qué falta: tocar Vista previa, elegir qué hacer con los duplicados, confirmar las salidas, o que la vista previa falló. Solo cambia la presentación; no cambia datos ni la base.
+
+## 4 octoquinquicies. PR #42 — Bajas reales y tasa de fuga (2026-10-14)
+
+- **Punto de partida (14/10):** con las cargas del día se igualó Mi = Mf en las 4 comunidades de Cortado en Jarrito (11, 10, 32 y 26), para que el crecimiento neto arranque en 0 y mida lo que se sume desde ahora. Se hizo con una query a mano en el SQL Editor (no hay migración).
+- **Problema:** "Bajas estimadas" (Mi + entradas al flow − Mf) daba negativo (−9, −10) porque los grupos tienen gente que no pasó por el flow; la fuga global (36,3 %) no era confiable.
+- **Cambio (\`db/021_bajas_reales.sql\`):** las bajas son las salidas registradas al cargar la lista completa del grupo, con fecha de salida dentro del período; se pueden calcular desde la **segunda** carga de lista completa (antes devuelve NULL y el panel dice "No calculable"). Tasa de fuga = bajas ÷ (bajas + miembros finales). Cambian la función de Control_Comunidades y las vistas de Overview (\`comunidad_performance\`, \`kpis_macro\`); las columnas y sus tipos no cambian. La función auxiliar solo devuelve un número, nunca teléfonos.
+- Panel: columnas "Bajas (salidas cargadas)" y "Tasa de fuga" con estado "No calculable"; Overview igual. Pruebas: 3 nuevas (53 en total). Migración pendiente de ensayar y aplicar **antes de fusionar**.

@@ -379,7 +379,7 @@ function renderOverview(kpis, comunidades){
     [fmtInt(k.clics_unicos_totales), 'Entradas únicas al flow (todas las comunidades)'],
     [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales'],
     [fmtMoney(k.cpme_global), 'CPME global'],
-    [fmtPct(k.tasa_fuga_global_pct), 'Tasa de fuga global'],
+    [fmtPct(k.tasa_fuga_global_pct), k.tasa_fuga_global_pct == null ? 'Tasa de fuga global (se calcula desde la segunda carga de la lista completa)' : 'Tasa de fuga global'],
   ]);
 
   const totalMf = comunidades.reduce((s,c) => s + (c.miembros_finales||0), 0);
@@ -390,7 +390,7 @@ function renderOverview(kpis, comunidades){
           <td>${esc(c.nombre)}</td>
           <td class="mono">${fmtInt(c.miembros_iniciales)}</td>
           <td class="mono">${fmtInt(c.clics_unicos)}</td>
-          <td class="mono">${fmtInt(c.bajas_estimadas)}</td>
+          <td class="mono">${c.bajas_estimadas == null ? '<span class="na" title="Se calcula desde la segunda carga de la lista completa del grupo">No calculable</span>' : fmtInt(c.bajas_estimadas)}</td>
           <td class="mono">${fmtInt(c.miembros_finales)}</td>
           <td class="mono">${fmtPct(pct)}</td>
         </tr>`;
@@ -398,15 +398,15 @@ function renderOverview(kpis, comunidades){
           <td>Totales</td>
           <td class="mono">${fmtInt(comunidades.reduce((s,c)=>s+(c.miembros_iniciales||0),0))}</td>
           <td class="mono">${fmtInt(comunidades.reduce((s,c)=>s+(c.clics_unicos||0),0))}</td>
-          <td class="mono">${fmtInt(comunidades.reduce((s,c)=>s+(c.bajas_estimadas||0),0))}</td>
+          <td class="mono">${comunidades.some(c => c.bajas_estimadas != null) ? fmtInt(comunidades.reduce((s,c)=>s+(c.bajas_estimadas||0),0)) : '<span class="na" title="Se calcula desde la segunda carga de la lista completa del grupo">No calculable</span>'}</td>
           <td class="mono">${fmtInt(totalMf)}</td>
           <td class="mono">100%</td>
         </tr>`
     : `<tr class="empty-row"><td colspan="6">Sin comunidades cargadas todavía — agregá una abajo.</td></tr>`;
 
   return kpiCards +
-    `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow y las bajas estimadas se calculan solas (First-Contact Attribution).</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Entradas al flow (CRM)</th><th>Bajas est. (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
+    `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow se calculan solas (First-Contact Attribution) y las bajas salen de las cargas de la lista completa de cada grupo (desde la segunda carga).</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Entradas al flow (CRM)</th><th>Bajas (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
     renderComunidadesForm(comunidades);
 }
@@ -502,6 +502,7 @@ const fmtEnteroTabla = (v) => Number(v).toLocaleString('es-AR', { maximumFractio
 const ESTADOS_VACIO = {
   sin_dato:   { texto: 'Sin dato',      ayuda: 'No hay base para calcularlo en este período (por ejemplo, no hubo conversaciones).' },
   sin_fuente: { texto: 'Sin fuente',    ayuda: 'Este dato todavía no llega al CRM: la integración aún no lo envía.' },
+  no_calc:    { texto: 'No calculable', ayuda: 'Las bajas se calculan desde la segunda carga de la lista completa del grupo (Overview → Cargar miembros → "La lista completa del grupo").' },
   no_disp:    { texto: 'No disponible', ayuda: 'Depende de los miembros iniciales y finales (MI y MF), que todavía no están cargados.' },
 };
 const vacio = (clave, ayuda) => `<span class="vacio" tabindex="0" data-ayuda="${esc(ayuda || ESTADOS_VACIO[clave].ayuda)}">${ESTADOS_VACIO[clave].texto}</span>`;
@@ -572,9 +573,9 @@ const COLUMNAS_CONTROL = [
   { id:'crecimiento', grupo:'WhatsApp & Salud', etiqueta:'Crecimiento neto',
     info:'MF − MI: cuánto creció el grupo. Requiere MI y MF cargados.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.crecimiento_neto), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mf - t.mi) },
-  { id:'bajas', grupo:'WhatsApp & Salud', etiqueta:'Bajas estimadas',
-    info:'Estimación: MI + Entradas al flow − MF. Es una estimación: supone que todas las entradas se unieron al grupo. Requiere MI y MF cargados.',
-    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.bajas_estimadas), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.bajas) },
+  { id:'bajas', grupo:'WhatsApp & Salud', etiqueta:'Bajas (salidas cargadas)',
+    info:'Personas que quedaron como salidas al cargar la lista completa del grupo, con fecha de salida dentro del período. Se puede calcular desde la segunda carga de lista completa de la comunidad; antes no hay con qué comparar.',
+    celda:(c)=>c.bajas_estimadas == null ? vacio('no_calc') : vEntero(c.bajas_estimadas), total:(t)=>t.bajasMed > 0 ? vEntero(t.bajas) : vacio('no_calc') },
   { id:'costo_entrada', grupo:'Financiera', etiqueta:'Costo por entrada al flow',
     info:'Inversión ÷ Entradas al flow. La inversión es la de Meta; las entradas incluyen a quienes llegan sin pasar por la pauta.',
     celda:(c)=>vMoneda(c.cpcu), total:(t)=>vMoneda(t.razon(t.inv, t.ent)) },
@@ -585,8 +586,8 @@ const COLUMNAS_CONTROL = [
     info:'Inversión ÷ (MF − MI): cuánto costó cada miembro que sumó el grupo. Requiere MI y MF cargados.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(c.cpmn), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null) },
   { id:'fuga', grupo:'Financiera', etiqueta:'Tasa de fuga',
-    info:'Bajas estimadas ÷ Entradas al flow. Requiere MI y MF cargados; hasta entonces no se puede calcular.',
-    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vPct(c.tasa_fuga_pct), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vPct(t.razon(t.bajas, t.ent, 100)) },
+    info:'Bajas ÷ (bajas + miembros finales): de todas las personas que estuvieron en el grupo, cuántas se fueron. Se puede calcular desde la segunda carga de lista completa de la comunidad.',
+    celda:(c)=>c.tasa_fuga_pct == null ? vacio('no_calc') : vPct(c.tasa_fuga_pct), total:(t)=>t.bajasMed > 0 ? vPct(t.razon(t.bajas, t.bajas + t.mfMed, 100)) : vacio('no_calc') },
 ];
 const COLOR_GRUPO = Object.fromEntries(Object.entries(GRUPOS_TABLA).map(([nombre, g]) => [nombre, g.color]));
 const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas';
@@ -645,7 +646,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
   const t = {
     razon: (num, den, factor = 1) => (den > 0 ? (num / den) * factor : null),
     inv: suma('inversion'), conv: suma('conversaciones_meta'), ent: suma('clics_unicos'), leads: suma('leads_meta'),
-    mi: suma('miembros_iniciales'), mf: suma('miembros_finales'), bajas: suma('bajas_estimadas'), trig: suma('triggers_entregados'),
+    mi: suma('miembros_iniciales'), mf: suma('miembros_finales'), bajas: suma('bajas_estimadas'), bajasMed: comunidades.filter(c => c.bajas_estimadas != null).length,
+    mfMed: comunidades.filter(c => c.bajas_estimadas != null).reduce((s, c) => s + (Number(c.miembros_finales) || 0), 0), trig: suma('triggers_entregados'),
     clics: suma('clics'), impresiones: suma('impresiones'), clicsms: suma('clics_me_sumo'),
   };
 

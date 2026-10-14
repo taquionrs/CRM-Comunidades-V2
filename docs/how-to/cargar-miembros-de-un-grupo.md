@@ -34,3 +34,9 @@ Esto se construyó **antes del login**, por decisión del usuario del 14/10/2026
 - La lista de miembros se carga a mano (no hay forma automática de leer un grupo de WhatsApp).
 - Si siempre cargás solo personas nuevas, las salidas no se detectan: para medir bajas hay que cargar la lista completa de vez en cuando.
 - Solo se puede cruzar con los contactos que entraron por WhatsApp: los de Instagram no traen teléfono (ver el pendiente de pedir el número en los flows de Instagram).
+
+## Cómo se calculan las bajas y la fuga
+- **Bajas:** las personas que quedaron como salidas al cargar la **lista completa** del grupo (con fecha de salida dentro del período elegido). Se pueden calcular **desde la segunda carga de lista completa** de la comunidad: antes no hay con qué comparar y el panel dice "No calculable".
+- **Tasa de fuga** = bajas ÷ (bajas + miembros finales): de todas las personas que estuvieron en el grupo, cuántas se fueron.
+- Antes se estimaban con una cuenta (Mi + entradas al flow − Mf) que daba negativo si el grupo tenía gente que no pasó por el flow. Esa estimación se reemplazó (`db/021`).
+- Para medir bajas hay que cargar la lista completa del grupo cada tanto (por ejemplo, una vez por semana).
