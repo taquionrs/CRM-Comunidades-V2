@@ -30,7 +30,7 @@ create table if not exists crm_comunidades_v2.carga_miembros (
   cliente_id        uuid not null,
   comunidad_id      uuid not null,
   archivo           text,
-  cargada_en        timestamptz not null default now(),
+  cargada_en        timestamptz not null default clock_timestamp(),
   cargada_por       text,
   filas_leidas      int not null default 0,
   numeros_validos   int not null,
