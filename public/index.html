@@ -523,8 +523,8 @@ function tramosDeGrupos(columnas){
 const iniciosDeTramo = (columnas) => columnas.map((col, i) => i === 0 || columnas[i - 1].grupo !== col.grupo);
 /* TABLA-METRICAS:FIN */
 
-const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow: falta el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001).';
-const NA_CLIC = 'Todavía no llegó ningún aviso de clic: falta la acción de salida del botón "Me sumo" en el flow de ManyChat.';
+const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow en este período. Puede ser que nadie haya entrado al flow o que falte el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001). Para saberlo, entrá vos al flow y mirá si el contador sube.';
+const NA_CLIC = 'Todavía no llegó ningún aviso de clic en este período. Puede ser que nadie haya tocado "Me sumo" o que falte la acción de salida del botón en el flow de ManyChat. Para saberlo, tocá el botón vos y mirá si el contador sube.';
 const NO_MIEMBROS = 'Faltan los miembros iniciales y finales (MI y MF). Se cargan en la sección Overview, tabla "Comunidades".';
 const COLUMNAS_CONTROL = [
   { id:'inversion', grupo:'Meta Ads', etiqueta:'Inversión',
