@@ -695,3 +695,7 @@ El aviso de las celdas "Sin fuente" de **Trigger entregados** y **Clics en "Me s
 - **Comunidad:** lista todas las comunidades del cliente, **incluida la "(general)"** (la de Cortado en Jarrito es un grupo real; una versión intermedia la omitía por error y se corrigió antes de subirla).
 - **Opción "Todas las comunidades":** para un CSV que junta las hojas de varias comunidades, con una columna Comunidad (o Hoja, Localidad, Barrio). El panel reparte las filas por nombre (sin importar mayúsculas ni tildes), muestra una vista previa por comunidad y una sola decisión para los duplicados y para las salidas, y guarda comunidad por comunidad. Cada comunidad se guarda por separado: si una falla, se avisa cuáles quedaron guardadas y cuáles no. Las filas con comunidad no reconocida o sin comunidad quedan afuera y se listan.
 - Sin cambios en la base (usa las funciones de `db/020`). Pruebas: 6 nuevas (50 en total).
+
+## 4 septquinquicies. PR #41 — Cargar miembros: se ve por qué no se puede guardar (2026-10-14)
+
+Al usar el botón con un CSV real (11 teléfonos válidos), "Confirmar y guardar" parecía "nunca habilitarse": el botón solo se habilita después de "Vista previa", pero el resultado (o el error) aparecía debajo de los botones, fuera de la pantalla. Ahora: (1) la pantalla baja sola hasta el resultado y (2) junto al botón hay un aviso que dice qué falta: tocar Vista previa, elegir qué hacer con los duplicados, confirmar las salidas, o que la vista previa falló. Solo cambia la presentación; no cambia datos ni la base.

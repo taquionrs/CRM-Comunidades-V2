@@ -1080,6 +1080,7 @@ async function abrirCargaMiembros(){
           <button type="button" class="btn" id="cmGuardar" disabled style="background:var(--accent); border-color:var(--accent); color:#fff">Confirmar y guardar</button>
           <button type="button" class="btn" id="cmVer">Ver miembros del grupo</button>
         </div>
+        <div class="sub" id="cmEstadoGuardar" role="status" style="margin:8px 0 0">Para guardar, primero tocá "Vista previa".</div>
         <div id="cmResultado" style="margin-top:14px; font-size:12.5px"></div>
       </div>
       <div id="cmMiembros"></div>
@@ -1088,7 +1089,7 @@ async function abrirCargaMiembros(){
   document.body.style.overflow = 'hidden';
 
   const el = (id) => document.getElementById(id);
-  const msg = (html) => { el('cmResultado').innerHTML = html; };
+  const msg = (html) => { el('cmResultado').innerHTML = html; el('cmResultado').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
   const rojo = (t) => `<span style="color:var(--danger)">${esc(t)}</span>`;
   let leido = null, archivo = '', vistas = null, reparto = null;
   const modoCompleta = () => document.querySelector('input[name="cmModo"]:checked').value === 'completa';
@@ -1105,7 +1106,8 @@ async function abrirCargaMiembros(){
     return { clave: claveCarga, por };
   };
   const errorClave = (err) => /Clave de carga/.test(err.message) ? 'La clave de carga no es correcta.' : err.message;
-  const invalidarVista = () => { vistas = null; leido = null; reparto = null; el('cmGuardar').disabled = true; };
+  const estadoGuardar = (t) => { el('cmEstadoGuardar').textContent = t; };
+  const invalidarVista = () => { vistas = null; leido = null; reparto = null; el('cmGuardar').disabled = true; estadoGuardar('Para guardar, primero tocá "Vista previa".'); };
   const pintarComunidades = () => {
     el('cmCom').innerHTML = (comunidades.length > 1 ? `<option value="">Todas las comunidades (el archivo trae la columna Comunidad)</option>` : '') +
       comunidades.map(c => `<option value="${c.id}">${esc(c.nombre)} (Mf actual: ${fmtInt(c.miembros_finales)})</option>`).join('');
@@ -1119,12 +1121,14 @@ async function abrirCargaMiembros(){
   };
   // El botón de guardar se habilita solo cuando se resolvieron los duplicados y las salidas.
   const actualizarGuardar = () => {
-    if (!vistas) { el('cmGuardar').disabled = true; return; }
+    if (!vistas) { el('cmGuardar').disabled = true; estadoGuardar('Para guardar, primero tocá "Vista previa".'); return; }
     const dupTotal = vistas.reduce((s, x) => s + (x.v.duplicados || 0), 0);
     const salTotal = vistas.reduce((s, x) => s + (x.v.salidas || 0), 0);
     const dupOk = !(dupTotal > 0) || !!document.querySelector('input[name="cmDup"]:checked');
     const salOk = !(salTotal > 0) || (el('cmSal') && el('cmSal').checked);
     el('cmGuardar').disabled = !(dupOk && salOk);
+    estadoGuardar(!dupOk ? 'Falta elegir qué hacer con los números que ya estaban cargados (ignorarlos o actualizar su fecha).'
+      : !salOk ? 'Falta confirmar las personas que quedarían como salidas.' : 'Todo listo: tocá "Confirmar y guardar".');
   };
 
   pintarComunidades();
@@ -1161,7 +1165,7 @@ async function abrirCargaMiembros(){
     const nuevas = [];
     for (const g of reparto.grupos) {
       const { data, error } = await supabase.rpc('vista_previa_carga_miembros', { p_clave: clave, p_comunidad: g.comunidad.id, p_filas: g.filas, p_lista_completa: modoCompleta() });
-      if (error) return msg(rojo(errorClave(error)));
+      if (error) { estadoGuardar('No se puede guardar: la vista previa falló (mirá el mensaje de abajo).'); return msg(rojo(errorClave(error))); }
       nuevas.push({ g, v: (data && data[0]) || {} });
     }
     vistas = nuevas;
