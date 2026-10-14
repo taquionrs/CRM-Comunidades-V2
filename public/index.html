@@ -420,7 +420,7 @@ function renderComunidadesForm(comunidades){
       <td><button class="btn btn-guardar-comunidad" data-id="${c.id}" style="padding:5px 10px; font-size:11px">Guardar</button></td>
     </tr>`).join('');
 
-  return `<div class="card" id="comunidadesFormWrap"><h3>Comunidades</h3><div class="sub">Alta de comunidad + carga manual de miembros iniciales/finales (Mi/Mf) y el adset_name para el mapeo de Windsor.ai.</div>
+  return `<div class="card" id="comunidadesFormWrap"><div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px"><h3>Comunidades</h3><button class="btn" id="btnCargarMiembros" type="button" title="Subir la lista de números de un grupo de WhatsApp">Cargar miembros</button></div><div class="sub">Alta de comunidad + carga manual de miembros iniciales/finales (Mi/Mf) y el adset_name para el mapeo de Windsor.ai.</div>
     <div class="tbl-wrap" style="margin-bottom:14px"><table><thead><tr><th>Nombre</th><th>adset_name</th><th>Mi</th><th>Mf</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="5">Ninguna todavía</td></tr>'}</tbody></table></div>
     <form id="formNuevaComunidad" class="form-row">
       <label>Nombre<input type="text" name="nombre" required placeholder="San Luis"></label>
@@ -449,6 +449,9 @@ function wireComunidadesForm(){
       catch (err) { resultado.innerHTML = `<span style="color:var(--danger)">Error: ${esc(err.message)}</span>`; }
     };
   });
+
+  const btnCargar = document.getElementById('btnCargarMiembros');
+  if (btnCargar) btnCargar.onclick = abrirCargaMiembros;
 
   const form = document.getElementById('formNuevaComunidad');
   form.onsubmit = async (e) => {
@@ -783,6 +786,7 @@ const TIPOS_CONSULTA = {
   conversion: { etiqueta: 'Conversión',         ayuda: 'Se pasó lo recibido a las métricas por comunidad' },
   programada: { etiqueta: 'Programada',         ayuda: 'Trabajo diario automático (pg_cron)' },
   csv:        { etiqueta: 'CSV manual',         ayuda: 'Importación manual desde un archivo' },
+  carga_miembros: { etiqueta: 'Carga de miembros', ayuda: 'Se cargó la lista de miembros de un grupo' },
 };
 const fmtFechaAR = (d) => d ? new Date(d).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
 function haceCuantoConsulta(d){
@@ -893,6 +897,186 @@ async function abrirConsultasWindsor(){
   await cargar();
 }
 
+
+/* CARGA-MIEMBROS:INICIO */
+// Lector de la lista de miembros de un grupo. Acepta un CSV o números pegados, uno por línea, con o sin "+", espacios o guiones.
+// Se queda con la columna de teléfono (por el encabezado) o, si no hay encabezado, con el primer número válido de cada fila.
+// Supone números argentinos cuando falta el código de país: 11 5555-1234 → 5491155551234.
+function normalizarTelefono(texto){
+  let d = String(texto ?? '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  let completado = false;
+  if (d.length === 10) { d = '549' + d; completado = true; }
+  else if (d.length === 12 && d.startsWith('54') && d[2] !== '9') { d = '549' + d.slice(2); completado = true; }
+  if (d.length < 10 || d.length > 15) return null;
+  return { numero: d, completado };
+}
+function partirLineaCsv(linea, sep){
+  const out = []; let cel = '', entre = false;
+  for (let i = 0; i < linea.length; i++) {
+    const c = linea[i];
+    if (entre) { if (c === '"') { if (linea[i + 1] === '"') { cel += '"'; i++; } else entre = false; } else cel += c; }
+    else if (c === '"') entre = true;
+    else if (c === sep) { out.push(cel); cel = ''; }
+    else cel += c;
+  }
+  out.push(cel);
+  return out.map(x => x.trim());
+}
+function parsearListaMiembros(texto){
+  const lineas = String(texto ?? '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim() !== '');
+  const resultado = { filas_leidas: 0, numeros: [], repetidos: 0, invalidos: 0, completados: 0, encabezado: false };
+  if (!lineas.length) return resultado;
+  const cuenta = (c) => lineas[0].split(c).length - 1;
+  const sep = [',', ';', '\t'].sort((a, b) => cuenta(b) - cuenta(a))[0];
+  const filas = lineas.map(l => partirLineaCsv(l, sep));
+  const esTel = (h) => /tel|phone|cel|n[uú]mero|numero|whats|\bwa\b/i.test(h);
+  let col = -1, desde = 0;
+  const primeraTieneNumero = filas[0].some(c => normalizarTelefono(c));
+  if (!primeraTieneNumero) {
+    resultado.encabezado = true; desde = 1;
+    col = filas[0].findIndex(esTel);
+  }
+  const vistos = new Set();
+  for (let i = desde; i < filas.length; i++) {
+    const celdas = filas[i];
+    if (celdas.every(c => c === '')) continue;
+    resultado.filas_leidas++;
+    const candidatas = col >= 0 ? [celdas[col]] : celdas;
+    let n = null;
+    for (const c of candidatas) { n = normalizarTelefono(c); if (n) break; }
+    if (!n) { resultado.invalidos++; continue; }
+    if (n.completado) resultado.completados++;
+    if (vistos.has(n.numero)) { resultado.repetidos++; continue; }
+    vistos.add(n.numero); resultado.numeros.push(n.numero);
+  }
+  return resultado;
+}
+/* CARGA-MIEMBROS:FIN */
+
+/* ================= Botón "Cargar miembros" (pantalla completa) ================= */
+// EXCEPCIÓN (decisión del usuario, 2026-10-14): esto se hizo antes del login. Los números se leen y se guardan solo con la clave de carga
+// (db/019). La clave vive en esta pestaña mientras está abierta: no se guarda en el navegador.
+let claveCarga = '';
+const CLAVE_NOMBRE_CARGA = 'crm_v2_carga_miembros_nombre';
+function cerrarCargaMiembros(){
+  const m = document.getElementById('modalCarga');
+  if (m) m.remove();
+  document.body.style.overflow = '';
+  if (window.__cargaEsc) { document.removeEventListener('keydown', window.__cargaEsc); window.__cargaEsc = null; }
+}
+async function abrirCargaMiembros(){
+  cerrarCargaMiembros();
+  let comunidades = [];
+  try {
+    const { data, error } = await supabase.from('comunidad').select('id,nombre,miembros_iniciales,miembros_finales').eq('cliente_id', state.clienteId).order('nombre');
+    if (error) throw error;
+    comunidades = data || [];
+  } catch (err) { alert('No se pudieron leer las comunidades: ' + err.message); return; }
+  let nombreGuardado = '';
+  try { nombreGuardado = localStorage.getItem(CLAVE_NOMBRE_CARGA) || ''; } catch (_) { /* sin almacenamiento */ }
+
+  const cont = document.createElement('div');
+  cont.id = 'modalCarga'; cont.className = 'modal-full';
+  cont.setAttribute('role', 'dialog'); cont.setAttribute('aria-modal', 'true'); cont.setAttribute('aria-label', 'Cargar miembros de un grupo');
+  cont.innerHTML = `<div class="modal-full-head">
+      <div><h2>Cargar miembros de un grupo</h2><div class="sub">Subí la lista de números de un grupo de WhatsApp: se guarda una foto con fecha y se actualizan los miembros finales (Mf).</div></div>
+      <div class="modal-full-acciones"><button type="button" class="btn" id="btnCargaCerrar">Cerrar ✕</button></div>
+    </div>
+    <div class="modal-full-cuerpo">
+      <div class="card" style="max-width:880px">
+        <div class="filters" style="align-items:flex-end">
+          <label>Comunidad<select id="cmCom">${comunidades.map(c => `<option value="${c.id}">${esc(c.nombre)} (Mf actual: ${fmtInt(c.miembros_finales)})</option>`).join('')}</select></label>
+          <label>Clave de carga<input type="password" id="cmClave" autocomplete="off" value="${esc(claveCarga)}" style="width:190px"></label>
+          <label>Cargado por<input type="text" id="cmPor" value="${esc(nombreGuardado)}" placeholder="Tu nombre" style="width:160px"></label>
+        </div>
+        <div class="filters" style="align-items:flex-end">
+          <label>Archivo CSV o TXT<input type="file" id="cmArchivo" accept=".csv,.txt,text/csv,text/plain"></label>
+        </div>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-faint); margin-bottom:12px">…o pegá los números (uno por línea)
+          <textarea id="cmTexto" rows="5" style="background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:8px 9px; border-radius:var(--r-in); width:100%"></textarea></label>
+        <label style="display:flex; gap:8px; align-items:center; font-size:12px; margin-bottom:12px"><input type="checkbox" id="cmMi"> Usar esta carga también como miembros iniciales (Mi) — para la primera vez</label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button type="button" class="btn" id="cmVista">Vista previa</button>
+          <button type="button" class="btn" id="cmGuardar" disabled style="background:var(--accent); border-color:var(--accent); color:#fff">Confirmar y guardar</button>
+          <button type="button" class="btn" id="cmVer">Ver miembros del grupo</button>
+        </div>
+        <div id="cmResultado" style="margin-top:14px; font-size:12.5px"></div>
+      </div>
+      <div id="cmMiembros"></div>
+    </div>`;
+  document.body.appendChild(cont);
+  document.body.style.overflow = 'hidden';
+
+  const el = (id) => document.getElementById(id);
+  const msg = (html) => { el('cmResultado').innerHTML = html; };
+  let leido = null, archivo = '';
+  const textoFuente = async () => {
+    const f = el('cmArchivo').files[0];
+    if (f) { archivo = f.name; return await f.text(); }
+    archivo = 'números pegados'; return el('cmTexto').value;
+  };
+  const credenciales = () => {
+    claveCarga = el('cmClave').value;
+    const por = el('cmPor').value.trim();
+    try { localStorage.setItem(CLAVE_NOMBRE_CARGA, por); } catch (_) { /* sin almacenamiento */ }
+    return { clave: claveCarga, por };
+  };
+  const errorClave = (err) => /Clave de carga/.test(err.message) ? 'La clave de carga no es correcta.' : err.message;
+
+  el('cmArchivo').onchange = () => { el('cmGuardar').disabled = true; leido = null; };
+  el('cmVista').onclick = async () => {
+    const { clave } = credenciales();
+    if (!clave) return msg('<span style="color:var(--danger)">Ingresá la clave de carga.</span>');
+    leido = parsearListaMiembros(await textoFuente());
+    if (!leido.numeros.length) { el('cmGuardar').disabled = true; return msg('<span style="color:var(--danger)">No encontré ningún número válido en la lista.</span>'); }
+    msg('Calculando…');
+    const { data, error } = await supabase.rpc('vista_previa_carga_miembros', { p_clave: clave, p_comunidad: el('cmCom').value, p_numeros: leido.numeros });
+    if (error) { el('cmGuardar').disabled = true; return msg(`<span style="color:var(--danger)">${esc(errorClave(error))}</span>`); }
+    const v = (data && data[0]) || {};
+    const comNombre = comunidades.find(c => c.id === el('cmCom').value)?.nombre || '';
+    msg(`<div class="kpi-grid" style="margin-bottom:10px">
+        <div class="kpi"><div class="v">${fmtInt(v.total)}</div><div class="l">Números válidos</div></div>
+        <div class="kpi"><div class="v">${v.hay_carga_anterior ? '+' + fmtInt(v.nuevos) + ' / −' + fmtInt(v.salieron) : '—'}</div><div class="l">Entraron / salieron vs. la carga anterior</div></div>
+        <div class="kpi"><div class="v">${fmtInt(v.coincidencias_crm)}</div><div class="l">Coinciden con contactos del CRM</div></div>
+      </div>
+      <div class="sub">Filas leídas: ${fmtInt(leido.filas_leidas)} · repetidos: ${fmtInt(leido.repetidos)} · inválidos: ${fmtInt(leido.invalidos)}${leido.completados ? ' · ' + fmtInt(leido.completados) + ' sin código de país (se completaron como argentinos, 549…)' : ''}${v.hay_carga_anterior ? '' : ' · es la primera carga de este grupo'}</div>
+      <div class="sub">Al confirmar, los miembros finales de <b>${esc(comNombre)}</b> pasan a ${fmtInt(v.total)}.</div>`);
+    el('cmGuardar').disabled = false;
+  };
+  el('cmGuardar').onclick = async () => {
+    if (!leido || !leido.numeros.length) return;
+    const { clave, por } = credenciales();
+    el('cmGuardar').disabled = true; msg('Guardando…');
+    const { data, error } = await supabase.rpc('cargar_miembros_grupo', {
+      p_clave: clave, p_comunidad: el('cmCom').value, p_archivo: archivo, p_numeros: leido.numeros, p_cargada_por: por || null,
+      p_filas_leidas: leido.filas_leidas, p_repetidos: leido.repetidos, p_invalidos: leido.invalidos, p_usar_como_mi: el('cmMi').checked,
+    });
+    if (error) { el('cmGuardar').disabled = false; return msg(`<span style="color:var(--danger)">${esc(errorClave(error))}</span>`); }
+    const r = (data && data[0]) || {};
+    msg(`<span style="color:#5fd39a">Listo: se guardó la carga de ${fmtInt(r.total)} números y se actualizaron los miembros finales. Quedó registrada en Consultas.</span>`);
+    leido = null;
+  };
+  el('cmVer').onclick = async () => {
+    const { clave } = credenciales();
+    if (!clave) return msg('<span style="color:var(--danger)">Ingresá la clave de carga.</span>');
+    el('cmMiembros').innerHTML = '<div class="sub">Cargando…</div>';
+    const { data, error } = await supabase.rpc('ver_miembros_grupo', { p_clave: clave, p_comunidad: el('cmCom').value });
+    if (error) { el('cmMiembros').innerHTML = ''; return msg(`<span style="color:var(--danger)">${esc(errorClave(error))}</span>`); }
+    const filas = data || [];
+    if (!filas.length) { el('cmMiembros').innerHTML = '<div class="card"><div class="sub">Este grupo todavía no tiene ninguna carga.</div></div>'; return; }
+    const f0 = filas[0];
+    const entraron = filas.filter(f => f.entro_por_flow).length;
+    el('cmMiembros').innerHTML = `<div class="card"><h3>Miembros del grupo (${fmtInt(filas.length)})</h3>
+      <div class="sub">Última carga: ${esc(fmtFechaAR(f0.cargada_en))}${f0.cargada_por ? ' · por ' + esc(f0.cargada_por) : ''}${f0.archivo ? ' · ' + esc(f0.archivo) : ''} · ${fmtInt(entraron)} entraron por el flow de ManyChat</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Teléfono</th><th>Nombre (del CRM)</th><th>¿Entró por el flow?</th><th>Primera entrada</th></tr></thead><tbody>
+        ${filas.map(f => `<tr><td class="mono">+${esc(f.telefono_id)}</td><td>${f.nombre ? esc(f.nombre) : '<span class="vacio" style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:10.5px;border:1px dashed var(--border-strong);color:var(--text-muted)">Sin dato</span>'}</td><td>${f.entro_por_flow ? 'Sí' : 'No'}</td><td class="mono">${f.primera_entrada ? esc(fmtFechaAR(f.primera_entrada)) : '—'}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  };
+  el('btnCargaCerrar').onclick = cerrarCargaMiembros;
+  window.__cargaEsc = (ev) => { if (ev.key === 'Escape') cerrarCargaMiembros(); };
+  document.addEventListener('keydown', window.__cargaEsc);
+}
 
 /* ================= Atribucion (sección en construcción) ================= */
 // Esta sección va a mostrar a qué anuncio, campaña o canal se atribuye cada persona. Hoy el CRM NO tiene ese dato: lo único que
