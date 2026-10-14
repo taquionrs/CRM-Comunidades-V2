@@ -669,3 +669,7 @@ El botón **Todo el histórico** de Control_Comunidades se resalta (mismo azul s
 - **Qué hace falta:** (1) el paso de pregunta en cada flow de Instagram, con el número validado; (2) que el CRM reciba y guarde ese número asociado al identificador de Instagram (aviso nuevo de ManyChat); (3) cargar la lista de miembros del grupo y cruzarla; (4) mostrarlo en el panel.
 - **Riesgos a resolver antes:** pedir un dato más hace que parte de la gente abandone (medir el efecto en un solo flow, empezando por Cortado Palermo); y hay que avisar para qué se usa el número y validarlo con Legal (uso de datos personales, ya pendiente en la sección Atribucion).
 - Contexto: en Cortado Palermo el grupo tiene 34 miembros y el CRM solo conoce 1 contacto de WhatsApp; el resto entró por Instagram.
+
+## 4 tritricies. PR #37 — Texto honesto en "Sin fuente" de Trigger y Clic en "Me sumo" (2026-10-14)
+
+El aviso de las celdas "Sin fuente" de **Trigger entregados** y **Clics en "Me sumo"** decía siempre que "falta el paso" en ManyChat, aunque el paso estuviera puesto: con conteo cero no se puede distinguir entre "nadie entró" y "el paso no funciona" (caso Boedo: el paso existe en el flow, pero no entra tráfico desde el 09/10). Ahora dice que puede ser cualquiera de las dos cosas y cómo comprobarlo (entrar al flow y mirar si el contador sube). Solo cambia el texto; no cambia datos ni cálculos.
