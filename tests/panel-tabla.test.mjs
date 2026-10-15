@@ -60,3 +60,27 @@ test("cada grupo tiene color e ícono", () => {
     assert.match(g.icono, /^<svg /, nombre);
   }
 });
+
+// ---- Bajas y fuga reales (db/021): NULL = "No calculable" hasta la segunda carga de lista completa
+const finCols = html.indexOf("const COLOR_GRUPO");
+const { COLUMNAS_CONTROL } = new Function("esc", html.slice(ini, finCols) + "\nreturn { COLUMNAS_CONTROL };")(esc);
+const col = (id) => COLUMNAS_CONTROL.find((c) => c.id === id);
+
+test("bajas y fuga: sin datos (null) dicen 'No calculable', no un número negativo ni cero", () => {
+  assert.match(col("bajas").celda({ bajas_estimadas: null }), /No calculable/);
+  assert.match(col("fuga").celda({ tasa_fuga_pct: null }), /No calculable/);
+  assert.match(col("bajas").total({ bajasMed: 0 }), /No calculable/);
+  assert.match(col("fuga").total({ bajasMed: 0 }), /No calculable/);
+});
+
+test("bajas y fuga: con datos muestran el valor (0 también es un dato)", () => {
+  assert.match(col("bajas").celda({ bajas_estimadas: 0 }), /^<span class="entero">0<\/span>$/);
+  assert.match(col("bajas").celda({ bajas_estimadas: 3 }), />3</);
+  assert.match(col("fuga").celda({ tasa_fuga_pct: 9.09 }), /9,1%/);
+});
+
+test("total de bajas y de fuga: suman solo las comunidades donde se pueden calcular", () => {
+  const t = { bajasMed: 2, bajas: 3, mfMed: 27, razon: (n, d, f = 1) => (d > 0 ? (n / d) * f : null) };
+  assert.match(col("bajas").total(t), />3</);
+  assert.match(col("fuga").total(t), /10,0%/); // 3 / (3 + 27)
+});
