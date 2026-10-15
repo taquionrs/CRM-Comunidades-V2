@@ -251,7 +251,7 @@ iniciarMenuLateral();
 })();
 /* TOOLTIP-INFO:FIN */
 
-let state = { tab:'overview', entered:false, clienteId:null, clientes:[], columnasControl:null, columnasAbierto:false };
+let state = { tab:'overview', entered:false, clienteId:null, clientes:[], columnasControl:null, columnasAbierto:false, canalControl:'todos' };
 
 /* ---------- selector de cliente ---------- */
 function leerClienteGuardado(){
@@ -273,6 +273,7 @@ function renderSelectorCliente(){
     state.baseLimpiaFiltro = null;
     state.fechaDesde = null;
     state.fechaHasta = null;
+    state.canalControl = 'todos';
     renderAll();
   };
 }
@@ -322,9 +323,9 @@ async function loadComunidadesPerformance(){
   return data || [];
 }
 // Matriz de Control_Comunidades filtrable por fechas (db/006). desde/hasta nulos = todo el histórico.
-async function loadComunidadesRango(desde, hasta){
+async function loadComunidadesRango(desde, hasta, canal){
   const { data, error } = await supabase.rpc('comunidad_performance_rango', {
-    p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta,
+    p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_canal: canal || 'todos',
   });
   if (error) throw error;
   return data || [];
@@ -502,6 +503,7 @@ const fmtEnteroTabla = (v) => Number(v).toLocaleString('es-AR', { maximumFractio
 const ESTADOS_VACIO = {
   sin_dato:   { texto: 'Sin dato',      ayuda: 'No hay base para calcularlo en este período (por ejemplo, no hubo conversaciones).' },
   sin_fuente: { texto: 'Sin fuente',    ayuda: 'Este dato todavía no llega al CRM: la integración aún no lo envía.' },
+  no_canal:   { texto: 'No se divide', ayuda: 'Este dato no se puede separar por canal: viene de Meta, del conteo del grupo de WhatsApp o usa la inversión de Meta. Se muestra el total.' },
   no_calc:    { texto: 'No calculable', ayuda: 'Las bajas se calculan desde la segunda carga de la lista completa del grupo (Overview → Cargar miembros → "La lista completa del grupo").' },
   no_disp:    { texto: 'No disponible', ayuda: 'Depende de los miembros iniciales y finales (MI y MF), que todavía no están cargados.' },
 };
@@ -549,19 +551,19 @@ const COLUMNAS_CONTROL = [
   { id:'ctr', grupo:'Meta Ads', etiqueta:'CTR (todos los clics)',
     info:'Clics totales ÷ Impresiones. Cuenta todos los clics del anuncio, no solo los que van al enlace, por eso suele ser mayor que el CTR de enlace de Ads Manager.',
     celda:(c)=>vPct(c.ctr_anuncio_pct), total:(t)=>vPct(t.razon(t.clics, t.impresiones, 100)) },
-  { id:'trigger', grupo:'ManyChat', etiqueta:'Trigger entregados',
+  { id:'trigger', porCanal:true, grupo:'ManyChat', etiqueta:'Trigger entregados',
     info:'Personas distintas que recibieron el primer mensaje del flow. Lo informa ManyChat con un aviso al empezar el flow.',
     celda:(c)=>c.triggers_entregados > 0 ? vEntero(c.triggers_entregados) : vacio('sin_fuente', NA_TRIGGER), total:(t)=>t.trig > 0 ? vEntero(t.trig) : vacio('sin_fuente', NA_TRIGGER) },
-  { id:'clics_me_sumo', grupo:'ManyChat', etiqueta:'Clics en "Me sumo"',
+  { id:'clics_me_sumo', porCanal:true, grupo:'ManyChat', etiqueta:'Clics en "Me sumo"',
     info:'Personas distintas que tocaron el botón "Me sumo". Se registra desde la salida propia del botón en ManyChat, desde el 09/10.',
     celda:(c)=>c.clics_me_sumo > 0 ? vEntero(c.clics_me_sumo) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vEntero(t.clicsms) : vacio('sin_fuente', NA_CLIC) },
-  { id:'entradas', grupo:'CRM', etiqueta:'Entradas al flow',
+  { id:'entradas', porCanal:true, grupo:'CRM', etiqueta:'Entradas al flow',
     info:'Personas nuevas que entraron al flow en el período, contadas por su primer contacto. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta: no distingue el origen.',
     celda:(c)=>vEntero(c.clics_unicos), total:(t)=>vEntero(t.ent) },
   { id:'entradas_conv', grupo:'CRM', etiqueta:'Entradas / conversaciones',
     info:'Entradas al flow ÷ Conversaciones de Meta (tasa de triaje). Es un tope: entrar al flow no es lo mismo que unirse al grupo.',
     celda:(c)=>vPct(c.conversaciones_meta > 0 ? c.clics_unicos / c.conversaciones_meta * 100 : null), total:(t)=>vPct(t.razon(t.ent, t.conv, 100)) },
-  { id:'tasa_me_sumo', grupo:'CRM', etiqueta:'Clic en "Me sumo" / entradas',
+  { id:'tasa_me_sumo', porCanal:true, grupo:'CRM', etiqueta:'Clic en "Me sumo" / entradas',
     info:'Clics en "Me sumo" ÷ Entradas al flow: de cada 100 personas que entran, cuántas tocan el botón.',
     celda:(c)=>c.clics_me_sumo > 0 ? vPct(c.clics_unicos > 0 ? c.clics_me_sumo / c.clics_unicos * 100 : null) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vPct(t.razon(t.clicsms, t.ent, 100)) : vacio('sin_fuente', NA_CLIC) },
   { id:'mi', grupo:'WhatsApp & Salud', etiqueta:'Miembros iniciales (MI)',
@@ -632,7 +634,7 @@ const ATAJOS_FECHAS = [
 ];
 /* ATAJOS-FECHAS:FIN */
 
-function renderControl(comunidades, filtroComunidad, desde, hasta){
+function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos'){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
@@ -658,8 +660,9 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
     return `<th colspan="${tr.n}" scope="colgroup" class="th-gr g-${g.k} g-ini" style="--gc:${g.color}"><span class="th-gr-in">${g.icono}${esc(tr.grupo)}</span></th>`; }).join('');
   const encabezados = visibles.map((col, k) => { const g = GRUPOS_TABLA[col.grupo] || { color:'#8B90A0' };
     return `<th scope="col" class="th-col ${claseGrupo(col, k)}" style="--gc:${g.color}"><span class="th-txt">${esc(col.etiqueta)}</span><button type="button" class="info-btn" data-info="${esc(col.info || '')}" aria-label="Qué significa: ${esc(col.etiqueta)}">i</button></th>`; }).join('');
+  const canalActivo = canal === 'instagram' || canal === 'whatsapp';
   const celdas = (fn) => visibles.map((col, k) => { const g = GRUPOS_TABLA[col.grupo] || { color:'#8B90A0' };
-    return `<td class="num ${claseGrupo(col, k)}" style="--gc:${g.color}">${fn(col)}</td>`; }).join('');
+    return `<td class="num ${claseGrupo(col, k)}" style="--gc:${g.color}">${canalActivo && !col.porCanal ? vacio('no_canal') : fn(col)}</td>`; }).join('');
 
   const filas = porComunidad.length
     ? porComunidad.map(c => `<tr><th scope="row" class="td-com">${esc(c.nombre)}</th>${celdas(col => col.celda(c))}</tr>`).join('')
@@ -685,6 +688,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
 
   return `<div class="filters">
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
+      <label>Canal<select id="selCanal" aria-label="Canal"><option value="todos" ${canal === 'todos' ? 'selected' : ''}>Todos</option><option value="instagram" ${canal === 'instagram' ? 'selected' : ''}>Instagram</option><option value="whatsapp" ${canal === 'whatsapp' ? 'selected' : ''}>WhatsApp</option></select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
       <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
       <label>Período rápido<select id="selAtajo" aria-label="Período rápido">${(() => {
@@ -700,6 +704,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta){
     <div class="card"><h3>Métricas por comunidad</h3>
       <div class="sub">Meta Ads · ManyChat · CRM</div>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion).</div>
+      ${canalActivo ? `<div class="sub" style="color:var(--warn)">Mostrando solo el flow de ${canal === 'instagram' ? 'Instagram' : 'WhatsApp'}: se dividen las entradas, los triggers y los clics en "Me sumo". El resto de las columnas (Meta, miembros y costos) no se divide por canal y aparece como "No se divide".</div>` : ''}
       ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
       <div class="tbl-wrap"><table class="tabla-metricas"><caption class="sr-only">Métricas por comunidad, agrupadas por fuente: ${tramosDeGrupos(visibles).map(x => x.grupo).join(', ')}</caption><thead><tr class="fila-grupos"><th rowspan="2" scope="col" class="th-com">Comunidad</th>${encabezadoGrupos}</tr><tr>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>`;
@@ -764,6 +769,8 @@ function wireControl(){
   }
   const sel = document.getElementById('selFiltroComunidad');
   if (sel) sel.onchange = () => { state.filtroComunidad = sel.value || null; renderAll(); };
+  const selCanal = document.getElementById('selCanal');
+  if (selCanal) selCanal.onchange = () => { state.canalControl = selCanal.value || 'todos'; renderAll(); };
   const desde = document.getElementById('inpFechaDesde');
   const hasta = document.getElementById('inpFechaHasta');
   if (desde) desde.onchange = () => { state.fechaDesde = desde.value || null; renderAll(); };
@@ -1560,8 +1567,8 @@ async function renderAll(){
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
-      const comunidades = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null);
-      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '');
+      const comunidades = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl);
       wireControl();
 
     } else if (state.tab === 'atribucion') {
