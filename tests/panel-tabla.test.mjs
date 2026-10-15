@@ -84,3 +84,18 @@ test("total de bajas y de fuga: suman solo las comunidades donde se pueden calcu
   assert.match(col("bajas").total(t), />3</);
   assert.match(col("fuga").total(t), /10,0%/); // 3 / (3 + 27)
 });
+
+// ---- Filtro de canal (db/022): solo lo que viene del flow de ManyChat se divide por canal
+test("canal: solo trigger, clics en Me sumo, entradas y clic/entradas se dividen por canal", () => {
+  assert.deepEqual(COLUMNAS_CONTROL.filter((c) => c.porCanal).map((c) => c.id).sort(), ["clics_me_sumo", "entradas", "tasa_me_sumo", "trigger"]);
+  // lo que usa Meta, los miembros o la inversión no se divide (incluye entradas / conversaciones, que usa las conversaciones de Meta)
+  for (const id of ["inversion", "conversaciones", "cpl", "leads", "costo_lead", "ctr", "entradas_conv", "mi", "mf", "crecimiento", "bajas", "costo_entrada", "costo_clic", "cpmn", "fuga"]) {
+    assert.ok(!col(id).porCanal, id);
+  }
+});
+
+test("canal: el estado 'No se divide' explica por qué", () => {
+  const html2 = api.vacio("no_canal");
+  assert.match(html2, /No se divide/);
+  assert.match(html2, /data-ayuda="[^"]*canal/);
+});
