@@ -1374,6 +1374,12 @@ function renderDedup(eventos, comunidadesById){
   </div>`;
 }
 
+async function loadEnviosPlanilla(){
+  const { data, error } = await supabase.from('envio_planilla').select('evento_id,estado,motivo').eq('cliente_id', state.clienteId).limit(1000);
+  if (error) return new Map(); // si la tabla todavía no existe (db/023), Data_Cruda sigue mostrando todo lo demás
+  return new Map((data || []).map(x => [x.evento_id, x]));
+}
+
 /* ================= TAB 5: Data_Cruda ================= */
 function haceCuanto(v){
   const s = Math.max(0, Math.round((Date.now() - new Date(v).getTime()) / 1000));
@@ -1382,7 +1388,21 @@ function haceCuanto(v){
   if (s < 86400) return 'hace ' + Math.floor(s/3600) + ' h';
   return 'hace ' + Math.floor(s/86400) + ' d';
 }
-function filaAceptada(e, comunidadesById){
+/* PLANILLA-ESTADO:INICIO */
+// Estado de cada evento en la planilla de Google (lo informa n8n, db/023). Sin fila = n8n no avisó (evento anterior a la integración, o n8n no llegó a avisar).
+const PLANILLA_ESTADOS = {
+  registrado: { texto: 'Registrado',           clase: 'pill pill-ok',  ayuda: 'Se escribió en la planilla de Google' },
+  ignorado:   { texto: 'Ignorado (Instagram)', clase: 'pill',          ayuda: 'No es un contacto de WhatsApp: a propósito no va a la planilla' },
+  error:      { texto: 'Error',                clase: 'pill pill-bad', ayuda: 'n8n no pudo escribir en la planilla' },
+};
+function pillPlanilla(envio){
+  if (!envio) return '<span class="pill" style="opacity:.6" title="n8n no informó el resultado de este evento: es anterior a la integración o n8n no llegó a avisar">Sin registro</span>';
+  const e = PLANILLA_ESTADOS[envio.estado] || { texto: String(envio.estado), clase: 'pill', ayuda: '' };
+  const motivo = envio.estado === 'error' && envio.motivo ? `<div style="color:var(--danger); font-size:11px; max-width:220px; margin-top:3px">${esc(envio.motivo)}</div>` : '';
+  return `<span class="${e.clase}" title="${esc(e.ayuda)}">${esc(e.texto)}</span>${motivo}`;
+}
+/* PLANILLA-ESTADO:FIN */
+function filaAceptada(e, comunidadesById, envios = new Map()){
   const p = e.payload || {};
   const c = p.contact || {};
   const nombre = c.name || [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
@@ -1390,6 +1410,7 @@ function filaAceptada(e, comunidadesById){
   return `<tr>
     <td class="mono" style="white-space:nowrap">${fmtFecha(e.recibido_en)}<div class="sub" style="margin:0">${haceCuanto(e.recibido_en)}</div></td>
     <td><span class="pill pill-ok">Aceptado</span></td>
+    <td>${pillPlanilla(envios.get(e.id))}</td>
     <td class="mono">${canalPill(e.telefono_id)} ${esc(idVisible(e.telefono_id, p))}</td>
     <td>${esc(nombre)}</td>
     <td>${comunidad ? esc(comunidad) : '<span class="pill badge-warn">Sin comunidad</span>'}</td>
@@ -1407,6 +1428,7 @@ function filaRechazada(i){
   return `<tr>
     <td class="mono" style="white-space:nowrap">${fmtFecha(i.creado_en)}<div class="sub" style="margin:0">${haceCuanto(i.creado_en)}</div></td>
     <td><span class="pill pill-bad">Rechazado ${esc(i.estado)}</span></td>
+    <td>—</td>
     <td class="mono">${i.telefono_id ? canalPill(i.telefono_id) + " " + esc(idVisible(i.telefono_id, p)) : "—"}</td>
     <td>${esc(nombreDePayload(p) || '—')}</td>
     <td>—</td>
@@ -1414,17 +1436,21 @@ function filaRechazada(i){
     <td style="font-size:12px; max-width:300px"><div style="color:var(--danger)">${esc(i.motivo)}</div>${p ? `<details style="margin-top:6px"><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details>` : ''}</td>
   </tr>`;
 }
-const FILTROS_CRUDO = [['todos','Todos'], ['aceptados','Aceptados'], ['rechazados','Rechazados']];
-function renderCrudo(eventos, intentos, comunidadesById, filtro){
+const FILTROS_CRUDO = [['todos','Todos'], ['aceptados','Aceptados'], ['rechazados','Rechazados'], ['planilla_error','Error en planilla']];
+function renderCrudo(eventos, intentos, comunidadesById, filtro, envios = new Map()){
+  const conErrorPlanilla = eventos.filter(e => (envios.get(e.id) || {}).estado === 'error');
+  const eventosVisibles = filtro === 'planilla_error' ? conErrorPlanilla : eventos;
   const items = [
-    ...(filtro !== 'rechazados' ? eventos.map(e => ({ t: new Date(e.recibido_en).getTime(), html: filaAceptada(e, comunidadesById) })) : []),
-    ...(filtro !== 'aceptados' ? intentos.map(i => ({ t: new Date(i.creado_en).getTime(), html: filaRechazada(i) })) : []),
+    ...(filtro !== 'rechazados' ? eventosVisibles.map(e => ({ t: new Date(e.recibido_en).getTime(), html: filaAceptada(e, comunidadesById, envios) })) : []),
+    ...(filtro !== 'aceptados' && filtro !== 'planilla_error' ? intentos.map(i => ({ t: new Date(i.creado_en).getTime(), html: filaRechazada(i) })) : []),
   ].sort((a, b) => b.t - a.t);
   const vacio = filtro === 'rechazados'
     ? 'Sin intentos rechazados — es lo esperado si todo funciona.'
+    : filtro === 'planilla_error'
+    ? 'Sin errores al escribir en la planilla — es lo esperado si todo funciona.'
     : 'Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).';
-  const rows = items.length ? items.map(x => x.html).join('') : `<tr class="empty-row"><td colspan="7">${vacio}</td></tr>`;
-  const conteo = { todos: eventos.length + intentos.length, aceptados: eventos.length, rechazados: intentos.length };
+  const rows = items.length ? items.map(x => x.html).join('') : `<tr class="empty-row"><td colspan="8">${vacio}</td></tr>`;
+  const conteo = { todos: eventos.length + intentos.length, aceptados: eventos.length, rechazados: intentos.length, planilla_error: conErrorPlanilla.length };
   const chips = FILTROS_CRUDO.map(([k, label]) =>
     `<button class="btn${filtro === k ? ' btn-on' : ''}" type="button" data-crudo-filtro="${k}">${label} (${conteo[k]})</button>`).join('');
   return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
@@ -1445,7 +1471,7 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro){
         </select></label>
       <span class="sub" id="crudoExportEstado" style="margin:0"></span>
     </div>
-    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Contacto</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Planilla <span class="hint" title="Resultado de enviar el contacto a la planilla de Google (n8n): Registrado, Ignorado (Instagram) o Error. Sin registro = n8n no avisó.">ⓘ</span></th><th>Contacto</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
 /* ---------- Exportar CSV de Data_Cruda: toda la historia del cliente, no solo las 200 filas visibles ---------- */
@@ -1586,9 +1612,9 @@ async function renderAll(){
       content.innerHTML = renderDedup(eventos, byId);
 
     } else if (state.tab === 'crudo') {
-      const [eventos, intentos, comunidades] = await Promise.all([loadEventoCrudo(), loadIntentosRechazados(), loadComunidades()]);
+      const [eventos, intentos, comunidades, envios] = await Promise.all([loadEventoCrudo(), loadIntentosRechazados(), loadComunidades(), loadEnviosPlanilla()]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
-      content.innerHTML = renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos');
+      content.innerHTML = renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios);
       wireCrudo();
     }
   } catch (err) {
