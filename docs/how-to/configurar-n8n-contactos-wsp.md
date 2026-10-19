@@ -29,7 +29,7 @@ En la **fila 1 de cada pestaña**, un encabezado por celda, de A a D: `Fecha`, `
 Si llega una comunidad que no está en la tabla, la pestaña queda como `SIN-HOJA` y el nodo da error (queda registrado como "Error" en el CRM). Una comunidad nueva necesita su pestaña y una línea nueva en la tabla del nodo "Armar fila".
 
 ## 2. Credenciales en n8n
-- **Header Auth** ("Webhook CRM (Header Auth)"): nombre del encabezado `x-crm-secret` y, como valor, un secreto largo que inventes. Se usa en el nodo Webhook y en los tres nodos "Avisar al CRM".
+- **Header Auth** ("Webhook CRM (Header Auth)"): nombre del encabezado `x-crm-secret` (también se acepta `Webhook-crm-secret`; lo importante es usar **el mismo nombre y el mismo valor** en la credencial de n8n y en el encabezado del webhook de Supabase) y, como valor, un secreto largo que inventes. Se usa en el nodo Webhook y en los tres nodos "Avisar al CRM".
 - **Custom Auth** ("Supabase CRM"), para el nodo "Buscar comunidad y cliente". Con la **Publishable key** del proyecto (Project Settings → API Keys; nunca la Secret):
 
   ```json
@@ -46,8 +46,8 @@ Importar el JSON y completar:
 Si ya tenías el flujo armado y no querés reimportar, agregá a mano esos tres nodos (HTTP Request, POST a `https://<proyecto>.supabase.co/rest/v1/rpc/registrar_envio_planilla`, encabezados `apikey` y `Content-Profile: crm_comunidades_v2`, cuerpo JSON con `p_evento_id` = `{{ $('Webhook (desde Supabase)').first().json.body.record.id }}` y `p_estado` = `registrado`, `ignorado` o `error` según la rama; el de error suma `p_motivo`), y poné el nodo de Sheets en *Settings → On Error → Continue (using error output)*.
 
 ## 4. Base de datos (una vez)
-1. Aplicar `db/023_envio_planilla.sql` (tabla `envio_planilla` y función `registrar_envio_planilla`).
-2. Cargar el hash del secreto, con **el mismo valor** que pusiste en la credencial Header Auth (escribilo vos en el SQL Editor; no lo compartas):
+1. Aplicar `db/023_envio_planilla.sql` (tabla `envio_planilla` y función `registrar_envio_planilla`) y después `db/024_envio_planilla_encabezados.sql`, que hace que la función acepte el secreto con cualquiera de los dos nombres de encabezado.
+2. Cargar el hash del secreto, con **el mismo valor** que pusiste en la credencial Header Auth (escribilo vos en el SQL Editor; no lo compartas). Para comprobar que quedó igual: `select encode(extensions.digest('EL_VALOR', 'sha256'), 'hex') = (select clave_hash from crm_comunidades_v2.config_n8n);` tiene que dar `true`.
 
    ```sql
    insert into crm_comunidades_v2.config_n8n (clave_hash)
