@@ -13,22 +13,35 @@
       "name": "Webhook (desde Supabase)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "crm-contacto-wsp",
       "credentials": {
-        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Webhook CRM (Header Auth)" }
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Webhook CRM (Header Auth)"
+        }
       }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "es-whatsapp-con-telefono",
               "leftValue": "={{ /^[0-9]{8,}$/.test(String($json.body.record.telefono_id || '')) }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -39,7 +52,10 @@
       "name": "¿WhatsApp con teléfono?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [240, 0]
+      "position": [
+        240,
+        0
+      ]
     },
     {
       "parameters": {
@@ -50,7 +66,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Accept-Profile", "value": "crm_comunidades_v2" }
+            {
+              "name": "Accept-Profile",
+              "value": "crm_comunidades_v2"
+            }
           ]
         },
         "options": {}
@@ -59,47 +78,203 @@
       "name": "Buscar comunidad y cliente (Supabase)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, -80],
+      "position": [
+        480,
+        -80
+      ],
       "credentials": {
-        "httpCustomAuth": { "id": "REEMPLAZAR", "name": "Supabase CRM (Custom Auth)" }
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM (Custom Auth)"
+        }
       }
     },
     {
       "parameters": {
-        "jsCode": "const entrada = $('Webhook (desde Supabase)').first().json.body;\nconst rec = entrada.record || {};\nconst resp = $input.first().json;\nconst com = (Array.isArray(resp) ? resp[0] : resp) || {};\n\nconst ahora = rec.recibido_en ? new Date(rec.recibido_en) : new Date();\nconst zona = 'America/Argentina/Buenos_Aires';\nconst fecha = new Intl.DateTimeFormat('en-CA', { timeZone: zona }).format(ahora);\nconst hora = new Intl.DateTimeFormat('en-GB', { timeZone: zona, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ahora);\n\nconst contacto = (rec.payload && rec.payload.contact) || {};\nconst nombre = String(contacto.name || contacto.first_name || '').trim();\n// El nombre de la hoja es el de la comunidad; Google Sheets no admite estos caracteres en el nombre de una hoja.\nconst hoja = String(com.nombre || 'Sin comunidad').replace(/[\\[\\]*\\/\\\\?:]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 100);\n\nreturn [{ json: {\n  Hoja: hoja,\n  Fecha: fecha,\n  Hora: hora,\n  'Teléfono': '+' + String(rec.telefono_id),\n  Nombre: nombre,\n  Cliente: (com.cliente && com.cliente.nombre) || ''\n} }];"
+        "jsCode": "const entrada = $('Webhook (desde Supabase)').first().json.body;\nconst rec = entrada.record || {};\nconst resp = $input.first().json;\nconst com = (Array.isArray(resp) ? resp[0] : resp) || {};\n\nconst ahora = rec.recibido_en ? new Date(rec.recibido_en) : new Date();\nconst zona = 'America/Argentina/Buenos_Aires';\nconst fecha = new Intl.DateTimeFormat('en-CA', { timeZone: zona }).format(ahora);\nconst hora = new Intl.DateTimeFormat('en-GB', { timeZone: zona, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ahora);\n\nconst contacto = (rec.payload && rec.payload.contact) || {};\nconst nombre = String(contacto.name || contacto.first_name || '').trim();\n\n// Nombre de la pestaña en la planilla, según cliente y comunidad\nconst HOJAS = {\n  'Cortado en Jarrito / Boedo': 'Cortado-Boedo',\n  'Cortado en Jarrito / Villa Devoto': 'Cortado-Devoto',\n  'Cortado en Jarrito / Palermo': 'Cortado-Palermo',\n  'Cortado en Jarrito / Cortado en Jarrito (general)': 'Cortado-General',\n  'Todo un País / La Toma': 'Todounpais-LaToma',\n  'Todo un País / Quines': 'Todounpais-Quines',\n  'Todo un País / San Luis Capital': 'Todounpais-SanLuis',\n  'Todo un País / Todo un País (general)': 'Todounpais-General',\n};\nconst cliente = (com.cliente && com.cliente.nombre) || '';\nconst hoja = HOJAS[cliente + ' / ' + (com.nombre || '')] || 'SIN-HOJA';\n\nreturn [{ json: {\n  Hoja: hoja,\n  Fecha: fecha,\n  Hora: hora,\n  'Teléfono': '+' + String(rec.telefono_id),\n  Nombre: nombre\n} }];"
       },
       "id": "c3333333-3333-4333-8333-333333333333",
       "name": "Armar fila",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [720, -80]
+      "position": [
+        720,
+        -80
+      ]
     },
     {
       "parameters": {
         "operation": "appendOrUpdate",
-        "documentId": { "__rl": true, "value": "PEGAR_ID_DE_LA_PLANILLA", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "={{ $json.Hoja }}", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "PEGAR_ID_DE_LA_PLANILLA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.Hoja }}",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
             "Fecha": "={{ $json.Fecha }}",
             "Hora": "={{ $json.Hora }}",
             "Teléfono": "={{ $json['Teléfono'] }}",
-            "Nombre": "={{ $json.Nombre }}",
-            "Cliente": "={{ $json.Cliente }}"
+            "Nombre": "={{ $json.Nombre }}"
           },
-          "matchingColumns": ["Teléfono"],
+          "matchingColumns": [
+            "Teléfono"
+          ],
           "schema": []
         },
-        "options": { "cellFormat": "RAW" }
+        "options": {
+          "cellFormat": "RAW"
+        }
       },
       "id": "d4444444-4444-4444-8444-444444444444",
       "name": "Agregar o actualizar en la hoja de la comunidad",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [960, -80],
+      "position": [
+        960,
+        -80
+      ],
+      "onError": "continueErrorOutput",
       "credentials": {
-        "googleSheetsOAuth2Api": { "id": "REEMPLAZAR", "name": "Google Sheets" }
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/registrar_envio_planilla",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "PEGAR_PUBLISHABLE_KEY"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_evento_id: $('Webhook (desde Supabase)').first().json.body.record.id, p_estado: 'registrado' }) }}",
+        "options": {}
+      },
+      "id": "a8888888-8888-4888-8888-888888888881",
+      "name": "Avisar al CRM: registrado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Webhook CRM (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/registrar_envio_planilla",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "PEGAR_PUBLISHABLE_KEY"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_evento_id: $('Webhook (desde Supabase)').first().json.body.record.id, p_estado: 'error', p_motivo: String(($json.error && $json.error.message) || $json.error || 'Error al escribir en la planilla').slice(0, 280) }) }}",
+        "options": {}
+      },
+      "id": "a8888888-8888-4888-8888-888888888882",
+      "name": "Avisar al CRM: error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        20
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Webhook CRM (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/registrar_envio_planilla",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "PEGAR_PUBLISHABLE_KEY"
+            },
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_evento_id: $('Webhook (desde Supabase)').first().json.body.record.id, p_estado: 'ignorado' }) }}",
+        "options": {}
+      },
+      "id": "a8888888-8888-4888-8888-888888888883",
+      "name": "Avisar al CRM: ignorado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Webhook CRM (Header Auth)"
+        }
       }
     },
     {
@@ -112,42 +287,119 @@
       "name": "Responder 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1200, -80]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { ok: true, ignorado: 'sin teléfono de WhatsApp' } }}",
-        "options": {}
-      },
-      "id": "a7777777-7777-4777-8777-777777777777",
-      "name": "Responder 200 (ignorado)",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [480, 120]
+      "position": [
+        1440,
+        -80
+      ]
     }
   ],
   "connections": {
     "Webhook (desde Supabase)": {
-      "main": [[{ "node": "¿WhatsApp con teléfono?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "¿WhatsApp con teléfono?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "¿WhatsApp con teléfono?": {
       "main": [
-        [{ "node": "Buscar comunidad y cliente (Supabase)", "type": "main", "index": 0 }],
-        [{ "node": "Responder 200 (ignorado)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Buscar comunidad y cliente (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar al CRM: ignorado",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Buscar comunidad y cliente (Supabase)": {
-      "main": [[{ "node": "Armar fila", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Armar fila",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Armar fila": {
-      "main": [[{ "node": "Agregar o actualizar en la hoja de la comunidad", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Agregar o actualizar en la hoja de la comunidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Agregar o actualizar en la hoja de la comunidad": {
-      "main": [[{ "node": "Responder 200", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Avisar al CRM: registrado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar al CRM: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar al CRM: registrado": {
+      "main": [
+        [
+          {
+            "node": "Responder 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar al CRM: error": {
+      "main": [
+        [
+          {
+            "node": "Responder 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar al CRM: ignorado": {
+      "main": [
+        [
+          {
+            "node": "Responder 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {},
   "active": false
 }
