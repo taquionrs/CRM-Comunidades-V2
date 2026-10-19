@@ -726,3 +726,7 @@ Al usar el botón con un CSV real (11 teléfonos válidos), "Confirmar y guardar
 ## 4 tricies bis. PR #45 — El secreto de n8n se acepta con cualquiera de los dos nombres de encabezado (2026-10-19)
 
 Al probar los avisos de n8n al CRM, la función `registrar_envio_planilla` respondía "Clave incorrecta" aunque el valor era correcto: la credencial Header Auth de n8n quedó con el nombre `Webhook-crm-secret` (el mismo que usa el webhook de Supabase hacia n8n) y la función buscaba solo `x-crm-secret`. En lugar de renombrar el encabezado en n8n y en Supabase a la vez (con riesgo de perder avisos mientras tanto), `db/024_envio_planilla_encabezados.sql` hace que la función lea `x-crm-secret` y, si no está, `webhook-crm-secret`. Guía actualizada con una comprobación para verificar que el hash guardado coincide con el secreto. Se ensaya con rollback y se aplica antes de fusionar.
+
+## 4 tricies ter. PR #46 — Roadmap: funciones de IA en el CRM (2026-10-19)
+
+Se anota en `specs/2026-10-19-funciones-de-ia.md` la idea de sumar IA (Claude API u OpenRouter) al CRM. Solo documentación: no se construye nada. Puntos clave: las llamadas salen de una función del servidor (nunca del navegador) con la clave como secreto; cada consulta queda registrada en "Consultas" con tope de gasto; el modelo redacta sobre cifras ya calculadas y no recibe teléfonos, nombres ni textos de personas; primera función propuesta: resumen semanal por comunidad. Decisiones pendientes: proveedor, presupuesto y primera función.
