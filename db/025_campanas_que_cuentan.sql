@@ -5,9 +5,9 @@
 -- Eso inflaba la inversión de Overview y distorsionaba el costo por conversación y por miembro.
 --
 -- Decisión: solo cuentan las campañas de conversión o tráfico a WhatsApp.
---   * Cortado en Jarrito: solo TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP (queda en la comunidad general hasta conocer sus
---     conjuntos por barrio; al agregarlos al mapeo, la regla por conjunto gana sobre la de "toda la campaña"). La campaña de leads de Cortado
---     (CON_LEADS_..._WHATSAPP) y la INTE quedan fuera por decisión del usuario.
+--   * Cortado en Jarrito: solo TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP. Sus tres conjuntos (_BOEDO, _DEVOTO, _PALERMO) van a
+--     su comunidad; cualquier otro conjunto de esa campaña va a la comunidad general (la regla por conjunto gana sobre la de "toda la campaña").
+--     La campaña de leads de Cortado (CON_LEADS_..._WHATSAPP) y la INTE quedan fuera por decisión del usuario.
 --   * Todo un País: sin cambios (campaña de leads por comunidad).
 --
 -- Cambios:
@@ -58,6 +58,23 @@ select c.id, co.id, 'TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP
      select 1 from crm_comunidades_v2.comunidad_meta_origen o
       where o.cliente_id = c.id and o.adset_nombre is null
         and crm_comunidades_v2.normalizar_nombre(o.campana_nombre) = crm_comunidades_v2.normalizar_nombre('TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP'));
+
+-- Los tres conjuntos de la campaña de tráfico, cada uno a su comunidad (nombres tomados del Administrador de anuncios el 20/10/2026).
+insert into crm_comunidades_v2.comunidad_meta_origen (cliente_id, comunidad_id, campana_nombre, adset_nombre, cuenta)
+select c.id, co.id, 'TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP', v.adset, true
+  from crm_comunidades_v2.cliente c
+  join (values
+         ('Boedo',        'TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP_BOEDO'),
+         ('Villa Devoto', 'TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP_DEVOTO'),
+         ('Palermo',      'TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP_PALERMO')
+       ) v(comunidad, adset) on true
+  join crm_comunidades_v2.comunidad co on co.cliente_id = c.id and co.nombre = v.comunidad
+ where c.slug = 'cortado-en-jarrito'
+   and not exists (
+     select 1 from crm_comunidades_v2.comunidad_meta_origen o
+      where o.cliente_id = c.id
+        and crm_comunidades_v2.normalizar_nombre(o.campana_nombre) = crm_comunidades_v2.normalizar_nombre('TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP')
+        and crm_comunidades_v2.normalizar_nombre(o.adset_nombre) = crm_comunidades_v2.normalizar_nombre(v.adset));
 
 -- Conversión de la tabla cruda de Windsor a meta_ads_metrica (misma firma que en db/015).
 create or replace function crm_comunidades_v2.sincronizar_meta_desde_windsor(p_tabla text default 'windsor_raw.facebook_ads')

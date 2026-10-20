@@ -49,14 +49,14 @@ Cada regla de `comunidad_meta_origen` tiene una marca **`cuenta`**:
 
 | Cliente | Campaña | Cuenta |
 |---|---|---|
-| Cortado en Jarrito | `TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` | **Sí** (a la comunidad general, hasta conocer sus conjuntos por barrio) |
+| Cortado en Jarrito | `TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` (conjuntos `_BOEDO`, `_DEVOTO` y `_PALERMO`) | **Sí**: cada conjunto va a su comunidad; cualquier otro conjunto de la campaña va a la comunidad general |
 | Cortado en Jarrito | `TQN_AON_META_CON_LEADS_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` (Boedo, Palermo, Devoto) | No (decisión del usuario) |
 | Cortado en Jarrito | `TQN_AON_META_CON_INTE_MANUAL_CORTADO_EN_JARRITO` (POST y DARK) | No: su resultado en Meta son visitas al perfil y a la página |
 | Todo un País | `TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS` (La Toma, Quines, San Luis) | Sí |
 
 **Cómo se ve en la práctica:** al sincronizar con Windsor, la función quita de `meta_ads_metrica` lo que ya no corresponde (las filas de las fechas que trae Windsor que ninguna regla vigente respalda), así el gasto excluido no queda en la base. Si el mapeo no asigna ninguna fila, no borra nada.
 
-**Agregar los conjuntos por barrio de la campaña de tráfico:** insertar una regla por conjunto en `comunidad_meta_origen` (con `campana_nombre`, `adset_nombre` y la comunidad). La regla por conjunto gana sobre la de "toda la campaña".
+**Agregar un conjunto nuevo (por ejemplo, otro barrio):** insertar una regla en `comunidad_meta_origen` con `campana_nombre`, `adset_nombre` y la comunidad. La regla por conjunto gana sobre la de "toda la campaña". Mientras no esté, el gasto de ese conjunto va a la comunidad general y se ve en Consultas.
 
 **Revertir una exclusión:**
 ```sql
