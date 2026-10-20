@@ -74,7 +74,8 @@ export function normalizarFilasWindsor(filas) {
 }
 
 /**
- * mapeo: [{cliente_id, cliente_slug, comunidad_id, comunidad_nombre, campana_nombre, adset_nombre|null, meta_cuenta_id|null}]
+ * mapeo: [{cliente_id, cliente_slug, comunidad_id, comunidad_nombre, campana_nombre, adset_nombre|null, meta_cuenta_id|null, cuenta?: boolean}]
+ * Una regla con cuenta === false no suma al gasto (se informa en `excluidas`). Si falta, cuenta como true.
  * opciones.cuentaNombre: si el CSV no trae account_id, solo se aceptan filas de esa cuenta (sin distinguir mayúsculas).
  */
 export function mapearFilas(filas, mapeo, opciones = {}) {
@@ -91,6 +92,7 @@ export function mapearFilas(filas, mapeo, opciones = {}) {
   const ignoradas = new Map();   // campaña → cantidad de filas
   const desconocidos = new Map(); // "campaña | conjunto" → { filas, inversion }
   const descartadasPorCuenta = new Map();
+  const excluidas = new Map();    // campaña → { filas, inversion } de reglas con cuenta = false (no suman a las métricas)
   const cuentaPedida = opciones.cuentaNombre ? normalizarNombre(opciones.cuentaNombre) : null;
 
   for (const f of filas) {
@@ -112,6 +114,13 @@ export function mapearFilas(filas, mapeo, opciones = {}) {
     else if (cuentaPedida && f.cuentaNombre) cuentaOk = normalizarNombre(f.cuentaNombre) === cuentaPedida;
     if (!cuentaOk) { const k = f.cuentaNombre || f.cuentaId; descartadasPorCuenta.set(k, (descartadasPorCuenta.get(k) ?? 0) + 1); continue; }
 
+    // Regla marcada como "no cuenta" (db/025): el gasto no se suma a las métricas, pero se informa cuánto fue.
+    if (m.cuenta === false) {
+      const x = excluidas.get(f.campana) ?? { filas: 0, inversion: 0 };
+      x.filas++; x.inversion += f.inversion; excluidas.set(f.campana, x);
+      continue;
+    }
+
     const clave = `${m.comunidad_id}|${f.fecha}`;
     const a = acumulado.get(clave) ?? {
       cliente_id: m.cliente_id, cliente_slug: m.cliente_slug, comunidad_id: m.comunidad_id, comunidad_nombre: m.comunidad_nombre,
@@ -129,9 +138,10 @@ export function mapearFilas(filas, mapeo, opciones = {}) {
   for (const [k, d] of desconocidos) {
     advertencias.push(`Conjunto de anuncios SIN comunidad en una campaña mapeada: ${k} (${d.filas} filas, gasto ${d.inversion.toFixed(2)}). No se importó; agregarlo a comunidad_meta_origen.`);
   }
+  for (const [k, x] of excluidas) advertencias.push(`Campaña que NO cuenta para las métricas (regla con cuenta = false): ${k} (${x.filas} filas, gasto ${x.inversion.toFixed(2)}). No se importó.`);
   for (const [k, n] of descartadasPorCuenta) advertencias.push(`Filas descartadas por ser de otra cuenta publicitaria (${k}): ${n}.`);
 
-  return { registros, ignoradas: Object.fromEntries(ignoradas), desconocidos: Object.fromEntries(desconocidos), advertencias };
+  return { registros, ignoradas: Object.fromEntries(ignoradas), desconocidos: Object.fromEntries(desconocidos), excluidas: Object.fromEntries(excluidas), advertencias };
 }
 
 /** Resumen por comunidad para mostrar antes de aplicar. */

@@ -39,3 +39,29 @@ Qué hace con el CSV:
 - Las pruebas del importador: `npm test`.
 
 **Alta de una comunidad nueva en Meta:** insertar una fila en `comunidad_meta_origen` (ver `db/mantenimiento/2026-10-08_cargar_mapeo_meta.sql` como modelo) con el nombre exacto de la campaña y del conjunto.
+
+## Qué campañas cuentan para las métricas (desde db/025)
+Cada regla de `comunidad_meta_origen` tiene una marca **`cuenta`**:
+- `true` (por defecto): el gasto y las conversaciones de esa campaña o conjunto suman en las métricas y en los costos.
+- `false`: el gasto **no suma**, pero queda registrado en **Consultas** ("no cuenta por regla: N filas, $X"). La columna `motivo_exclusion` dice por qué.
+
+**Criterio (decisión del 20/10/2026):** solo cuentan las campañas de **conversión o tráfico a WhatsApp**. Las de interacción o visitas al perfil no, porque distorsionan el costo por conversación y por miembro.
+
+| Cliente | Campaña | Cuenta |
+|---|---|---|
+| Cortado en Jarrito | `TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` | **Sí** (a la comunidad general, hasta conocer sus conjuntos por barrio) |
+| Cortado en Jarrito | `TQN_AON_META_CON_LEADS_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` (Boedo, Palermo, Devoto) | No (decisión del usuario) |
+| Cortado en Jarrito | `TQN_AON_META_CON_INTE_MANUAL_CORTADO_EN_JARRITO` (POST y DARK) | No: su resultado en Meta son visitas al perfil y a la página |
+| Todo un País | `TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS` (La Toma, Quines, San Luis) | Sí |
+
+**Cómo se ve en la práctica:** al sincronizar con Windsor, la función quita de `meta_ads_metrica` lo que ya no corresponde (las filas de las fechas que trae Windsor que ninguna regla vigente respalda), así el gasto excluido no queda en la base. Si el mapeo no asigna ninguna fila, no borra nada.
+
+**Agregar los conjuntos por barrio de la campaña de tráfico:** insertar una regla por conjunto en `comunidad_meta_origen` (con `campana_nombre`, `adset_nombre` y la comunidad). La regla por conjunto gana sobre la de "toda la campaña".
+
+**Revertir una exclusión:**
+```sql
+update crm_comunidades_v2.comunidad_meta_origen set cuenta = true, motivo_exclusion = null where id = 'ID_DE_LA_REGLA';
+select * from crm_comunidades_v2.sincronizar_meta_desde_windsor();
+```
+
+**Límite:** el importador por CSV (`scripts/windsor-importar.mjs`) respeta la marca, pero no borra lo que ya estaba cargado; para corregir el pasado se usa la sincronización con Windsor.

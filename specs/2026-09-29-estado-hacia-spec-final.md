@@ -734,3 +734,12 @@ Se anota en `specs/2026-10-19-funciones-de-ia.md` la idea de sumar IA (Claude AP
 ## 4 tricies quater. PR #47 — Guía de n8n: solución de problemas (2026-10-20)
 
 La guía `docs/how-to/configurar-n8n-contactos-wsp.md` suma la sección "Si algo falla", con lo aprendido al implementar el flujo: cómo leer las respuestas de n8n a Supabase (`net._http_response`) y una tabla de causas y soluciones para los errores 403, 404, 401, `PGRST202` ("Could not find the function"), "No columns found", filas duplicadas y la clave privada de Google. Solo documentación. Es también la primera PR después de reconectar Vercel al repositorio de la organización taquionrs: su despliegue sirve para comprobar que la conexión funciona.
+
+## 4 tricies quinquies. PR #48 — Solo cuentan las campañas de conversión o tráfico a WhatsApp (2026-10-20)
+
+- **Origen:** minuta de la reunión del 20/10 (métricas del panel y campañas). Se acordó que el gasto y los costos reflejen únicamente campañas de conversión o tráfico de Instagram y WhatsApp.
+- **Hallazgo:** la campaña general de Cortado (`…CON_INTE_MANUAL_CORTADO_EN_JARRITO`, conjuntos POST y DARK) tiene como resultado en Meta "visitas al perfil y a la página" y aportaba ~96 % del gasto de Cortado (unos $8,0 M de $8,3 M hasta el 12/10) con 53 conversaciones: inflaba la inversión de Overview y el CPL global ($28.896). La campaña de leads por WhatsApp sumaba ~$297 mil con 227 conversaciones (≈ $1.310 cada una).
+- **Cambio (`db/025_campanas_que_cuentan.sql`):** marca `cuenta` y `motivo_exclusion` en `comunidad_meta_origen`; la sincronización la respeta, registra lo excluido en `windsor_sync_log` (visible en Consultas) y quita de `meta_ads_metrica` lo que ya no corresponde (solo si se asignó algo). Reglas: para Cortado cuenta solo `…CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP` (a la comunidad general hasta conocer sus conjuntos por barrio); INTE y la de leads de Cortado quedan fuera (esta última por decisión del usuario, reversible con un `update`); Todo un País sin cambios.
+- **Efecto a tener en cuenta:** hasta cargar los conjuntos por barrio de la campaña de tráfico, Boedo, Palermo y Villa Devoto muestran inversión en cero y todo el gasto queda en "Cortado en Jarrito (general)".
+- Importador por CSV con la misma regla (3 pruebas nuevas, 64 en total). Se ensaya con rollback y se aplica antes de fusionar.
+- Pendiente de la minuta (no incluido): CPMI, CTR del botón, filtro de fecha en Overview, doble CPA, retención mensual, etiquetas de ManyChat, gasto en vivo, MCP.

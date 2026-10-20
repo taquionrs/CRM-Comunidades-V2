@@ -63,7 +63,7 @@ function leerMapeo(cli, slug) {
   const filtro = slug ? `and c.slug = '${slug}'` : "";
   return ejecutarSql(cli, `
     select c.id as cliente_id, c.slug as cliente_slug, c.meta_cuenta_id, m.id as comunidad_id, m.nombre as comunidad_nombre,
-           o.campana_nombre, o.adset_nombre
+           o.campana_nombre, o.adset_nombre, o.cuenta
     from crm_comunidades_v2.comunidad_meta_origen o
     join crm_comunidades_v2.comunidad m on m.id = o.comunidad_id and m.cliente_id = o.cliente_id
     join crm_comunidades_v2.cliente c on c.id = o.cliente_id
