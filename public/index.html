@@ -383,7 +383,7 @@ function renderOverview(kpis, comunidades){
   const kpiCards = kpiGrid([
     [fmtMoney(k.inversion_total), 'Inversión total Meta'],
     [fmtInt(k.conversaciones_totales), 'Conversaciones totales (Meta)'],
-    [fmtMoney(k.cpl_global), 'CPL global'],
+    [fmtMoney(k.cpl_global), 'CPMI global'],
     [fmtInt(k.clics_unicos_totales), 'Entradas únicas al flow (todas las comunidades)'],
     [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales'],
     [fmtMoney(k.cpme_global), 'CPME global'],
@@ -546,8 +546,8 @@ const COLUMNAS_CONTROL = [
   { id:'conversaciones', grupo:'Meta Ads', etiqueta:'Conversaciones',
     info:'Conversaciones de mensajería iniciadas desde los anuncios, con la ventana de atribución de 7 días de Meta. No es lo mismo que las entradas al flow.',
     celda:(c)=>vEntero(c.conversaciones_meta), total:(t)=>vEntero(t.conv) },
-  { id:'cpl', grupo:'Meta Ads', etiqueta:'CPL',
-    info:'Costo por conversación: Inversión ÷ Conversaciones. Sin dato si no hubo conversaciones en el período.',
+  { id:'cpl', grupo:'Meta Ads', etiqueta:'CPMI',
+    info:'Costo por mensaje iniciado (antes "CPL"): Inversión ÷ Conversaciones iniciadas en Meta. Sin dato si no hubo conversaciones en el período.',
     celda:(c)=>vMoneda(c.cpl), total:(t)=>vMoneda(t.razon(t.inv, t.conv)) },
   { id:'leads', grupo:'Meta Ads', etiqueta:'Clientes potenciales (Meta)',
     info:'Clientes potenciales que Meta informa para la campaña. Es otra métrica distinta de las conversaciones y no todas las campañas la informan.',
@@ -698,7 +698,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
   const ctr = (x) => x.impresiones > 0 ? fmtPct(x.clics / x.impresiones * 100) : '—';
   const cpc = (x) => x.conversaciones > 0 ? fmtMoney(x.inversion / x.conversaciones) : '—';
   const nums = (x) => `<td class="num">${fmtMoney(x.inversion)}</td><td class="num">${fmtInt(x.conversaciones)}</td><td class="num">${cpc(x)}</td><td class="num">${fmtInt(x.clics)}</td><td class="num">${ctr(x)}</td>`;
-  const cabecera = (primera) => `<thead><tr><th scope="col">${primera}</th><th scope="col" class="num">Inversión</th><th scope="col" class="num">Conversaciones</th><th scope="col" class="num">Costo por conversación</th><th scope="col" class="num">Clics</th><th scope="col" class="num">CTR</th></tr></thead>`;
+  const cabecera = (primera) => `<thead><tr><th scope="col">${primera}</th><th scope="col" class="num">Inversión</th><th scope="col" class="num">Conversaciones</th><th scope="col" class="num" title="Costo por mensaje iniciado: inversión ÷ conversaciones">CPMI</th><th scope="col" class="num">Clics</th><th scope="col" class="num">CTR</th></tr></thead>`;
   const aviso = cub.completo ? '' : `<div class="sub" style="color:var(--warn)">${g.total.inversion > 0
     ? `El detalle suma ${fmtMoney(g.total.inversion)} y la tabla de arriba ${fmtMoney(inversionTabla)}: faltan ${fmtMoney(cub.falta)} de días que todavía no tienen detalle por campaña.`
     : `Hay inversión en la tabla de arriba (${fmtMoney(inversionTabla)}) pero todavía no hay detalle por campaña en este período.`} Se completa con el próximo traído de Windsor o con "Traer de Meta ahora" sobre esas fechas.</div>`;
