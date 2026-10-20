@@ -730,3 +730,7 @@ Al probar los avisos de n8n al CRM, la función `registrar_envio_planilla` respo
 ## 4 tricies ter. PR #46 — Roadmap: funciones de IA en el CRM (2026-10-19)
 
 Se anota en `specs/2026-10-19-funciones-de-ia.md` la idea de sumar IA (Claude API u OpenRouter) al CRM. Solo documentación: no se construye nada. Puntos clave: las llamadas salen de una función del servidor (nunca del navegador) con la clave como secreto; cada consulta queda registrada en "Consultas" con tope de gasto; el modelo redacta sobre cifras ya calculadas y no recibe teléfonos, nombres ni textos de personas; primera función propuesta: resumen semanal por comunidad. Decisiones pendientes: proveedor, presupuesto y primera función.
+
+## 4 tricies quater. PR #47 — Guía de n8n: solución de problemas (2026-10-20)
+
+La guía `docs/how-to/configurar-n8n-contactos-wsp.md` suma la sección "Si algo falla", con lo aprendido al implementar el flujo: cómo leer las respuestas de n8n a Supabase (`net._http_response`) y una tabla de causas y soluciones para los errores 403, 404, 401, `PGRST202` ("Could not find the function"), "No columns found", filas duplicadas y la clave privada de Google. Solo documentación. Es también la primera PR después de reconectar Vercel al repositorio de la organización taquionrs: su despliegue sirve para comprobar que la conexión funciona.
