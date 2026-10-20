@@ -274,6 +274,7 @@ function renderSelectorCliente(){
     state.fechaDesde = null;
     state.fechaHasta = null;
     state.canalControl = 'todos';
+    state.metaVivo = null;
     renderAll();
   };
 }
@@ -634,6 +635,27 @@ const ATAJOS_FECHAS = [
 ];
 /* ATAJOS-FECHAS:FIN */
 
+/* META-VIVO:INICIO */
+// "Traer de Meta ahora" (db/027, función meta-en-vivo): valida el rango elegido antes de pedirlo. Sin fechas, se piden los últimos 7 días hasta ayer.
+// Mismas reglas que la función del servidor (supabase/functions/meta-en-vivo/ventanas.mjs): hasta 31 días y sin fechas futuras.
+const MAX_DIAS_META_VIVO = 31;
+function validarRangoMetaVivo(desde, hasta, hoy){
+  const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+  const aMs = (f) => Date.parse(f + 'T00:00:00Z');
+  const aTexto = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const mas = (f, n) => aTexto(aMs(f) + n * 86400000);
+  let d = desde || '', h = hasta || '', porDefecto = false;
+  if (!d && !h) { h = mas(hoy, -1); d = mas(hoy, -7); porDefecto = true; }
+  else if (!d || !h) return { ok: false, error: 'Elegí las dos fechas (desde y hasta), o dejá las dos vacías para traer los últimos 7 días.' };
+  if (!FECHA.test(d) || !FECHA.test(h) || aTexto(aMs(d)) !== d || aTexto(aMs(h)) !== h) return { ok: false, error: 'Las fechas no son válidas.' };
+  if (d > h) return { ok: false, error: 'La fecha desde no puede ser posterior a la fecha hasta.' };
+  if (h > hoy) return { ok: false, error: 'No se pueden pedir fechas futuras: elegí como máximo hoy.' };
+  const dias = (aMs(h) - aMs(d)) / 86400000 + 1;
+  if (dias > MAX_DIAS_META_VIVO) return { ok: false, error: `El máximo es de ${MAX_DIAS_META_VIVO} días por vez (elegiste ${dias}). Traelo en tramos.` };
+  return { ok: true, desde: d, hasta: h, dias, porDefecto };
+}
+/* META-VIVO:FIN */
+
 function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos'){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
@@ -700,7 +722,9 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       <button class="btn ${!desde && !hasta ? 'on' : ''}" id="btnFechasLimpiar" type="button" aria-pressed="${!desde && !hasta ? 'true' : 'false'}">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
+      <button class="btn" id="btnMetaVivo" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, y actualiza el gasto y las conversaciones de Meta">Traer de Meta ahora</button>
     </div>
+    <div class="sub" id="metaVivoEstado" role="status" style="margin:0 0 10px; ${state.metaVivo && state.metaVivo.tipo === 'error' ? 'color:var(--danger)' : state.metaVivo && state.metaVivo.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.metaVivo && state.metaVivo.texto) || '')}</div>
     <div class="card"><h3>Métricas por comunidad</h3>
       <div class="sub">Meta Ads · ManyChat · CRM</div>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion). Solo suman las campañas de conversión o tráfico a WhatsApp definidas en el mapeo: el gasto de las demás queda registrado en Consultas, sin sumarse.</div>
@@ -787,6 +811,34 @@ function wireControl(){
   if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   const consultas = document.getElementById('btnConsultas');
   if (consultas) consultas.onclick = abrirConsultasWindsor;
+  const metaVivo = document.getElementById('btnMetaVivo');
+  if (metaVivo) metaVivo.onclick = traerMetaEnVivo;
+}
+
+/* ================= "Traer de Meta ahora": consulta a Windsor en vivo para el rango elegido (db/027) ================= */
+async function traerMetaEnVivo(){
+  const estado = document.getElementById('metaVivoEstado');
+  const boton = document.getElementById('btnMetaVivo');
+  const v = validarRangoMetaVivo(state.fechaDesde, state.fechaHasta, hoyAR());
+  if (!v.ok) { state.metaVivo = { tipo: 'error', texto: v.error }; if (estado) { estado.textContent = v.error; estado.style.color = 'var(--danger)'; } return; }
+  if (boton) boton.disabled = true;
+  if (estado) { estado.style.color = ''; estado.textContent = `Consultando Windsor del ${fmtDia(v.desde)} al ${fmtDia(v.hasta)}${v.porDefecto ? ' (últimos 7 días, porque no elegiste fechas)' : ''}… puede tardar hasta 1 minuto.`; }
+  try {
+    const { data, error } = await supabase.functions.invoke('meta-en-vivo', { body: { desde: v.desde, hasta: v.hasta } });
+    if (error) {
+      let mensaje = error.message || 'No se pudo consultar a Windsor';
+      try { const j = await error.context.json(); if (j && j.error) mensaje = j.error; } catch (_) { /* sin detalle */ }
+      throw new Error(mensaje);
+    }
+    const r = data || {};
+    state.metaVivo = { tipo: 'ok', texto: `Listo: Windsor devolvió ${fmtInt(r.filas_windsor)} filas del ${fmtDia(r.desde)} al ${fmtDia(r.hasta)} y se actualizaron ${fmtInt(r.registros_escritos)} registros` +
+      (r.filas_excluidas ? ` · no cuenta por regla: ${fmtInt(r.filas_excluidas)} filas, ${fmtMoney(r.gasto_excluido)}` : '') +
+      (r.registros_borrados ? ` · se quitaron ${fmtInt(r.registros_borrados)} registros que ya no corresponden` : '') +
+      (r.filas_sin_comunidad ? ` · atención: ${fmtInt(r.filas_sin_comunidad)} filas de una campaña mapeada no tienen comunidad (${fmtMoney(r.gasto_sin_comunidad)})` : '') + '.' };
+  } catch (err) {
+    state.metaVivo = { tipo: 'error', texto: 'No se pudo traer de Meta: ' + err.message };
+  }
+  renderAll();
 }
 
 /* ================= Botón "Consultas": trazabilidad de Windsor (pantalla completa) ================= */
