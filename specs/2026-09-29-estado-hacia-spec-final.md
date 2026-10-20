@@ -753,3 +753,7 @@ La guía `docs/how-to/configurar-n8n-contactos-wsp.md` suma la sección "Si algo
 - **Excepción de seguridad (hasta el SSO):** la función se despliega sin verificación de token; la acotan el tope de 31 días y la pausa de 45 s. No devuelve datos de personas.
 - Sirve también para traer el tramo viejo que falta (14/08 al 12/09) sin entrar a Windsor.
 - Pruebas: 7 nuevas (71 en total). Guía: `docs/how-to/meta-en-vivo.md`. **Pendiente:** ensayar y aplicar db/027, cargar el secreto `WINDSOR_API_KEY` y desplegar la función.
+
+## 4 tricies octies. PR #51 — La limpieza del gasto que no cuenta también corre si todo el gasto del período es excluido (2026-10-20)
+
+Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 333 filas, 50 de ellas ($3.873.506,76) de la campaña INTE (que no cuenta), y no quedó ninguna fila asignada: la protección de db/025 y db/027 ("no borrar nada si no se asignó ninguna fila") frenó la limpieza y ese gasto siguió en `meta_ads_metrica`, en la comunidad general. `db/028_limpiar_gasto_excluido.sql` cambia la condición: la limpieza corre si alguna fila coincidió con **alguna regla** (cuente o no). Un mapeo vacío o roto sigue sin borrar nada. Se ensaya con rollback y se aplica antes de fusionar; después se vuelve a traer el mismo rango.
