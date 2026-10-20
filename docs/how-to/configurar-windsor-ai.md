@@ -65,3 +65,14 @@ select * from crm_comunidades_v2.sincronizar_meta_desde_windsor();
 ```
 
 **Límite:** el importador por CSV (`scripts/windsor-importar.mjs`) respeta la marca, pero no borra lo que ya estaba cargado; para corregir el pasado se usa la sincronización con Windsor.
+
+## Elegir las campañas desde el panel (desde db/026)
+En **Control_Comunidades → botón "Campañas"** se abre una pantalla completa con **todas las campañas y conjuntos que llegan de Windsor** (de cualquier cliente de la cuenta publicitaria), con su gasto, conversaciones y clics de los últimos 30 a 365 días.
+
+- **Estados:** *Cuenta* (suma en una comunidad), *No cuenta* (conserva la regla; su gasto se registra en Consultas pero no suma) y *Sin asignar* (no tiene regla: **no suma**). **Una campaña nueva aparece "Sin asignar"**, así nada nuevo distorsiona los números sin que lo decidas.
+- **Destino:** para cada campaña, o para cada uno de sus conjuntos (botón ▸ para desplegarlos), se elige "Sin asignar", "No cuenta" o "Cuenta en" una comunidad de cualquier cliente. La elección en la campaña se aplica a toda la campaña, y los conjuntos con regla propia la conservan.
+- **Recalcular ahora:** aplica los cambios ya mismo a las métricas (si no, se aplican con la actualización diaria de Windsor). Se puede usar una vez cada 10 segundos.
+- **Filtros:** por estado, cliente y un buscador por nombre de campaña o conjunto.
+- **Historial:** cada cambio se registra con la fecha y el nombre que se escribe en "Cambios hechos por" (campo de la parte superior), y aparece en **Consultas** con el tipo "Campañas". Para deshacer un cambio, volver a elegir el destino anterior.
+
+**Seguridad (excepción hasta el SSO):** esta sección funciona **sin clave** por decisión del 20/10/2026. Cualquiera con el enlace del panel puede ver el gasto de todas las campañas de la cuenta (incluidas las de otros clientes) y cambiar qué cuenta. Con el SSO pasa a exigir usuario.

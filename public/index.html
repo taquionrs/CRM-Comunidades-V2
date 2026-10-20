@@ -783,6 +783,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
         })()}</select></label>
       <button class="btn ${!desde && !hasta ? 'on' : ''}" id="btnFechasLimpiar" type="button" aria-pressed="${!desde && !hasta ? 'true' : 'false'}">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
+      <button class="btn" id="btnCampanas" type="button" title="Elegir qué campañas de Meta cuentan para las métricas">Campañas</button>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
       <button class="btn" id="btnMetaVivo" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, y actualiza el gasto y las conversaciones de Meta">Traer de Meta ahora</button>
     </div>
@@ -874,6 +875,8 @@ function wireControl(){
   if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   const consultas = document.getElementById('btnConsultas');
   if (consultas) consultas.onclick = abrirConsultasWindsor;
+  const campanasBtn = document.getElementById('btnCampanas');
+  if (campanasBtn) campanasBtn.onclick = abrirCampanas;
   const metaVivo = document.getElementById('btnMetaVivo');
   if (metaVivo) metaVivo.onclick = traerMetaEnVivo;
 }
@@ -904,12 +907,211 @@ async function traerMetaEnVivo(){
   renderAll();
 }
 
+/* CAMPANAS:INICIO */
+// Sección "Campañas" (db/026): todas las campañas y conjuntos que llegan de Windsor, y desde acá se elige cuáles cuentan para las métricas.
+// Una campaña nueva aparece "Sin asignar" y NO suma hasta que se la clasifica. Funciones puras (se prueban en tests/panel-campanas.test.mjs).
+const estadoCampana = (f) => f.regla_id == null ? 'sin_asignar' : (f.cuenta ? 'cuenta' : 'no_cuenta');
+const ETIQUETA_ESTADO_CAMPANA = { cuenta: 'Cuenta', no_cuenta: 'No cuenta', sin_asignar: 'Sin asignar', mixto: 'Mixto' };
+const normTexto = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+// Agrupa las filas (una por campaña y conjunto) por campaña. Un grupo es "mixto" si sus conjuntos no comparten estado y destino.
+function agruparCampanas(filas){
+  const mapa = new Map();
+  for (const f of filas) {
+    if (!mapa.has(f.campana)) mapa.set(f.campana, { campana: f.campana, filas: [], gasto: 0, conversaciones: 0, clics: 0, impresiones: 0, desde: f.desde, hasta: f.hasta });
+    const g = mapa.get(f.campana);
+    g.filas.push(f);
+    g.gasto += Number(f.gasto) || 0; g.conversaciones += Number(f.conversaciones) || 0; g.clics += Number(f.clics) || 0; g.impresiones += Number(f.impresiones) || 0;
+    if (f.desde && (!g.desde || f.desde < g.desde)) g.desde = f.desde;
+    if (f.hasta && (!g.hasta || f.hasta > g.hasta)) g.hasta = f.hasta;
+  }
+  const grupos = [...mapa.values()];
+  for (const g of grupos) {
+    const claves = new Set(g.filas.map((f) => estadoCampana(f) + '|' + (f.comunidad_id || '')));
+    g.estado = claves.size === 1 ? estadoCampana(g.filas[0]) : 'mixto';
+    g.gasto = Math.round(g.gasto * 100) / 100;
+  }
+  return grupos.sort((a, b) => b.gasto - a.gasto || a.campana.localeCompare(b.campana));
+}
+// Totales por estado, contados por conjunto (cada fila es un conjunto de anuncios).
+function resumenCampanas(filas){
+  const r = { cuenta: { n: 0, gasto: 0 }, no_cuenta: { n: 0, gasto: 0 }, sin_asignar: { n: 0, gasto: 0 }, total: { n: 0, gasto: 0 } };
+  for (const f of filas) {
+    const e = r[estadoCampana(f)]; const g = Number(f.gasto) || 0;
+    e.n++; e.gasto += g; r.total.n++; r.total.gasto += g;
+  }
+  for (const k of Object.keys(r)) r[k].gasto = Math.round(r[k].gasto * 100) / 100;
+  return r;
+}
+// Filtros: estado ('todos' | cuenta | no_cuenta | sin_asignar), cliente ('' | 'sin' | id de cliente) y texto (campaña o conjunto).
+function filtrarCampanas(grupos, { estado = 'todos', cliente = '', texto = '' } = {}){
+  const q = normTexto(texto);
+  const cumple = (f, g) => {
+    if (estado !== 'todos' && estadoCampana(f) !== estado) return false;
+    if (cliente === 'sin' && f.regla_id != null) return false;
+    if (cliente && cliente !== 'sin' && f.cliente_id !== cliente) return false;
+    if (q && !normTexto(g.campana).includes(q) && !normTexto(f.adset).includes(q)) return false;
+    return true;
+  };
+  return grupos.map((g) => ({ ...g, filas: g.filas.filter((f) => cumple(f, g)) })).filter((g) => g.filas.length);
+}
+// Valor del selector de destino de una fila o grupo, y su traducción a la acción que se guarda.
+const valorDestinoCampana = (f) => { const e = estadoCampana(f); return e === 'cuenta' ? 'c:' + f.comunidad_id : e === 'no_cuenta' ? 'no' : 'sin'; };
+function interpretarDestinoCampana(valor){
+  if (valor === 'sin') return { accion: 'sin_asignar', comunidad: null };
+  if (valor === 'no') return { accion: 'no_cuenta', comunidad: null };
+  if (typeof valor === 'string' && valor.startsWith('c:') && valor.length > 2) return { accion: 'cuenta', comunidad: valor.slice(2) };
+  return null;
+}
+/* CAMPANAS:FIN */
+
+/* ================= Botón "Campañas": qué campañas de Meta cuentan (pantalla completa) ================= */
+// EXCEPCIÓN (decisión del usuario, 2026-10-20): sin clave y antes del SSO (db/026). Cada cambio queda en el historial con el nombre de quien lo hizo.
+const CLAVE_NOMBRE_CAMPANAS = 'crm_v2_campanas_nombre';
+function cerrarCampanas(){
+  const m = document.getElementById('modalCampanas');
+  if (m) m.remove();
+  document.body.style.overflow = '';
+  if (window.__campanasEsc) { document.removeEventListener('keydown', window.__campanasEsc); window.__campanasEsc = null; }
+}
+async function abrirCampanas(){
+  cerrarCampanas();
+  const clientes = state.clientes || [];
+  let comunidades = [];
+  try {
+    const { data, error } = await supabase.from('comunidad').select('id,nombre,cliente_id').order('nombre');
+    if (error) throw error;
+    comunidades = data || [];
+  } catch (err) { alert('No se pudieron leer las comunidades: ' + err.message); return; }
+  let por = '';
+  try { por = localStorage.getItem(CLAVE_NOMBRE_CAMPANAS) || ''; } catch (_) { /* sin almacenamiento */ }
+
+  const cont = document.createElement('div');
+  cont.id = 'modalCampanas'; cont.className = 'modal-full';
+  cont.setAttribute('role', 'dialog'); cont.setAttribute('aria-modal', 'true'); cont.setAttribute('aria-label', 'Campañas de Meta');
+  cont.innerHTML = `<div class="modal-full-head">
+      <div><h2>Campañas de Meta</h2><div class="sub">Elegí cuáles cuentan para las métricas. Una campaña nueva aparece "Sin asignar" y no suma hasta que la clasifiques.</div></div>
+      <div class="modal-full-acciones">
+        <label style="display:flex; flex-direction:column; gap:2px; font-size:10.5px; color:var(--text-faint)">Cambios hechos por<input type="text" id="cpPor" value="${esc(por)}" placeholder="Tu nombre" style="width:150px; background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:6px 8px; border-radius:var(--r-in)"></label>
+        <button type="button" class="btn" id="cpRecalcular" title="Recalcula ya las métricas de Meta con lo que elegiste (si no, se recalcula sola con la actualización diaria)">Recalcular ahora</button>
+        <button type="button" class="btn" id="cpActualizar">Actualizar</button>
+        <button type="button" class="btn" id="btnCampanasCerrar">Cerrar ✕</button>
+      </div>
+    </div>
+    <div class="modal-full-cuerpo" id="cuerpoCampanas">Cargando…</div>`;
+  document.body.appendChild(cont);
+  document.body.style.overflow = 'hidden';
+
+  const el = (id) => document.getElementById(id);
+  let filas = [], dias = 90, estado = 'todos', cliente = '', texto = '', aviso = '', hayCambios = false;
+  const abiertas = new Set();
+  const nombrePor = () => { const v = el('cpPor') ? el('cpPor').value.trim() : ''; try { localStorage.setItem(CLAVE_NOMBRE_CAMPANAS, v); } catch (_) { /* sin almacenamiento */ } return v; };
+
+  const opcionesDestino = (valorActual, conMixto) => {
+    const grupos = clientes.map((c) => {
+      const cs = comunidades.filter((x) => x.cliente_id === c.id);
+      return cs.length ? `<optgroup label="Cuenta en · ${esc(c.nombre)}">${cs.map((x) => `<option value="c:${x.id}" ${valorActual === 'c:' + x.id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</optgroup>` : '';
+    }).join('');
+    return (conMixto ? '<option value="" selected disabled>Mixto: ver conjuntos</option>' : '') +
+      `<option value="sin" ${valorActual === 'sin' ? 'selected' : ''}>Sin asignar (no suma)</option>` +
+      `<option value="no" ${valorActual === 'no' ? 'selected' : ''}>No cuenta (no suma)</option>` + grupos;
+  };
+  const pastilla = (e) => `<span class="est ${e === 'cuenta' ? 'ok' : e === 'no_cuenta' ? 'mal' : 'medio'}">${esc(ETIQUETA_ESTADO_CAMPANA[e])}</span>`;
+
+  const pintar = () => {
+    const cuerpo = el('cuerpoCampanas'); if (!cuerpo) return;
+    const res = resumenCampanas(filas);
+    const grupos = filtrarCampanas(agruparCampanas(filas), { estado, cliente, texto });
+    const tarjeta = (t, x) => `<div class="kpi"><div class="v" style="font-size:16px">${fmtMoney(x.gasto)}</div><div class="l">${esc(t)}</div><div class="sub" style="margin-top:4px">${fmtInt(x.n)} conjuntos</div></div>`;
+    const chips = [['todos', 'Todas'], ['cuenta', 'Cuentan'], ['no_cuenta', 'No cuentan'], ['sin_asignar', 'Sin asignar']].map(([k, t]) => {
+      const n = k === 'todos' ? res.total.n : res[k].n;
+      return `<button type="button" class="chip ${estado === k ? 'on' : ''}" data-cp-estado="${k}">${t} <span class="n">${n}</span></button>`;
+    }).join('');
+    const filasHtml = grupos.map((g) => {
+      const conjuntos = g.filas.filter((f) => f.adset);
+      const unico = g.filas.length === 1 && !g.filas[0].adset;
+      const abierto = abiertas.has(g.campana);
+      const valorGrupo = g.estado === 'mixto' ? '' : valorDestinoCampana(g.filas[0]);
+      const fila = `<tr style="background:var(--panel-raised)">
+        <td>${conjuntos.length ? `<button type="button" class="btn btn-mini" data-cp-abrir="${esc(g.campana)}" aria-expanded="${abierto}">${abierto ? '▾' : '▸'} ${conjuntos.length}</button>` : ''}</td>
+        <td style="font-weight:700; word-break:break-word">${esc(g.campana)}<div class="sub" style="margin:2px 0 0; font-weight:400">${conjuntos.length ? conjuntos.length + ' conjuntos' : 'sin conjuntos'} · ${esc(fmtDia(g.desde))} → ${esc(fmtDia(g.hasta))}</div></td>
+        <td class="mono">${fmtMoney(g.gasto)}</td><td class="mono">${fmtInt(g.conversaciones)}</td><td class="mono">${fmtInt(g.clics)}</td>
+        <td>${pastilla(g.estado)}</td>
+        <td><select class="cp-destino" data-campana="${esc(g.campana)}" data-adset="" title="${conjuntos.length ? 'Aplica a toda la campaña; los conjuntos con regla propia la conservan' : ''}">${opcionesDestino(valorGrupo, g.estado === 'mixto')}</select></td>
+      </tr>`;
+      const hijos = abierto ? conjuntos.map((f) => `<tr>
+        <td></td><td style="padding-left:26px; word-break:break-word; color:var(--text-muted)">${esc(f.adset)}</td>
+        <td class="mono">${fmtMoney(f.gasto)}</td><td class="mono">${fmtInt(f.conversaciones)}</td><td class="mono">${fmtInt(f.clics)}</td>
+        <td>${pastilla(estadoCampana(f))}${f.alcance === 'campana' ? '<div class="sub" style="margin:2px 0 0">por la campaña</div>' : ''}${f.motivo && !f.cuenta ? `<div class="sub" style="margin:2px 0 0" title="${esc(f.motivo)}">${esc(f.motivo.slice(0, 60))}${f.motivo.length > 60 ? '…' : ''}</div>` : ''}</td>
+        <td><select class="cp-destino" data-campana="${esc(f.campana)}" data-adset="${esc(f.adset)}">${opcionesDestino(valorDestinoCampana(f), false)}</select></td>
+      </tr>`).join('') : '';
+      return fila + hijos;
+    }).join('');
+
+    cuerpo.innerHTML = `
+      <div class="kpi-grid" style="margin-bottom:12px">${tarjeta('Cuentan', res.cuenta)}${tarjeta('No cuentan', res.no_cuenta)}${tarjeta('Sin asignar', res.sin_asignar)}${tarjeta('Total de los últimos ' + dias + ' días', res.total)}</div>
+      ${aviso ? `<div class="sub" style="color:${hayCambios ? 'var(--warn)' : '#5fd39a'}; margin-bottom:10px">${esc(aviso)}</div>` : ''}
+      <div class="filters" style="align-items:flex-end; margin-bottom:10px">
+        <label>Período<select id="cpDias">${[30, 60, 90, 180, 365].map((d) => `<option value="${d}" ${d === dias ? 'selected' : ''}>Últimos ${d} días</option>`).join('')}</select></label>
+        <label>Cliente<select id="cpCliente"><option value="">Todos</option><option value="sin" ${cliente === 'sin' ? 'selected' : ''}>Sin asignar</option>${clientes.map((c) => `<option value="${c.id}" ${cliente === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('')}</select></label>
+        <label>Buscar<input type="search" id="cpTexto" value="${esc(texto)}" placeholder="Campaña o conjunto" style="width:240px"></label>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px">${chips}</div>
+      <div class="tbl-wrap"><table><thead><tr><th></th><th>Campaña / conjunto</th><th>Gasto</th><th>Conversaciones</th><th>Clics</th><th>Estado</th><th>Destino</th></tr></thead>
+        <tbody>${filasHtml || '<tr class="empty-row"><td colspan="7">No hay campañas para este filtro.</td></tr>'}</tbody></table></div>
+      <div class="sub" style="margin-top:10px">Lo que no tiene regla (Sin asignar) no suma. "No cuenta" conserva la regla y su gasto se registra en Consultas. Cada cambio queda en el historial con tu nombre.</div>`;
+
+    cuerpo.querySelectorAll('[data-cp-estado]').forEach((b) => { b.onclick = () => { estado = b.dataset.cpEstado; pintar(); }; });
+    cuerpo.querySelectorAll('[data-cp-abrir]').forEach((b) => { b.onclick = () => { const k = b.dataset.cpAbrir; if (abiertas.has(k)) abiertas.delete(k); else abiertas.add(k); pintar(); }; });
+    el('cpDias').onchange = () => { dias = Number(el('cpDias').value); cargar(); };
+    el('cpCliente').onchange = () => { cliente = el('cpCliente').value; pintar(); };
+    el('cpTexto').oninput = () => { texto = el('cpTexto').value; const pos = el('cpTexto').selectionStart; pintar(); const t = el('cpTexto'); t.focus(); t.setSelectionRange(pos, pos); };
+    cuerpo.querySelectorAll('.cp-destino').forEach((s) => { s.onchange = () => guardar(s); });
+  };
+
+  const cargar = async () => {
+    const cuerpo = el('cuerpoCampanas'); if (!cuerpo) return;
+    try {
+      const { data, error } = await supabase.rpc('campanas_windsor', { p_dias: dias });
+      if (error) throw error;
+      filas = data || []; pintar();
+    } catch (err) { cuerpo.innerHTML = `<span style="color:var(--danger)">No se pudieron cargar las campañas: ${esc(err.message)}</span>`; }
+  };
+  const guardar = async (sel) => {
+    const accion = interpretarDestinoCampana(sel.value);
+    if (!accion) return;
+    sel.disabled = true;
+    const { error } = await supabase.rpc('guardar_regla_campana', {
+      p_campana: sel.dataset.campana, p_adset: sel.dataset.adset || null, p_accion: accion.accion, p_comunidad: accion.comunidad, p_motivo: null, p_por: nombrePor() || null,
+    });
+    if (error) { aviso = 'No se pudo guardar: ' + error.message; hayCambios = false; await cargar(); return; }
+    hayCambios = true; aviso = 'Guardado. Tocá "Recalcular ahora" para ver el efecto en las métricas, o se aplica solo con la actualización diaria.';
+    await cargar();
+  };
+
+  el('btnCampanasCerrar').onclick = cerrarCampanas;
+  el('cpActualizar').onclick = cargar;
+  el('cpRecalcular').onclick = async () => {
+    el('cpRecalcular').disabled = true; aviso = 'Recalculando…'; hayCambios = false; pintar();
+    const { data, error } = await supabase.rpc('recalcular_meta_windsor', { p_por: nombrePor() || null });
+    el('cpRecalcular').disabled = false;
+    if (error) { aviso = 'No se pudo recalcular: ' + error.message; hayCambios = true; return pintar(); }
+    const r = (data && data[0]) || {};
+    aviso = `Listo: se recalcularon las métricas de Meta (${fmtInt(r.registros_escritos)} registros). Los cambios ya se ven en Control_Comunidades y Overview.`;
+    hayCambios = false; await cargar();
+  };
+  window.__campanasEsc = (ev) => { if (ev.key === 'Escape') cerrarCampanas(); };
+  document.addEventListener('keydown', window.__campanasEsc);
+  await cargar();
+}
+
 /* ================= Botón "Consultas": trazabilidad de Windsor (pantalla completa) ================= */
 const TIPOS_CONSULTA = {
   entrega:    { etiqueta: 'Entrega de Windsor', ayuda: 'Windsor escribió o reemplazó filas en la base' },
   conversion: { etiqueta: 'Conversión',         ayuda: 'Se pasó lo recibido a las métricas por comunidad' },
   programada: { etiqueta: 'Programada',         ayuda: 'Trabajo diario automático (pg_cron)' },
   csv:        { etiqueta: 'CSV manual',         ayuda: 'Importación manual desde un archivo' },
+  campanas:   { etiqueta: 'Campañas',          ayuda: 'Cambios al mapeo de campañas hechos desde el panel' },
   carga_miembros: { etiqueta: 'Carga de miembros', ayuda: 'Se cargó la lista de miembros de un grupo' },
 };
 const fmtFechaAR = (d) => d ? new Date(d).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';

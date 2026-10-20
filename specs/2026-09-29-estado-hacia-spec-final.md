@@ -744,6 +744,14 @@ La guía `docs/how-to/configurar-n8n-contactos-wsp.md` suma la sección "Si algo
 - Importador por CSV con la misma regla (3 pruebas nuevas, 64 en total). Se ensaya con rollback y se aplica antes de fusionar.
 - Pendiente de la minuta (no incluido): CPMI, CTR del botón, filtro de fecha en Overview, doble CPA, retención mensual, etiquetas de ManyChat, gasto en vivo, MCP.
 
+## 4 tricies sexies. PR #49 — Sección "Campañas": elegir desde el panel qué campañas de Meta cuentan (2026-10-20)
+
+- **Pedido:** poder elegir desde el CRM qué campañas se ven y se contabilizan, y traer campañas nuevas por cuenta propia, en lugar de depender de SQL cada vez que sale una.
+- **Qué es:** botón **"Campañas"** en Control_Comunidades que abre un modal de pantalla completa con todas las campañas y conjuntos que llegan de Windsor (de cualquier cliente de la cuenta publicitaria), con gasto, conversaciones y clics, y su estado: *Cuenta*, *No cuenta* o *Sin asignar*. Para cada campaña o conjunto se elige el destino (sin asignar, no cuenta, o cuenta en una comunidad). Filtros por estado, cliente y texto; "Recalcular ahora" para ver el efecto al instante. **Una campaña nueva queda "Sin asignar" y no suma** hasta que se la clasifica (decisión del usuario).
+- **Base (`db/026_seccion_campanas.sql`, requiere db/025):** funciones `campanas_windsor`, `guardar_regla_campana` y `recalcular_meta_windsor`, y la tabla `campania_regla_historial`; `consultas_windsor` suma el tipo "Campañas". Cada cambio queda registrado con el nombre de quien lo hizo.
+- **Excepción de seguridad (decisión del usuario, 20/10):** sin clave y antes del SSO. Cualquiera con el enlace puede ver el gasto de todas las campañas de la cuenta (incluidas las de otros clientes) y cambiar qué cuenta; compensación: historial de cambios con nombre. Con el SSO pasa a exigir usuario.
+- Pruebas: 7 nuevas (71 en total). Se ensaya con rollback y se aplica antes de fusionar; **requiere que db/025 ya esté aplicada**.
+
 ## 4 tricies septies. PR #50 — Meta en vivo: traer de Windsor a pedido y para el rango elegido (2026-10-20)
 
 - **Pedido:** un enfoque en vivo: que Windsor traiga los datos de Meta según el rango de fechas que se elija (punto "gasto en vivo" de la minuta del 20/10).
