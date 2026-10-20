@@ -331,6 +331,12 @@ async function loadComunidadesRango(desde, hasta, canal){
   if (error) throw error;
   return data || [];
 }
+// Desglose por campaña de lo que cuenta (db/029). Si falla, devuelve null: la tabla de arriba se muestra igual.
+async function loadDesgloseCampanas(desde, hasta, comunidad){
+  const { data, error } = await supabase.rpc('desglose_campanas', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_comunidad: comunidad });
+  if (error) { console.warn('desglose_campanas:', error.message); return null; }
+  return data || [];
+}
 async function loadComunidades(){
   const { data, error } = await supabase.from('comunidad').select('*').eq('cliente_id', state.clienteId).order('nombre');
   if (error) throw error;
@@ -656,7 +662,63 @@ function validarRangoMetaVivo(desde, hasta, hoy){
 }
 /* META-VIVO:FIN */
 
-function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos'){
+/* DESGLOSE:INICIO */
+// Desglose de campañas contempladas (db/029) debajo de la tabla de Control_Comunidades. Solo lo que cuenta, igual que la tabla de arriba.
+// Filas de la base: una por medio · campaña · conjunto · comunidad. Se agrupa por medio → campaña, con los conjuntos adentro.
+function agruparDesglose(filas){
+  const n = (v) => Number(v) || 0;
+  const suma = (a, f) => ({ inversion: a.inversion + n(f.inversion), conversaciones: a.conversaciones + n(f.conversaciones), clics: a.clics + n(f.clics), impresiones: a.impresiones + n(f.impresiones) });
+  const cero = () => ({ inversion: 0, conversaciones: 0, clics: 0, impresiones: 0 });
+  const medios = new Map();
+  for (const f of filas || []) {
+    const medio = f.medio || 'Sin medio';
+    if (!medios.has(medio)) medios.set(medio, { medio, ...cero(), campanas: new Map() });
+    const m = medios.get(medio);
+    Object.assign(m, suma(m, f));
+    if (!m.campanas.has(f.campana)) m.campanas.set(f.campana, { campana: f.campana, ...cero(), conjuntos: [] });
+    const c = m.campanas.get(f.campana);
+    Object.assign(c, suma(c, f));
+    c.conjuntos.push({ adset: f.adset || '', comunidad: f.comunidad_nombre || '', ...suma(cero(), f) });
+  }
+  const porGasto = (a, b) => b.inversion - a.inversion;
+  const lista = [...medios.values()].map(m => ({ ...m, campanas: [...m.campanas.values()].map(c => ({ ...c, conjuntos: c.conjuntos.sort(porGasto) })).sort(porGasto) })).sort(porGasto);
+  return { medios: lista, total: lista.reduce((a, m) => suma(a, m), cero()) };
+}
+// ¿El detalle alcanza para explicar la inversión de la tabla? Diferencia de hasta $1 por redondeos. Sin detalle y con inversión: faltan días por traer.
+function cubreDesglose(totalDetalle, inversionTabla){
+  const dif = Math.round(((Number(inversionTabla) || 0) - (Number(totalDetalle) || 0)) * 100) / 100;
+  return { completo: Math.abs(dif) <= 1, falta: dif };
+}
+/* DESGLOSE:FIN */
+
+function renderDesglose(filas, inversionTabla, filtroNombre){
+  if (filas == null) return `<div class="card"><h3>Desglose de campañas contempladas</h3><div class="sub">No se pudo cargar el desglose. La tabla de arriba no cambia.</div></div>`;
+  const g = agruparDesglose(filas);
+  const cub = cubreDesglose(g.total.inversion, inversionTabla);
+  const ctr = (x) => x.impresiones > 0 ? fmtPct(x.clics / x.impresiones * 100) : '—';
+  const cpc = (x) => x.conversaciones > 0 ? fmtMoney(x.inversion / x.conversaciones) : '—';
+  const nums = (x) => `<td class="num">${fmtMoney(x.inversion)}</td><td class="num">${fmtInt(x.conversaciones)}</td><td class="num">${cpc(x)}</td><td class="num">${fmtInt(x.clics)}</td><td class="num">${ctr(x)}</td>`;
+  const cabecera = (primera) => `<thead><tr><th scope="col">${primera}</th><th scope="col" class="num">Inversión</th><th scope="col" class="num">Conversaciones</th><th scope="col" class="num">Costo por conversación</th><th scope="col" class="num">Clics</th><th scope="col" class="num">CTR</th></tr></thead>`;
+  const aviso = cub.completo ? '' : `<div class="sub" style="color:var(--warn)">${g.total.inversion > 0
+    ? `El detalle suma ${fmtMoney(g.total.inversion)} y la tabla de arriba ${fmtMoney(inversionTabla)}: faltan ${fmtMoney(cub.falta)} de días que todavía no tienen detalle por campaña.`
+    : `Hay inversión en la tabla de arriba (${fmtMoney(inversionTabla)}) pero todavía no hay detalle por campaña en este período.`} Se completa con el próximo traído de Windsor o con "Traer de Meta ahora" sobre esas fechas.</div>`;
+  const cuerpo = g.medios.length ? g.medios.map(m => `<div class="desglose-medio">
+      <div class="sub" style="margin:12px 0 6px"><b>${esc(m.medio)}</b> · ${fmtMoney(m.inversion)} · ${fmtInt(m.conversaciones)} conversaciones</div>
+      ${m.campanas.map(c => `<details class="desglose-campana" style="margin:0 0 8px">
+        <summary style="cursor:pointer"><b>${esc(c.campana)}</b> — ${fmtMoney(c.inversion)} · ${fmtInt(c.conversaciones)} conversaciones · ${c.conjuntos.length} ${c.conjuntos.length === 1 ? 'conjunto' : 'conjuntos'}</summary>
+        <div class="tbl-wrap"><table class="tabla-metricas">${cabecera('Conjunto · comunidad')}<tbody>
+          ${c.conjuntos.map(j => `<tr><th scope="row" class="td-com">${esc(j.adset || 'Toda la campaña')} <small style="color:var(--text-faint)">· ${esc(j.comunidad)}</small></th>${nums(j)}</tr>`).join('')}
+          <tr class="totales"><th scope="row" class="td-com">Total de la campaña</th>${nums(c)}</tr>
+        </tbody></table></div></details>`).join('')}
+    </div>`).join('') : `<div class="sub">Sin campañas contempladas con detalle en este período.</div>`;
+  return `<div class="card"><h3>Desglose de campañas contempladas</h3>
+      <div class="sub">Solo las campañas que suman en la tabla de arriba, agrupadas por medio${filtroNombre ? ` · comunidad: ${esc(filtroNombre)}` : ''}. Hoy: Meta Ads; si se suman otros medios (por ejemplo Google Ads) aparecen acá. Respeta el período elegido.</div>
+      ${aviso}${cuerpo}
+      ${g.medios.length ? `<div class="sub" style="margin-top:8px"><b>Total del desglose</b>: ${fmtMoney(g.total.inversion)} · ${fmtInt(g.total.conversaciones)} conversaciones · ${fmtInt(g.total.clics)} clics</div>` : ''}
+    </div>`;
+}
+
+function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
@@ -731,7 +793,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       ${canalActivo ? `<div class="sub" style="color:var(--warn)">Mostrando solo el flow de ${canal === 'instagram' ? 'Instagram' : 'WhatsApp'}: se dividen las entradas, los triggers y los clics en "Me sumo". El resto de las columnas (Meta, miembros y costos) no se divide por canal y aparece como "No se divide".</div>` : ''}
       ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
       <div class="tbl-wrap"><table class="tabla-metricas"><caption class="sr-only">Métricas por comunidad, agrupadas por fuente: ${tramosDeGrupos(visibles).map(x => x.grupo).join(', ')}</caption><thead><tr class="fila-grupos"><th rowspan="2" scope="col" class="th-com">Comunidad</th>${encabezadoGrupos}</tr><tr>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
-    </div>`;
+    </div>
+    ${renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}`;
 }
 
 // Panel "Columnas": mostrar/ocultar, reordenar con ↑ ↓ o arrastrando, restablecer.
@@ -1645,8 +1708,11 @@ async function renderAll(){
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
-      const comunidades = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl);
-      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl);
+      const [comunidades, desglose] = await Promise.all([
+        loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
+        loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null),
+      ]);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose);
       wireControl();
 
     } else if (state.tab === 'atribucion') {
