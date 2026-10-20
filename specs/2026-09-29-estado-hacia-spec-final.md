@@ -743,3 +743,13 @@ La guía `docs/how-to/configurar-n8n-contactos-wsp.md` suma la sección "Si algo
 - **Efecto a tener en cuenta:** el historial de Cortado de antes de la campaña de tráfico queda con inversión en cero (la de leads y la INTE ya no cuentan); su gasto sigue registrado en Consultas.
 - Importador por CSV con la misma regla (3 pruebas nuevas, 64 en total). Se ensaya con rollback y se aplica antes de fusionar.
 - Pendiente de la minuta (no incluido): CPMI, CTR del botón, filtro de fecha en Overview, doble CPA, retención mensual, etiquetas de ManyChat, gasto en vivo, MCP.
+
+## 4 tricies septies. PR #50 — Meta en vivo: traer de Windsor a pedido y para el rango elegido (2026-10-20)
+
+- **Pedido:** un enfoque en vivo: que Windsor traiga los datos de Meta según el rango de fechas que se elija (punto "gasto en vivo" de la minuta del 20/10).
+- **Decisiones del usuario:** guardar lo que trae en el CRM (así Overview, Control_Comunidades y los costos usan los datos nuevos sin cambiar nada más) y cargar él mismo la clave de Windsor como secreto de Supabase (la clave nunca va en el panel, el repositorio ni el chat).
+- **Qué es:** botón **"Traer de Meta ahora"** en Control_Comunidades. Valida el rango (hasta 31 días, sin fechas futuras; sin fechas pide los últimos 7 días hasta ayer), llama a la función del servidor `meta-en-vivo`, que consulta a Windsor en ventanas de 14 días en paralelo y le pasa las filas a la base. Muestra un resumen y recarga el panel. No es instantáneo: tarda entre unos segundos y 1 minuto.
+- **Base (`db/027_meta_en_vivo.sql`):** la lógica de asignación de la sincronización diaria se separa en una pieza común (`_windsor_aplicar`) sin cambiar su comportamiento; `meta_en_vivo_aplicar` (solo service_role) valida el rango, frena una consulta si hubo otra hace menos de 45 s y descarta las filas fuera del rango. El registro queda en `windsor_sync_log` y se ve en Consultas.
+- **Excepción de seguridad (hasta el SSO):** la función se despliega sin verificación de token; la acotan el tope de 31 días y la pausa de 45 s. No devuelve datos de personas.
+- Sirve también para traer el tramo viejo que falta (14/08 al 12/09) sin entrar a Windsor.
+- Pruebas: 7 nuevas (71 en total). Guía: `docs/how-to/meta-en-vivo.md`. **Pendiente:** ensayar y aplicar db/027, cargar el secreto `WINDSOR_API_KEY` y desplegar la función.

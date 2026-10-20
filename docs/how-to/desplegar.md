@@ -39,6 +39,7 @@ La CLI se instala como binario en `%LOCALAPPDATA%\supabase-cli` (versión 2.118.
    supabase functions deploy manychat-webhook --use-api --no-verify-jwt
    supabase functions deploy windsor-sync --use-api
    supabase functions deploy nominacion-sync --use-api
+   supabase functions deploy meta-en-vivo --use-api --no-verify-jwt   # lleva el secreto WINDSOR_API_KEY (ver meta-en-vivo.md)
    supabase functions deploy panel-data --use-api
    ```
 
