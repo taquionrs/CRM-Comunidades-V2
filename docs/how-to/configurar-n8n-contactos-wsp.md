@@ -74,3 +74,40 @@ La planilla guarda el número real y el nombre. Compartirla solo con quien la ne
 - Solo registra a las personas que entran desde que el webhook está activo: no carga las que ya estaban.
 - Registra la entrada al flow, no el ingreso real al grupo (eso se carga con "Cargar miembros", ver `cargar-miembros-de-un-grupo.md`).
 - Si n8n está caído cuando entra una persona, Supabase no reintenta: esa persona queda "Sin registro" y no se escribe en la planilla.
+
+## Si algo falla (lo que se aprendió al implementarlo)
+Primero, mirar **qué le contestó n8n a Supabase**. En el SQL Editor:
+
+```sql
+select id, status_code, error_msg, left(content::text, 200) as respuesta, created
+from net._http_response
+order by created desc
+limit 10;
+```
+
+| Qué se ve | Causa | Qué hacer |
+|---|---|---|
+| `403` "Authorization data is wrong!" en todos los avisos | El encabezado secreto del webhook de Supabase no coincide con la credencial Header Auth de n8n. El **nombre del encabezado** es el que figura en el campo *Name* de esa credencial (por ejemplo `Webhook-crm-secret`), no necesariamente `x-crm-secret` | Editar el webhook en Supabase (Integrations → Database Webhooks → Edit) para que el encabezado se llame **igual** que en la credencial y tenga el mismo valor |
+| `404` | La URL del webhook es la de prueba (`/webhook-test/...`) o tiene un error | Usar la **Production URL** del nodo Webhook |
+| `200`, pero el contacto no aparece en la planilla | El aviso llega bien y falla más adelante | Abrir la pestaña **Executions** de n8n y ver en qué nodo termina |
+| No hay filas | Supabase no está enviando | Revisar que el webhook exista sobre `evento_crudo` con el evento *Insert* |
+
+En los nodos "Avisar al CRM":
+
+| Mensaje en n8n | Causa | Qué hacer |
+|---|---|---|
+| `404 … PGRST202 … Could not find the function public.registrar_envio_planilla` | Falta el encabezado `Content-Profile: crm_comunidades_v2` en ese nodo (sin él, Supabase busca la función en el esquema `public`) | Agregarlo junto a `apikey`. Hacerlo en los **tres** nodos |
+| `401 … Clave incorrecta` | El secreto no coincide con el guardado en la base, o el nombre del encabezado de la credencial no es ninguno de los dos aceptados (`x-crm-secret`, `webhook-crm-secret`) | Comprobar con la consulta de coincidencia de la sección 4 y revisar el nombre en la credencial |
+| `400 … El evento no existe` | Es lo **esperado** con el id falso de la prueba | Nada: indica que todo el camino funciona |
+
+En el nodo de Google Sheets:
+
+| Mensaje | Causa | Qué hacer |
+|---|---|---|
+| "No columns found in Google Sheets" | Falta la pestaña o no tiene los encabezados en la fila 1. Con una expresión en *Sheet* también pasa si el nodo no tiene datos de entrada | Crear la pestaña con los 4 encabezados; para configurar el nodo, fijar datos de ejemplo en el nodo **anterior** ("Armar fila") |
+| Se agregan filas duplicadas | El teléfono se guarda sin el `+` y la búsqueda no lo encuentra | En *Options* poner *Cell Format* = *Use format from n8n* |
+| "Private key validation failed" al crear la credencial | La clave privada se copió incompleta o con comillas | Pegar el valor de `private_key` completo, de `-----BEGIN PRIVATE KEY-----` a `-----END PRIVATE KEY-----`, sin comillas |
+
+En el nodo **"Avisar al CRM: ignorado"** no hace falta el campo `p_motivo` (solo lo usa el de error).
+
+Una **fila duplicada o de más** en una pestaña no afecta al CRM: el CRM guarda cada evento en su base y la planilla es una copia.
