@@ -765,3 +765,9 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - **Panel:** tarjeta "Desglose de campañas contempladas" debajo de la tabla: medio → campañas desplegables → conjuntos con comunidad; inversión, conversaciones, costo por conversación, clics y CTR; respeta el período y la comunidad elegidos. Si el desglose no alcanza para explicar la inversión de la tabla, avisa cuánto falta. Si la lectura falla, la tabla de arriba se muestra igual.
 - **Limitación:** el detalle se llena hacia adelante. Los días anteriores a aplicar la migración no lo tienen hasta volver a traerlos (sincronización diaria o "Traer de Meta ahora" sobre esas fechas).
 - Pruebas: 6 nuevas (77 en total). Ensayo: `exportes/ensayo-029.sql`. **Pendiente:** ensayar y aplicar db/029, y volver a traer 14/08–12/09 y 13/09 en adelante.
+
+## 4 tricies decies. PR #53 — CPL pasa a llamarse CPMI (2026-10-20)
+
+- **Pedido (minuta del 20/10):** renombrar CPL como CPMI: costo por mensaje iniciado. La fórmula no cambia (inversión ÷ conversaciones iniciadas en Meta).
+- Cambia el nombre en la tabla de Control_Comunidades, en el KPI global de Overview ("CPMI global") y en el desglose de campañas. El identificador interno de la columna se mantiene, así que el orden y las columnas ocultas que cada persona guardó siguen valiendo. No hay cambios de base.
+- Pruebas: 1 nueva (78 en total).

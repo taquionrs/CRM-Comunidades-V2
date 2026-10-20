@@ -69,3 +69,10 @@ test("el panel carga el desglose sin romper la tabla si falla, y lo dibuja debaj
   assert.match(html, /if \(error\) \{ console\.warn\('desglose_campanas:'[^}]*return null;/);
   assert.match(html, /<\/table><\/div>\s*<\/div>\s*\$\{renderDesglose\(/);
 });
+
+test("CPL se renombró a CPMI (costo por mensaje iniciado) en la tabla, en Overview y en el desglose, sin cambiar el id de la columna", () => {
+  assert.match(html, /\{ id:'cpl', grupo:'Meta Ads', etiqueta:'CPMI'/);
+  assert.match(html, /'CPMI global'/);
+  assert.doesNotMatch(html, /'CPL global'|etiqueta:'CPL'/);
+  assert.match(html, />CPMI<\/th>/);
+});
