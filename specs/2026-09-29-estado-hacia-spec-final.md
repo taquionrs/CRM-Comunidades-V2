@@ -751,3 +751,31 @@ La guía `docs/how-to/configurar-n8n-contactos-wsp.md` suma la sección "Si algo
 - **Base (`db/026_seccion_campanas.sql`, requiere db/025):** funciones `campanas_windsor`, `guardar_regla_campana` y `recalcular_meta_windsor`, y la tabla `campania_regla_historial`; `consultas_windsor` suma el tipo "Campañas". Cada cambio queda registrado con el nombre de quien lo hizo.
 - **Excepción de seguridad (decisión del usuario, 20/10):** sin clave y antes del SSO. Cualquiera con el enlace puede ver el gasto de todas las campañas de la cuenta (incluidas las de otros clientes) y cambiar qué cuenta; compensación: historial de cambios con nombre. Con el SSO pasa a exigir usuario.
 - Pruebas: 7 nuevas (71 en total). Se ensaya con rollback y se aplica antes de fusionar; **requiere que db/025 ya esté aplicada**.
+
+## 4 tricies septies. PR #50 — Meta en vivo: traer de Windsor a pedido y para el rango elegido (2026-10-20)
+
+- **Pedido:** un enfoque en vivo: que Windsor traiga los datos de Meta según el rango de fechas que se elija (punto "gasto en vivo" de la minuta del 20/10).
+- **Decisiones del usuario:** guardar lo que trae en el CRM (así Overview, Control_Comunidades y los costos usan los datos nuevos sin cambiar nada más) y cargar él mismo la clave de Windsor como secreto de Supabase (la clave nunca va en el panel, el repositorio ni el chat).
+- **Qué es:** botón **"Traer de Meta ahora"** en Control_Comunidades. Valida el rango (hasta 31 días, sin fechas futuras; sin fechas pide los últimos 7 días hasta ayer), llama a la función del servidor `meta-en-vivo`, que consulta a Windsor en ventanas de 14 días en paralelo y le pasa las filas a la base. Muestra un resumen y recarga el panel. No es instantáneo: tarda entre unos segundos y 1 minuto.
+- **Base (`db/027_meta_en_vivo.sql`):** la lógica de asignación de la sincronización diaria se separa en una pieza común (`_windsor_aplicar`) sin cambiar su comportamiento; `meta_en_vivo_aplicar` (solo service_role) valida el rango, frena una consulta si hubo otra hace menos de 45 s y descarta las filas fuera del rango. El registro queda en `windsor_sync_log` y se ve en Consultas.
+- **Excepción de seguridad (hasta el SSO):** la función se despliega sin verificación de token; la acotan el tope de 31 días y la pausa de 45 s. No devuelve datos de personas.
+- Sirve también para traer el tramo viejo que falta (14/08 al 12/09) sin entrar a Windsor.
+- Pruebas: 7 nuevas (71 en total). Guía: `docs/how-to/meta-en-vivo.md`. **Pendiente:** ensayar y aplicar db/027, cargar el secreto `WINDSOR_API_KEY` y desplegar la función.
+
+## 4 tricies octies. PR #51 — La limpieza del gasto que no cuenta también corre si todo el gasto del período es excluido (2026-10-20)
+
+Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 333 filas, 50 de ellas ($3.873.506,76) de la campaña INTE (que no cuenta), y no quedó ninguna fila asignada: la protección de db/025 y db/027 ("no borrar nada si no se asignó ninguna fila") frenó la limpieza y ese gasto siguió en `meta_ads_metrica`, en la comunidad general. `db/028_limpiar_gasto_excluido.sql` cambia la condición: la limpieza corre si alguna fila coincidió con **alguna regla** (cuente o no). Un mapeo vacío o roto sigue sin borrar nada. Se ensaya con rollback y se aplica antes de fusionar; después se vuelve a traer el mismo rango.
+
+## 4 tricies nonies. PR #52 — Desglose de campañas contempladas debajo de la tabla de Control_Comunidades (2026-10-20)
+
+- **Pedido:** debajo de la tabla "Métricas por comunidad", ver el desglose de las campañas contempladas de Meta; si hay otros medios (por ejemplo Google Ads), su detalle también va ahí. **Decisión del usuario:** solo las campañas que cuentan (las mismas de la tabla de arriba), sin línea de las excluidas.
+- **Base (`db/029_desglose_campanas.sql`):** tabla `ads_campana_dia` (medio, campaña, conjunto, comunidad, día; inversión, conversaciones, clics, impresiones, leads). La escriben `_windsor_aplicar` (por lo tanto la sincronización diaria y "Traer de Meta ahora") con las mismas reglas que `meta_ads_metrica` y la limpian igual. `desglose_campanas(cliente, desde, hasta, comunidad)` la lee agrupada. La columna `medio` ('Meta Ads' hoy) deja el lugar para Google Ads u otros.
+- **Panel:** tarjeta "Desglose de campañas contempladas" debajo de la tabla: medio → campañas desplegables → conjuntos con comunidad; inversión, conversaciones, costo por conversación, clics y CTR; respeta el período y la comunidad elegidos. Si el desglose no alcanza para explicar la inversión de la tabla, avisa cuánto falta. Si la lectura falla, la tabla de arriba se muestra igual.
+- **Limitación:** el detalle se llena hacia adelante. Los días anteriores a aplicar la migración no lo tienen hasta volver a traerlos (sincronización diaria o "Traer de Meta ahora" sobre esas fechas).
+- Pruebas: 6 nuevas (77 en total). Ensayo: `exportes/ensayo-029.sql`. **Pendiente:** ensayar y aplicar db/029, y volver a traer 14/08–12/09 y 13/09 en adelante.
+
+## 4 tricies decies. PR #53 — CPL pasa a llamarse CPMI (2026-10-20)
+
+- **Pedido (minuta del 20/10):** renombrar CPL como CPMI: costo por mensaje iniciado. La fórmula no cambia (inversión ÷ conversaciones iniciadas en Meta).
+- Cambia el nombre en la tabla de Control_Comunidades, en el KPI global de Overview ("CPMI global") y en el desglose de campañas. El identificador interno de la columna se mantiene, así que el orden y las columnas ocultas que cada persona guardó siguen valiendo. No hay cambios de base.
+- Pruebas: 1 nueva (78 en total).
