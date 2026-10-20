@@ -248,3 +248,40 @@ test("construirSqlRegistroImportacion: deja constancia de la importación con el
   assert.throws(() => construirSqlRegistroImportacion({ etiqueta: "a.csv", filasOrigen: -1, registrosEscritos: 0 }), /filasOrigen/);
   assert.throws(() => construirSqlRegistroImportacion({ etiqueta: "a.csv", filasOrigen: 1, registrosEscritos: NaN }), /registrosEscritos/);
 });
+
+test("mapearFilas: una regla con cuenta = false no suma gasto y se informa aparte (db/025)", () => {
+  const mapeo = [
+    { cliente_id: "11111111-1111-4111-8111-111111111111", cliente_slug: "cortado", comunidad_id: "22222222-2222-4222-8222-222222222222", comunidad_nombre: "General", campana_nombre: "CAMP_TRAFICO", adset_nombre: null, cuenta: true },
+    { cliente_id: "11111111-1111-4111-8111-111111111111", cliente_slug: "cortado", comunidad_id: "22222222-2222-4222-8222-222222222222", comunidad_nombre: "General", campana_nombre: "CAMP_INTE", adset_nombre: null, cuenta: false },
+  ];
+  const filas = [
+    { fecha: "2026-10-10", cuentaId: "", cuentaNombre: "", campana: "CAMP_TRAFICO", adset: "x", inversion: 100, impresiones: 10, clics: 5, conversaciones: 2, leads: 0 },
+    { fecha: "2026-10-10", cuentaId: "", cuentaNombre: "", campana: "CAMP_INTE", adset: "POST", inversion: 9000, impresiones: 999, clics: 800, conversaciones: 1, leads: 0 },
+    { fecha: "2026-10-10", cuentaId: "", cuentaNombre: "", campana: "CAMP_INTE", adset: "DARK", inversion: 1000, impresiones: 99, clics: 80, conversaciones: 0, leads: 0 },
+  ];
+  const r = mapearFilas(filas, mapeo);
+  assert.equal(r.registros.length, 1);
+  assert.equal(r.registros[0].inversion, 100); // solo la campaña que cuenta
+  assert.equal(r.registros[0].conversaciones, 2);
+  assert.deepEqual(r.excluidas, { CAMP_INTE: { filas: 2, inversion: 10000 } });
+  assert.ok(r.advertencias.some((x) => /NO cuenta/.test(x) && /CAMP_INTE/.test(x)));
+});
+
+test("mapearFilas: sin la marca cuenta, la regla cuenta (compatibilidad con mapeos anteriores)", () => {
+  const mapeo = [{ cliente_id: "11111111-1111-4111-8111-111111111111", cliente_slug: "c", comunidad_id: "22222222-2222-4222-8222-222222222222", comunidad_nombre: "A", campana_nombre: "C1", adset_nombre: null }];
+  const r = mapearFilas([{ fecha: "2026-10-10", cuentaId: "", cuentaNombre: "", campana: "C1", adset: "", inversion: 50, impresiones: 1, clics: 1, conversaciones: 1, leads: 0 }], mapeo);
+  assert.equal(r.registros[0].inversion, 50);
+  assert.deepEqual(r.excluidas, {});
+});
+
+test("mapearFilas: la regla por conjunto gana sobre la de toda la campaña, también con la marca", () => {
+  const base = { cliente_id: "11111111-1111-4111-8111-111111111111", cliente_slug: "c", campana_nombre: "C1" };
+  const mapeo = [
+    { ...base, comunidad_id: "22222222-2222-4222-8222-222222222222", comunidad_nombre: "General", adset_nombre: null, cuenta: true },
+    { ...base, comunidad_id: "33333333-3333-4333-8333-333333333333", comunidad_nombre: "Palermo", adset_nombre: "PALERMO", cuenta: true },
+  ];
+  const fila = (adset, inv) => ({ fecha: "2026-10-10", cuentaId: "", cuentaNombre: "", campana: "C1", adset, inversion: inv, impresiones: 1, clics: 1, conversaciones: 0, leads: 0 });
+  const r = mapearFilas([fila("PALERMO", 70), fila("otro", 30)], mapeo);
+  const por = Object.fromEntries(r.registros.map((x) => [x.comunidad_nombre, x.inversion]));
+  assert.deepEqual(por, { Palermo: 70, General: 30 });
+});
