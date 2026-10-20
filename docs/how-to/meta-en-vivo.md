@@ -39,3 +39,11 @@ Hasta ahora Windsor escribía una vez por día y el panel mostraba eso. Con **"T
 | "El máximo es de 31 días por vez" | Rango demasiado largo | Traerlo en tramos |
 | "Windsor respondió HTTP 429 / 5xx" o "timeout" | Windsor está lento o saturado | Probar con un rango más corto o más tarde |
 | La función no existe (404) | No se desplegó | Desplegarla con el comando de arriba |
+
+## Desglose por campaña (debajo de la tabla)
+
+Desde la migración `db/029`, cada vez que se trae Meta (la corrida diaria o "Traer de Meta ahora") se guarda también el detalle por campaña y conjunto de **lo que cuenta**. En Control_Comunidades aparece debajo de la tabla como "Desglose de campañas contempladas": agrupado por medio (hoy Meta Ads), con cada campaña desplegable para ver sus conjuntos y la comunidad a la que suman.
+
+- Muestra solo lo que suma en la tabla de arriba; lo que no cuenta se ve en "Consultas".
+- Respeta el período y la comunidad elegidos.
+- Los días anteriores a la migración no tienen detalle hasta volver a traerlos: elegí esas fechas y tocá "Traer de Meta ahora" (de a 31 días como máximo). El panel avisa cuánto falta cuando el desglose no coincide con la inversión de la tabla.
