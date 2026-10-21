@@ -134,12 +134,15 @@ Lectura abierta temporal; solo el webhook (service_role) escribe. `comunidad_per
 ### `clic_me_sumo` (013)
 Avisos "la persona tocó el botón Me sumo" que manda ManyChat desde la salida propia del botón (`"evento": "clic_me_sumo"`). No son contactos: no entran a `evento_crudo` ni a la atribución. Una fila por aviso; el panel cuenta personas distintas. Misma forma que `trigger_entregado` (`cliente_id`, `comunidad_id`, `telefono_id`, `recibido_en`). `comunidad_performance_rango` devuelve además `clics_me_sumo` y `costo_por_clic_me_sumo`.
 
-### `usuario_cliente` (005)
-`(user_id, cliente_id)`: qué usuario ve qué cliente. Alimenta el selector de cliente cuando haya login.
+### `usuario_crm` y `usuario_crm_auditoria` (030)
+`usuario_crm`: quién entra al CRM (`email` en minúsculas, cuenta @taquion.com.ar), con qué `rol` (`marketing` o `general`), si es `admin` (gestiona usuarios) y si es `fijo` (no se cambia desde el panel). `usuario_crm_auditoria`: cada alta, cambio y baja, con quién la hizo. Las dos se leen y escriben solo con las funciones de 030 (pestaña Usuarios). Detalle en [`specs/2026-10-21-sso-cloudflare-y-roles.md`](../../specs/2026-10-21-sso-cloudflare-y-roles.md).
+
+### ~~`usuario_cliente` (005)~~
+Nunca se aplicó: 030 y 031 la reemplazan. Todos los usuarios ven todos los clientes.
 
 ## Vistas
 
-Todas con `security_invoker = true`, todas con `cliente_id`.
+Todas con `cliente_id`. `evento_deduplicado` y `base_limpia` tienen `security_invoker = true` (datos personales: con la RLS de 031, solo Marketing). `comunidad_performance` y `kpis_macro` leen con los permisos del dueño (desde 031) para que el rol General vea los conteos: devuelven filas solo a usuarios del CRM y la plata (inversión, CPMI, CPME, costos) en NULL si no es Marketing.
 
 - **`evento_deduplicado`**: primer evento por `(cliente_id, telefono_id)` (`distinct on` + `order by recibido_en asc`) — First-Contact Attribution dentro de cada cliente.
 - **`base_limpia`**: `evento_deduplicado` + `usuario_curado` + `comunidad`. Nombre/email caen a `'Usuario WA'`/`'Sin email'` si todavía no hay datos.
@@ -149,11 +152,19 @@ Todas con `security_invoker = true`, todas con `cliente_id`.
 ## Funciones
 
 - **`comunidad_performance_rango(p_cliente, p_desde, p_hasta)`** (006): la misma matriz que `comunidad_performance`, más `clics`, `impresiones` y `ctr_anuncio_pct`, filtrada por fechas. Las métricas de Meta se filtran por `meta_ads_metrica.fecha`; los clics únicos, por la fecha del primer contacto en hora de Buenos Aires. Mi y Mf son snapshots sin fecha y se devuelven tal cual. Fechas nulas = todo el histórico.
-- **`mis_clientes()`** (005): los clientes habilitados para el usuario de la sesión.
+- **`mi_acceso()`** (030): email, rol y permiso de administrador del usuario de la sesión. Vacío si no tiene acceso o la sesión tiene más de 24 h o se cerró (se mira `auth.sessions`). La usan las políticas (`es_usuario_crm()`, `es_marketing()`), el panel y `_shared/acceso.mjs`.
+- **`usuarios_crm()`, `guardar_usuario_crm()`, `quitar_usuario_crm()`** (030): la pestaña Usuarios. Solo administradores; nadie se cambia a sí mismo y los fijos no se tocan.
+- **`datos_comunidad_planilla(p_comunidad)`** (030): para n8n, con el mismo secreto que `registrar_envio_planilla`.
 
 ## RLS y permisos
 
-- **Hoy (001 + 003):** SELECT abierto a cualquiera con la anon key; escritura solo para usuarios autenticados. Es temporal: deja teléfonos, nombres y emails legibles públicamente.
-- **Con 005:** sin acceso para `anon`; cada usuario ve solo los clientes de `usuario_cliente`. `evento_crudo` y `usuario_estado_historial` quedan de solo lectura desde el panel. Las Edge Functions usan `service_role` y no pasan por RLS.
+- **Hasta 031 (001 + 003):** SELECT abierto a cualquiera con la anon key; escritura solo para usuarios autenticados. Deja teléfonos, nombres y emails legibles públicamente.
+- **Desde 031 (login con SSO):**
+  - `anon` no lee nada del esquema; solo conserva las dos funciones de n8n, que exigen su secreto.
+  - Cualquier usuario del CRM lee `cliente` y `comunidad`. El resto de lo que usa el panel (datos personales, plata, registros) es solo para Marketing, y solo Marketing edita comunidades.
+  - Las funciones del panel que leen plata o datos personales, o que escriben, exigen Marketing (`_exigir_marketing()`).
+  - EXECUTE de funciones: nada por defecto, cada una se habilita explícitamente.
+  - Las Edge Functions usan `service_role` y no pasan por RLS.
+  - Pruebas: `npm run test:db`.
 
 GRANTs explícitos sobre el schema — Supabase no los aplica automático para un schema propio (mismo hallazgo que V1).

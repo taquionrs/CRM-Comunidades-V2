@@ -28,9 +28,11 @@
 // Deploy: `supabase functions deploy nominacion-sync`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { exigirMarketing } from "../_shared/acceso.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ACCESO = { supabaseUrl: SUPABASE_URL, anonKey: Deno.env.get("SUPABASE_ANON_KEY")! };
 const MANYCHAT_API_KEY = Deno.env.get("MANYCHAT_API_KEY");
 
 const CORS_HEADERS = {
@@ -49,6 +51,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
   }
+
+  const acceso = await exigirMarketing(req, ACCESO);
+  if (!acceso.ok) return json({ error: acceso.error }, acceso.status);
 
   if (!MANYCHAT_API_KEY) {
     return json(

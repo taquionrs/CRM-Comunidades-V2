@@ -16,13 +16,14 @@ Hermano de [`crm-comunidades`](https://github.com/MarketingTaquion/CRM-Comunidad
 - **Producción**: el panel está en `crm-comunidades-v2.vercel.app` (Vercel, se despliega solo al fusionar en `master`).
 - **Clientes**: **Cortado en Jarrito**, probado de punta a punta por WhatsApp e Instagram, y **Todo un País**, configurado pero sin tráfico (su WhatsApp no está activo).
 - **Frontend**: `public/index.html` — HTML/CSS/JS estático, sin build ni framework. Selector de cliente, filtro por fechas en Control_Comunidades, Data_Cruda como registro de eventos con filtro Aceptados / Rechazados y exportación a CSV de toda la historia del cliente, etiqueta de canal (WhatsApp / Instagram) y todo el HTML dinámico escapado.
-- **Login**: **todavía no tiene**; se agrega al final del proyecto. Hasta entonces el panel lee con la lectura abierta de `db/003`: quien tenga la URL ve teléfonos y nombres. No compartirla fuera del equipo.
-- **Base de datos**: schema `crm_comunidades_v2`, en el **mismo proyecto Supabase que V1**. Migraciones `001` a `004` y `006` a `016` aplicadas; `005` (acceso por usuario, con el login) **escrita y sin aplicar**. Ver [`docs/reference/esquema-de-base-de-datos.md`](docs/reference/esquema-de-base-de-datos.md).
+- **Login**: con SSO de Cloudflare (cuentas @taquion.com.ar) y dos roles: **Marketing** (todo) y **General** (conteos, sin plata ni datos personales). Los usuarios se administran en la pestaña **Usuarios**. Decisiones en [`specs/2026-10-21-sso-cloudflare-y-roles.md`](specs/2026-10-21-sso-cloudflare-y-roles.md); despliegue en [configurar el login](docs/how-to/configurar-sso-cloudflare.md). **Hasta aplicar `db/031`** sigue la lectura abierta de `db/003`: quien tenga la URL ve teléfonos y nombres.
+- **Base de datos**: schema `crm_comunidades_v2`, en el **mismo proyecto Supabase que V1**. Migraciones `001` a `004` y `006` a `016` aplicadas; `005` reemplazada por `030` y `031` (login y roles), que se aplican en el orden de [configurar el login](docs/how-to/configurar-sso-cloudflare.md#orden-de-despliegue). Ver [`docs/reference/esquema-de-base-de-datos.md`](docs/reference/esquema-de-base-de-datos.md).
 - **Edge Functions**:
   - `manychat-webhook` — deployada. Recibe el contacto completo de ManyChat (WhatsApp o Instagram), valida el secreto del cliente, guarda el evento y registra los rechazos.
   - `windsor-sync` — deployada, **sin `WINDSOR_API_KEY` cargada**: todavía no trae gasto, clics ni conversaciones de Meta Ads.
   - `nominacion-sync` — deployada, opcional. Necesita `MANYCHAT_API_KEY`.
-  - `panel-data` — endpoint JSON de solo lectura con el contrato de la Sección 4.C del documento de Jaz. **No deployada**: espera al login.
+  - `panel-data` — endpoint JSON de solo lectura con el contrato de la Sección 4.C del documento de Jaz. **No deployada**. Exige un usuario Marketing o la clave de servicio.
+  - `auth-cloudflare` — el login con SSO: valida el login de Cloudflare y crea la sesión de Supabase.
 
 ## Qué falta (backlog resumido)
 
@@ -33,7 +34,7 @@ El detalle y las prioridades están en el [spec](specs/2026-09-29-estado-hacia-s
 3. **Datos de Meta Ads**: ya se importan por comunidad desde la computadora del equipo (`scripts/windsor-importar.mjs`, ver [cómo configurar Windsor](docs/how-to/configurar-windsor-ai.md)); falta automatizarlo cuando Tecnología cierre la seguridad.
 4. **Miembros iniciales y finales** (carga manual) y mejoras de sus cuadros en el panel.
 5. **Decisiones con Jaz**: estadios posteriores a `clic_en_grupo`, fechas para MI / MF, eventos intermedios del bot, nominación por API o por POST.
-6. **Al final**: login, aplicar `005` y autenticar `panel-data`.
+6. **Login con SSO**: implementado (`030`, `031`, `auth-cloudflare`); falta desplegarlo en el orden de [configurar el login](docs/how-to/configurar-sso-cloudflare.md#orden-de-despliegue).
 
 ## Cómo trabajamos
 

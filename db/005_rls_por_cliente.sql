@@ -1,3 +1,5 @@
+-- ⛔ NO APLICAR. Reemplazada por db/030 y db/031 (login con SSO y roles, 2026-10-21): nunca se aplicó en producción.
+--    Ver specs/2026-10-21-sso-cloudflare-y-roles.md. Se deja como referencia del diseño anterior (asignación por cliente).
 -- ============================================================================
 -- CRM de Comunidades V2 — acceso por cliente (RLS)
 -- Ref: specs/2026-09-29-estado-hacia-spec-final.md, hallazgo 3.1 y decisión 9.

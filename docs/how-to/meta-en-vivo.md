@@ -19,15 +19,15 @@ Hasta ahora Windsor escribía una vez por día y el panel mostraba eso. Con **"T
 ## Puesta en marcha (una vez)
 1. **Cargar la clave de Windsor como secreto** de la función. En Supabase → Edge Functions → Secrets, agregar `WINDSOR_API_KEY` (o `supabase secrets set WINDSOR_API_KEY=...`). La clave **nunca** va en el panel, en el repositorio ni en el chat. La función no la devuelve ni la registra: la enmascara en cualquier mensaje de error.
 2. **Aplicar `db/027_meta_en_vivo.sql`** (con su ensayo con rollback primero).
-3. **Desplegar la función** (sin verificación de token, porque el panel todavía no tiene login):
+3. **Desplegar la función.** El control de acceso lo hace la propia función: exige una sesión del CRM con rol Marketing (`_shared/acceso.mjs`). Por eso se despliega sin la verificación de token de Supabase:
 
    ```bash
    supabase functions deploy meta-en-vivo --use-api --no-verify-jwt
    ```
 4. Probar con un rango corto (por ejemplo, los últimos 3 días) y revisar el resumen y Consultas.
 
-## Seguridad (excepción hasta el SSO)
-- La función se despliega **sin verificación de token** y cualquiera con el enlace del panel puede pedir una consulta. Los límites que la acotan: **31 días por pedido** y **una consulta cada 45 segundos** (se controla en la base).
+## Seguridad
+- Solo la puede usar un usuario del CRM con rol **Marketing** y sesión vigente (login con SSO, ver [configurar el login](configurar-sso-cloudflare.md)). Además, la acotan dos límites: **31 días por pedido** y **una consulta cada 45 segundos** (se controla en la base).
 - Consume cuota de la API de Windsor. No devuelve teléfonos ni datos de personas: solo un resumen de cuántas filas se actualizaron.
 - Con el SSO, la función pasa a exigir usuario.
 

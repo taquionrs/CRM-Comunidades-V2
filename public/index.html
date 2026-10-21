@@ -128,6 +128,11 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .form-row input{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
 
 .pill{display:inline-flex; padding:3px 9px; border-radius:99px; font-size:10px; font-weight:700; background:var(--panel-raised); border:1px solid var(--border-strong); color:var(--text-muted); white-space:nowrap}
+.sesion-email{color:var(--text-body); word-break:break-all}
+.sesion-rol{display:block; margin:2px 0 6px}
+.link-btn{background:none; border:none; padding:0; color:var(--accent); cursor:pointer; font-size:11px}
+.form-row select{background:var(--panel-sunken); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:7px 9px; border-radius:var(--r-in)}
+.form-row .check{flex-direction:row; align-items:center; gap:6px; font-size:12px; color:var(--text-body); padding-bottom:8px}
 .pill-ig{color:#e879b9; border-color:rgba(232,121,185,.45); background:rgba(232,121,185,.1)}
 .pill-ok{color:#3ddc97; border-color:rgba(61,220,151,.4); background:rgba(61,220,151,.08)}
 .pill-bad{color:var(--danger); border-color:rgba(255,92,122,.45); background:rgba(255,92,122,.1)}
@@ -153,9 +158,7 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
     </div>
     <label class="cliente-sel">Cliente<select id="selCliente" aria-label="Cliente"></select></label>
     <nav class="navlist" id="nav"></nav>
-    <div class="sidebar-foot">
-      <span style="color:var(--warn)">Sin login (temporal)</span>
-    </div>
+    <div class="sidebar-foot" id="sesionInfo"></div>
   </aside>
   <main class="main">
     <div class="main-head">
@@ -197,7 +200,20 @@ const TAB_SUB = {
   base_limpia:'Gestor de usuarios nominados — vista de cliente',
   dedup:'Log técnico de atribución — primer evento por teléfono',
   crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
+  usuarios:'Quién entra al CRM y con qué rol — solo administradores',
 };
+/* ROLES:INICIO */
+// Qué ve cada rol (specs/2026-10-21-sso-cloudflare-y-roles.md). Quien decide es la base (db/031): esto solo evita mostrar
+// pestañas, columnas y botones que para el rol General vendrían vacíos o fallarían.
+const TABS_SOLO_MARKETING = ['base_limpia', 'dedup', 'crudo'];
+const esMarketing = () => !!state.acceso && state.acceso.rol === 'marketing';
+const esAdmin = () => !!state.acceso && state.acceso.admin === true;
+function tabsVisibles(){
+  return [...TABS.filter(t => esMarketing() || !TABS_SOLO_MARKETING.includes(t.key)),
+          ...(esAdmin() ? [{ key:'usuarios', label:'Usuarios' }] : [])];
+}
+const ROL_LABEL = { marketing:'Marketing', general:'General' };
+/* ROLES:FIN */
 /* MENU-LATERAL:INICIO */
 // El menú lateral se puede ocultar para ganar ancho (útil en la matriz de Control_Comunidades). La preferencia queda en este
 // navegador; si no hay almacenamiento disponible, vale solo para la sesión.
@@ -281,7 +297,7 @@ function renderSelectorCliente(){
 
 function renderNav(){
   const nav = document.getElementById('nav');
-  nav.innerHTML = TABS.map(t => `<button class="nav-item ${state.tab===t.key?'active':''}" data-t="${t.key}">${t.label}</button>`).join('');
+  nav.innerHTML = tabsVisibles().map(t => `<button class="nav-item ${state.tab===t.key?'active':''}" data-t="${t.key}">${t.label}</button>`).join('');
   nav.querySelectorAll('.nav-item').forEach(btn => btn.onclick = () => { state.tab = btn.dataset.t; renderAll(); });
 }
 
@@ -381,14 +397,14 @@ async function loadIntentosRechazados(){
 function renderOverview(kpis, comunidades){
   const k = kpis || {};
   const kpiCards = kpiGrid([
-    [fmtMoney(k.inversion_total), 'Inversión total Meta'],
+    [fmtMoney(k.inversion_total), 'Inversión total Meta', true],
     [fmtInt(k.conversaciones_totales), 'Conversaciones totales (Meta)'],
-    [fmtMoney(k.cpl_global), 'CPMI global'],
+    [fmtMoney(k.cpl_global), 'CPMI global', true],
     [fmtInt(k.clics_unicos_totales), 'Entradas únicas al flow (todas las comunidades)'],
     [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales'],
-    [fmtMoney(k.cpme_global), 'CPME global'],
+    [fmtMoney(k.cpme_global), 'CPME global', true],
     [fmtPct(k.tasa_fuga_global_pct), k.tasa_fuga_global_pct == null ? 'Tasa de fuga global (se calcula desde la segunda carga de la lista completa)' : 'Tasa de fuga global'],
-  ]);
+  ].filter(([, , plata]) => esMarketing() || !plata));
 
   const totalMf = comunidades.reduce((s,c) => s + (c.miembros_finales||0), 0);
   const rows = comunidades.length
@@ -416,7 +432,7 @@ function renderOverview(kpis, comunidades){
     `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow se calculan solas (First-Contact Attribution) y las bajas salen de las cargas de la lista completa de cada grupo (desde la segunda carga).</div>
       <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Entradas al flow (CRM)</th><th>Bajas (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
-    renderComunidadesForm(comunidades);
+    (esMarketing() ? renderComunidadesForm(comunidades) : '');
 }
 
 function renderComunidadesForm(comunidades){
@@ -540,19 +556,19 @@ const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow en este p
 const NA_CLIC = 'Todavía no llegó ningún aviso de clic en este período. Puede ser que nadie haya tocado "Me sumo" o que falte la acción de salida del botón en el flow de ManyChat. Para saberlo, tocá el botón vos y mirá si el contador sube.';
 const NO_MIEMBROS = 'Faltan los miembros iniciales y finales (MI y MF). Se cargan en la sección Overview, tabla "Comunidades".';
 const COLUMNAS_CONTROL = [
-  { id:'inversion', grupo:'Meta Ads', etiqueta:'Inversión',
+  { id:'inversion', grupo:'Meta Ads', etiqueta:'Inversión', plata:true,
     info:'Gasto de Meta Ads asignado a la comunidad en el período. Viene de Windsor y se actualiza una vez al día, con un día de retraso. Se asigna por el nombre de la campaña y del conjunto de anuncios.',
     celda:(c)=>vMoneda(c.inversion), total:(t)=>vMoneda(t.inv) },
   { id:'conversaciones', grupo:'Meta Ads', etiqueta:'Conversaciones',
     info:'Conversaciones de mensajería iniciadas desde los anuncios, con la ventana de atribución de 7 días de Meta. No es lo mismo que las entradas al flow.',
     celda:(c)=>vEntero(c.conversaciones_meta), total:(t)=>vEntero(t.conv) },
-  { id:'cpl', grupo:'Meta Ads', etiqueta:'CPMI',
+  { id:'cpl', grupo:'Meta Ads', etiqueta:'CPMI', plata:true,
     info:'Costo por mensaje iniciado (antes "CPL"): Inversión ÷ Conversaciones iniciadas en Meta. Sin dato si no hubo conversaciones en el período.',
     celda:(c)=>vMoneda(c.cpl), total:(t)=>vMoneda(t.razon(t.inv, t.conv)) },
   { id:'leads', grupo:'Meta Ads', etiqueta:'Clientes potenciales (Meta)',
     info:'Clientes potenciales que Meta informa para la campaña. Es otra métrica distinta de las conversaciones y no todas las campañas la informan.',
     celda:(c)=>vEntero(c.leads_meta), total:(t)=>vEntero(t.leads) },
-  { id:'costo_lead', grupo:'Meta Ads', etiqueta:'Costo por cliente potencial',
+  { id:'costo_lead', grupo:'Meta Ads', etiqueta:'Costo por cliente potencial', plata:true,
     info:'Inversión ÷ Clientes potenciales de Meta. Sin dato si no hubo clientes potenciales.',
     celda:(c)=>vMoneda(c.costo_por_lead), total:(t)=>vMoneda(t.razon(t.inv, t.leads)) },
   { id:'ctr', grupo:'Meta Ads', etiqueta:'CTR (todos los clics)',
@@ -585,13 +601,13 @@ const COLUMNAS_CONTROL = [
   { id:'bajas', grupo:'WhatsApp & Salud', etiqueta:'Bajas (salidas cargadas)',
     info:'Personas que quedaron como salidas al cargar la lista completa del grupo, con fecha de salida dentro del período. Se puede calcular desde la segunda carga de lista completa de la comunidad; antes no hay con qué comparar.',
     celda:(c)=>c.bajas_estimadas == null ? vacio('no_calc') : vEntero(c.bajas_estimadas), total:(t)=>t.bajasMed > 0 ? vEntero(t.bajas) : vacio('no_calc') },
-  { id:'costo_entrada', grupo:'Financiera', etiqueta:'Costo por entrada al flow',
+  { id:'costo_entrada', grupo:'Financiera', etiqueta:'Costo por entrada al flow', plata:true,
     info:'Inversión ÷ Entradas al flow. La inversión es la de Meta; las entradas incluyen a quienes llegan sin pasar por la pauta.',
     celda:(c)=>vMoneda(c.cpcu), total:(t)=>vMoneda(t.razon(t.inv, t.ent)) },
-  { id:'costo_clic', grupo:'Financiera', etiqueta:'Costo por clic en "Me sumo"',
+  { id:'costo_clic', grupo:'Financiera', etiqueta:'Costo por clic en "Me sumo"', plata:true,
     info:'Inversión ÷ Clics en "Me sumo".',
     celda:(c)=>c.clics_me_sumo > 0 ? vMoneda(c.costo_por_clic_me_sumo) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vMoneda(t.razon(t.inv, t.clicsms)) : vacio('sin_fuente', NA_CLIC) },
-  { id:'cpmn', grupo:'Financiera', etiqueta:'Costo por miembro neto',
+  { id:'cpmn', grupo:'Financiera', etiqueta:'Costo por miembro neto', plata:true,
     info:'Inversión ÷ (MF − MI): cuánto costó cada miembro que sumó el grupo. Requiere MI y MF cargados.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(c.cpmn), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null) },
   { id:'fuga', grupo:'Financiera', etiqueta:'Tasa de fuga',
@@ -723,8 +739,9 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
   const cfg = state.columnasControl || (state.columnasControl = leerColumnasControl());
-  const porId = Object.fromEntries(COLUMNAS_CONTROL.map(c => [c.id, c]));
-  const visibles = cfg.orden.filter(id => !cfg.ocultas.includes(id)).map(id => porId[id]);
+  // Las columnas de plata (plata:true) solo existen para Marketing: para el rol General la base las devuelve vacías.
+  const porId = Object.fromEntries(COLUMNAS_CONTROL.filter(c => esMarketing() || !c.plata).map(c => [c.id, c]));
+  const visibles = cfg.orden.filter(id => porId[id] && !cfg.ocultas.includes(id)).map(id => porId[id]);
 
   // Total del cliente: suma de TODAS las comunidades (aunque haya una elegida en el filtro) y razones recalculadas
   // con esos totales, no promediando las filas. Las entradas no se duplican: la atribución es por primer contacto.
@@ -756,16 +773,16 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     : '';
 
   const panelColumnas = state.columnasAbierto ? `<div class="col-panel" id="panelColumnas">
-      <div class="col-panel-head"><b>Columnas</b><span>${visibles.length} de ${COLUMNAS_CONTROL.length} visibles · arrastrá para reordenar</span>
+      <div class="col-panel-head"><b>Columnas</b><span>${visibles.length} de ${Object.keys(porId).length} visibles · arrastrá para reordenar</span>
         <button class="btn btn-mini" id="btnColumnasReset" type="button">Restablecer</button></div>
-      <ul>${cfg.orden.map((id, i) => {
+      <ul>${cfg.orden.filter(id => porId[id]).map((id, i, lista) => {
         const col = porId[id];
         return `<li draggable="true" data-col-id="${id}">
           <span class="grip" title="Arrastrar">⋮⋮</span>
           <label><input type="checkbox" data-col-vis="${id}" ${cfg.ocultas.includes(id) ? '' : 'checked'}> ${esc(col.etiqueta)}</label>
           <small style="color:${COLOR_GRUPO[col.grupo] || 'var(--text-faint)'}">${esc(col.grupo)}</small>
           <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
-          <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="1" ${i === cfg.orden.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
+          <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="1" ${i === lista.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
         </li>`;
       }).join('')}</ul>
     </div>` : '';
@@ -783,9 +800,9 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
         })()}</select></label>
       <button class="btn ${!desde && !hasta ? 'on' : ''}" id="btnFechasLimpiar" type="button" aria-pressed="${!desde && !hasta ? 'true' : 'false'}">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
-      <button class="btn" id="btnCampanas" type="button" title="Elegir qué campañas de Meta cuentan para las métricas">Campañas</button>
+      ${esMarketing() ? `<button class="btn" id="btnCampanas" type="button" title="Elegir qué campañas de Meta cuentan para las métricas">Campañas</button>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
-      <button class="btn" id="btnMetaVivo" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, y actualiza el gasto y las conversaciones de Meta">Traer de Meta ahora</button>
+      <button class="btn" id="btnMetaVivo" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, y actualiza el gasto y las conversaciones de Meta">Traer de Meta ahora</button>` : ''}
     </div>
     <div class="sub" id="metaVivoEstado" role="status" style="margin:0 0 10px; ${state.metaVivo && state.metaVivo.tipo === 'error' ? 'color:var(--danger)' : state.metaVivo && state.metaVivo.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.metaVivo && state.metaVivo.texto) || '')}</div>
     <div class="card"><h3>Métricas por comunidad</h3>
@@ -795,7 +812,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
       <div class="tbl-wrap"><table class="tabla-metricas"><caption class="sr-only">Métricas por comunidad, agrupadas por fuente: ${tramosDeGrupos(visibles).map(x => x.grupo).join(', ')}</caption><thead><tr class="fila-grupos"><th rowspan="2" scope="col" class="th-com">Comunidad</th>${encabezadoGrupos}</tr><tr>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>
-    ${renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}`;
+    ${!esMarketing() ? '' : renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}`;
 }
 
 // Panel "Columnas": mostrar/ocultar, reordenar con ↑ ↓ o arrastrando, restablecer.
@@ -1890,13 +1907,106 @@ function wireCrudo(){
 }
 
 /* ---------- render principal ---------- */
+/* ---------- usuarios (solo administradores; reglas en db/030) ---------- */
+const VERBO_AUDITORIA = { alta:'dio de alta a', cambio:'cambió el acceso de', baja:'quitó a' };
+function renderUsuarios(d){
+  const usuarios = (d && d.usuarios) || [], auditoria = (d && d.auditoria) || [];
+  const yo = state.acceso.email;
+  const opcionesRol = (rol) => Object.entries(ROL_LABEL).map(([v, l]) => `<option value="${v}" ${rol === v ? 'selected' : ''}>${l}</option>`).join('');
+  const filas = usuarios.map(u => {
+    const bloqueado = u.fijo || u.email === yo;
+    return `<tr data-email="${esc(u.email)}">
+      <td>${esc(u.email)}${u.fijo ? ' <span class="pill" title="Se cambia solo por SQL (db/030)">Fijo</span>' : ''}${u.email === yo ? ' <span class="pill">Vos</span>' : ''}</td>
+      <td><select class="usr-rol" aria-label="Rol de ${esc(u.email)}" ${bloqueado ? 'disabled' : ''}>${opcionesRol(u.rol)}</select></td>
+      <td><input type="checkbox" class="usr-admin" aria-label="Administrador: ${esc(u.email)}" ${u.admin ? 'checked' : ''} ${bloqueado ? 'disabled' : ''}></td>
+      <td class="mono">${fmtFecha(u.actualizado_en)} · ${esc(u.actualizado_por)}</td>
+      <td style="white-space:nowrap">${bloqueado ? '' : '<button class="btn btn-mini usr-guardar" type="button">Guardar</button> <button class="btn btn-mini usr-quitar" type="button">Quitar</button>'}</td>
+    </tr>`;
+  }).join('');
+  const cambios = auditoria.length
+    ? auditoria.slice(0, 50).map(a => `<li>${fmtFecha(a.en)} · <b>${esc(a.por)}</b> ${VERBO_AUDITORIA[a.accion] || esc(a.accion)} <b>${esc(a.email)}</b>${a.accion === 'baja' ? '' : ` — ${esc(ROL_LABEL[a.rol] || a.rol)}${a.admin ? ' + administrador' : ''}`}</li>`).join('')
+    : '<li>Sin cambios todavía.</li>';
+  return `<div class="card"><h3>Dar de alta</h3>
+      <div class="sub">Cuenta @taquion.com.ar. <b>Marketing</b> ve y edita todo; <b>General</b> ve Overview y Control_Comunidades con conteos, sin plata ni datos personales, y solo lee. <b>Administrador</b> además gestiona usuarios. Los cambios rigen en el siguiente pedido, sin volver a entrar.</div>
+      <form id="formUsuario" class="form-row" style="margin-top:10px">
+        <label>Email<input type="email" name="email" required placeholder="nombre@taquion.com.ar" style="width:260px"></label>
+        <label>Rol<select name="rol">${opcionesRol('general')}</select></label>
+        <label class="check"><input type="checkbox" name="admin"> Administrador</label>
+        <button type="submit" class="btn" style="background:var(--accent); border-color:var(--accent); color:#fff">Dar de alta</button>
+      </form>
+      <div id="usuarioResultado" role="status" style="margin-top:10px; font-size:12px"></div>
+    </div>
+    <div class="card"><h3>Usuarios (${usuarios.length})</h3>
+      <div class="sub">Nadie puede cambiar ni quitar su propio acceso. Los administradores fijos solo se cambian por SQL.</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Email</th><th>Rol</th><th>Admin</th><th>Última modificación</th><th></th></tr></thead><tbody>${filas || '<tr class="empty-row"><td colspan="5">Sin usuarios</td></tr>'}</tbody></table></div>
+    </div>
+    <div class="card"><h3>Últimos cambios</h3><div class="sub">Altas, cambios y bajas, con quién los hizo. Nada se borra.</div>
+      <ul style="margin:8px 0 0; padding-left:18px; display:grid; gap:4px; font-size:12px">${cambios}</ul>
+    </div>`;
+}
+function wireUsuarios(){
+  // Se busca el elemento cada vez: después de guardar, la pestaña se vuelve a dibujar.
+  const avisar = (texto, error) => {
+    const r = document.getElementById('usuarioResultado');
+    if (r) { r.textContent = texto; r.style.color = error ? 'var(--danger)' : '#5fd39a'; }
+  };
+  const guardar = async (email, rol, admin) => {
+    const { error } = await supabase.rpc('guardar_usuario_crm', { p_email: email, p_rol: rol, p_admin: admin });
+    if (error) throw error;
+  };
+  const form = document.getElementById('formUsuario');
+  if (form) form.onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const email = String(fd.get('email') || '').trim().toLowerCase();
+    try {
+      await guardar(email, fd.get('rol'), fd.get('admin') === 'on');
+      await renderAll();
+      avisar(`${email} quedó dado de alta.`);
+    } catch (err) { avisar(err.message, true); }
+  };
+  document.querySelectorAll('#content tr[data-email]').forEach(tr => {
+    const email = tr.dataset.email;
+    const g = tr.querySelector('.usr-guardar');
+    if (g) g.onclick = async () => {
+      g.disabled = true;
+      try { await guardar(email, tr.querySelector('.usr-rol').value, tr.querySelector('.usr-admin').checked); await renderAll(); avisar(`Se guardó el acceso de ${email}.`); }
+      catch (err) { g.disabled = false; avisar(err.message, true); }
+    };
+    const q = tr.querySelector('.usr-quitar');
+    if (q) q.onclick = async () => {
+      if (!confirm(`¿Quitar el acceso de ${email} al CRM?`)) return;
+      q.disabled = true;
+      try {
+        const { error } = await supabase.rpc('quitar_usuario_crm', { p_email: email });
+        if (error) throw error;
+        await renderAll(); avisar(`${email} ya no tiene acceso.`);
+      } catch (err) { q.disabled = false; avisar(err.message, true); }
+    };
+  });
+}
+
 async function renderAll(){
   clearInterval(crudoTimer);
+  if (!(await accesoVigente())) return;
+  if (!tabsVisibles().some(t => t.key === state.tab)) state.tab = 'overview';
   renderNav();
-  document.getElementById('hTitle').textContent = TABS.find(t => t.key===state.tab).label;
+  document.getElementById('hTitle').textContent = tabsVisibles().find(t => t.key===state.tab).label;
   document.getElementById('hSub').textContent = TAB_SUB[state.tab];
   const content = document.getElementById('content');
   content.innerHTML = '<div class="card"><h3>Cargando…</h3></div>';
+
+  if (state.tab === 'usuarios') {
+    try {
+      const { data, error } = await supabase.rpc('usuarios_crm');
+      if (error) throw error;
+      content.innerHTML = renderUsuarios(data);
+      wireUsuarios();
+    } catch (err) {
+      content.innerHTML = `<div class="card"><h3>No se pudieron cargar los usuarios</h3><div class="sub" style="color:var(--danger)">${esc(err.message)}</div></div>`;
+    }
+    return;
+  }
 
   if (!state.clienteId) {
     content.innerHTML = '<div class="card"><h3>Sin clientes cargados</h3><div class="sub">Dar de alta al menos un cliente en crm_comunidades_v2.cliente — ver docs/how-to/agregar-un-cliente.md.</div></div>';
@@ -1912,7 +2022,7 @@ async function renderAll(){
     } else if (state.tab === 'control') {
       const [comunidades, desglose] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
-        loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null),
+        esMarketing() ? loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
       ]);
       content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose);
       wireControl();
@@ -1942,8 +2052,79 @@ async function renderAll(){
   }
 }
 
-/* ---------- sin login (temporal, ver README) ---------- */
+/* ---------- login con SSO (Cloudflare) y sesión — specs/2026-10-21-sso-cloudflare-y-roles.md ---------- */
+// El login lo hace la Edge Function auth-cloudflare: vuelve con la sesión de Supabase en el fragmento (#access_token=…),
+// que supabase-js toma solo, o con #sso_error=<código>. La sesión dura 24 h desde el login (la controla la base).
 const configError = document.getElementById('configError');
+const SSO_URL = cfg.SUPABASE_URL ? String(cfg.SUPABASE_URL).replace(/\/+$/, '') + '/functions/v1/auth-cloudflare' : '';
+const MENSAJES_SSO = {
+  sin_alta: (email) => `La cuenta ${email || ''} todavía no está dada de alta en el CRM. Pedile el acceso a un administrador.`,
+  dominio: (email) => `Solo pueden entrar cuentas @taquion.com.ar${email ? ` (entraste con ${email})` : ''}.`,
+  cancelado: () => 'Cloudflare no autorizó el ingreso con esa cuenta.',
+  vencido: () => 'El intento de ingreso venció o no es válido. Volvé a intentarlo.',
+  sin_email: () => 'Cloudflare no informó un email verificado.',
+  token: () => 'El login no se pudo validar. Volvé a intentarlo.',
+  config: () => 'El login todavía no está configurado (faltan los secretos de la función auth-cloudflare).',
+  cloudflare: () => 'No se pudo hablar con Cloudflare. Volvé a intentarlo en un momento.',
+  supabase: () => 'No se pudo crear la sesión. Volvé a intentarlo en un momento.',
+};
+const ACCESO_REVISION_MS = 5 * 60 * 1000;
+
+function leerErrorSso(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  const codigo = h.get('sso_error');
+  if (!codigo) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return { codigo, email: h.get('email') };
+}
+const irAlLogin = () => { location.href = SSO_URL + '/login'; };
+async function salir(){
+  try { await supabase.auth.signOut(); } catch (_) { /* igual se sale de Cloudflare */ }
+  location.href = SSO_URL + '/logout';
+}
+function pantallaAcceso(titulo, detalle){
+  document.getElementById('nav').innerHTML = '';
+  document.getElementById('sesionInfo').innerHTML = '';
+  document.getElementById('content').innerHTML = '';
+  document.getElementById('hTitle').textContent = 'CRM de Comunidades';
+  document.getElementById('hSub').textContent = 'Ingreso con la cuenta de Taquion';
+  configError.style.display = 'block';
+  configError.innerHTML = `<h3>${esc(titulo)}</h3><div class="sub">${esc(detalle)}</div>
+    <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+      <button class="btn" id="btnSsoEntrar" type="button" style="background:var(--accent); border-color:var(--accent); color:#fff">Entrar con la cuenta de Taquion</button>
+      <button class="btn" id="btnSsoSalir" type="button">Cerrar sesión y entrar con otra cuenta</button>
+    </div>`;
+  document.getElementById('btnSsoEntrar').onclick = async () => { try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {} irAlLogin(); };
+  document.getElementById('btnSsoSalir').onclick = salir;
+}
+function renderSesion(){
+  const a = state.acceso;
+  document.getElementById('sesionInfo').innerHTML = `<span class="sesion-email">${esc(a.email)}</span>
+    <span class="sesion-rol">${esc(ROL_LABEL[a.rol] || a.rol)}${a.admin ? ' · administrador' : ''}</span>
+    <button type="button" class="link-btn" id="btnSalir">Salir</button>`;
+  document.getElementById('btnSalir').onclick = salir;
+}
+// Rol y permiso del usuario según la base (mi_acceso, db/030). Vacío = sesión vencida (24 h) o sin acceso.
+async function cargarAcceso(){
+  const { data, error } = await supabase.rpc('mi_acceso');
+  const a = Array.isArray(data) ? data[0] : data;
+  if (error || !a) {
+    state.acceso = null;
+    pantallaAcceso('Tu sesión venció o tu usuario no tiene acceso',
+      'La sesión del CRM dura 24 horas. Si te dieron de baja o te cambiaron el acceso, consultalo con un administrador.');
+    return false;
+  }
+  state.acceso = a;
+  state.accesoRevisadoEn = Date.now();
+  renderSesion();
+  return true;
+}
+// Se vuelve a mirar cada 5 minutos: una baja o el vencimiento de la sesión se reflejan al navegar.
+async function accesoVigente(){
+  if (state.acceso && Date.now() - (state.accesoRevisadoEn || 0) < ACCESO_REVISION_MS) return true;
+  return cargarAcceso();
+}
+
 if (!supabase) {
   configError.style.display = 'block';
   configError.innerHTML = '<h3 style="color:var(--danger)">Config no disponible</h3><div class="sub">Falta SUPABASE_URL/SUPABASE_ANON_KEY (variables de entorno de Vercel).</div>';
@@ -1952,6 +2133,20 @@ if (!supabase) {
 }
 
 async function iniciar(){
+  const errorSso = leerErrorSso();
+  if (errorSso) {
+    pantallaAcceso('No se pudo entrar al CRM', (MENSAJES_SSO[errorSso.codigo] || (() => 'Ocurrió un error inesperado en el login.'))(errorSso.email));
+    return;
+  }
+  const { data: { session } } = await supabase.auth.getSession();
+  if (location.hash.includes('access_token')) history.replaceState(null, '', location.pathname + location.search);
+  if (!session) {
+    document.getElementById('content').innerHTML = '<div class="card"><h3>Redirigiendo al login de Taquion…</h3></div>';
+    irAlLogin();
+    return;
+  }
+  supabase.auth.onAuthStateChange((evento) => { if (evento === 'SIGNED_OUT') pantallaAcceso('Cerraste sesión', 'Para volver a entrar, usá la cuenta de Taquion.'); });
+  if (!(await cargarAcceso())) return;
   try {
     const { data, error } = await supabase.from('cliente').select('id, nombre, slug').eq('activo', true).order('nombre');
     if (error) throw error;

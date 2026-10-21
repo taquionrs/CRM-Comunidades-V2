@@ -21,9 +21,11 @@
 // Deploy: `supabase functions deploy windsor-sync`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { exigirMarketing } from "../_shared/acceso.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ACCESO = { supabaseUrl: SUPABASE_URL, anonKey: Deno.env.get("SUPABASE_ANON_KEY")!, serviceKey: SERVICE_ROLE_KEY, aceptarServicio: true };
 const WINDSOR_API_KEY = Deno.env.get("WINDSOR_API_KEY");
 // Nombre del campo de Windsor.ai para "conversaciones iniciadas". El documento de Jaz lo llama messaging_conversation_started_7d,
 // pero en el conector facebook de Windsor el campo real es actions_onsite_conversion_messaging_conversation_started_7d
@@ -57,6 +59,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
   }
+
+  const acceso = await exigirMarketing(req, ACCESO);
+  if (!acceso.ok) return json({ error: acceso.error }, acceso.status);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
