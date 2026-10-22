@@ -1,7 +1,7 @@
 # Reunión 2026-10-22 — CRM iteración
 
 **Participantes:** Juan Marroncle (marketing), Jazleidis Lesmes (PO).
-**Fuente:** notas y transcripción de Gemini, "CRM iteración" del 22/10/2026 (transcripción en Google Drive, adjunta al evento del calendario).
+**Fuente:** notas y transcripción de Gemini, "CRM iteración" del 22/10/2026. Original completo en [`originales/2026-10-22-notas-gemini-completas.md`](originales/2026-10-22-notas-gemini-completas.md).
 **Próxima reunión:** el jueves siguiente (29/10, a confirmar).
 
 ## Resumen
@@ -34,6 +34,22 @@ Juan mostró los avances desde la reunión anterior: el flujo de n8n que registr
 - **Control_Comunidades con desglose por campaña** y **sección Campañas** para incluir o excluir campañas. Una campaña en "destino sin asignar" no suma presupuesto ni métricas.
 - **Windsor en vivo:** el CRM consulta a Windsor por el rango de fechas elegido. Mejoró el problema anterior de la selección de fechas. En la prueba, al cambiar el rango cambiaron los números (la campaña de tráfico empezó a gastar hace pocos días).
 - **SSO:** Tecnología implementó varias piezas. Juan hizo algunos pasos de la lista que le pasaron y necesita apoyo de Tecnología para el resto.
+
+## Otros detalles de la conversación
+
+Cosas que dijo Juan en la transcripción y que Gemini no incluyó en el resumen:
+
+- **Orden de prioridades.** El filtro de período de Control_Comunidades iba primero en la lista, pero Juan prefirió hacer antes el desglose por campaña, que le pareció más importante. Con ese cambio ("lo más grande") quedaría el filtro en Overview y verificar que los datos sean correctos.
+- **La campaña de Instagram también es de conversión**, y el CRM levanta sus contactos; por eso tiene que estar incluida en Campañas.
+- **Una campaña sin asignar** muestra "destino sin asignar · no suma": no suma presupuesto ni métricas. Al asignarla se elige la comunidad destino y después se usa "Recalcular ahora".
+- **Pedido a la IA que arma el roadmap:** que a partir de estas notas, cuando se entre a Campañas de Meta, se pueda sumar y seleccionar la campaña de Instagram igual que se hizo con la otra.
+- **Quién usa el CRM:** habrá usuarios que no saben nada de métricas de marketing, por eso las leyendas ("la gente es floja": tienen que estar a mano, con el signo de pregunta).
+- **Qué mezcla cada bloque:** WhatsApp & Salud es manual; lo financiero es una mezcla de Windsor y de lo manual (las personas que todavía están en la comunidad); el CPMI es "el mix de lo manual con lo automático".
+- **Duplicados con plata:** Juan quiere los filtros de fecha y comunidad en Data_Deduplicada porque necesita ver si "nos está saliendo plata duplicada", es decir, controlar duplicados y montos.
+- **El opt-in es bajo** (comentario de Juan al contar los contactos de Palermo: "es muy poquito, a la gente no le gusta que opte").
+- **SSO:** Juan necesita ayuda de Tecnología "para mañana" (23/10) porque Feli ya no estaba conectado. Cuando Tecnología termine lo que él necesita, completa el roadmap que tienen en la tarea.
+- **Armonizar los datos** (flujo contra chat) se hace "en bloque" una vez resuelto el SSO; la reunión se repite "el otro jueves".
+- **Pendiente de verificar:** que al hacer clic en Palermo la pantalla efectivamente filtre.
 
 ## Hallazgos y dudas abiertas
 
