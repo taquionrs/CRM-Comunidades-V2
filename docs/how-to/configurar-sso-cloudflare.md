@@ -27,6 +27,8 @@ Navegador ──► panel (Vercel)
 
 ### 1. Cloudflare Zero Trust (equipo `quiet-lab-fdf2`)
 
+> ✅ **Ya está creado** (22/10/2026): política **CRM Comunidades - Acceso** y aplicación SaaS OIDC **CRM Comunidades**, con la configuración de abajo. ID de cliente `956a9d0a21578f9c1d040f7dc48b27e965a30a63115d3907d6ef3af53bafba84`. Emisor `https://quiet-lab-fdf2.cloudflareaccess.com/cdn-cgi/access/sso/oidc/956a9d0a21578f9c1d040f7dc48b27e965a30a63115d3907d6ef3af53bafba84`. Los pasos quedan como referencia por si hay que rehacerlo.
+
 1. **Política reutilizable** (*Controles de Access → Políticas → Agregar una política*):
    - Nombre: `CRM Comunidades - Acceso`
    - Acción: **Permitir**
