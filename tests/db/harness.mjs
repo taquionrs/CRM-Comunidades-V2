@@ -33,10 +33,10 @@ create function cron.unschedule(p_jobid bigint) returns boolean language sql as 
 create schema windsor_raw;
 `;
 
-/** Migraciones en orden. 005 nunca se aplicó (la reemplazan 030 y 031); las de db/mantenimiento son datos puntuales. */
+/** Migraciones en orden (las de db/mantenimiento son datos puntuales y no entran). */
 export function migraciones({ hasta = Infinity } = {}) {
   return fs.readdirSync(DB_DIR)
-    .filter((f) => /^\d{3}_.*\.sql$/.test(f) && !f.startsWith("005_") && parseInt(f, 10) <= hasta)
+    .filter((f) => /^\d{3}_.*\.sql$/.test(f) && parseInt(f, 10) <= hasta)
     .sort()
     .map((f) => path.join(DB_DIR, f));
 }

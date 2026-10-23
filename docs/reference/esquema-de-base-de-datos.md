@@ -2,7 +2,7 @@
 
 Todo vive en el schema Postgres `crm_comunidades_v2`, en el mismo proyecto de Supabase que V1 y `pulso-ignite`, pero sin ninguna tabla/vista/FK compartida con esos dos. Fuentes: [`db/001_init.sql`](../../db/001_init.sql), [`002`](../../db/002_vistas_panel.sql), [`003`](../../db/003_lectura_abierta_temporal.sql), [`004`](../../db/004_cliente.sql), [`005`](../../db/005_rls_por_cliente.sql), [`006`](../../db/006_rango_fechas_y_clics.sql), [`007`](../../db/007_webhook_intento.sql), [`008`](../../db/008_identificador_instagram.sql) y [`009`](../../db/009_rechazos_guardan_json.sql).
 
-> Estado: `004` (clientes) y `006` (fechas, clics y teléfono) están **aplicadas** desde el 2026-09-30. `005` (acceso por usuario) está escrita y **sin aplicar**; se aplica al final, junto con el login.
+> Estado: `004` (clientes) y `006` (fechas, clics y teléfono) están **aplicadas** desde el 2026-09-30. El login y los roles son `030` y `031` (ver [configurar el login](../how-to/configurar-sso-cloudflare.md)). La vieja `005` (asignación por cliente) se borró sin haberse aplicado.
 
 ## Modelo de cliente
 
@@ -136,9 +136,6 @@ Avisos "la persona tocó el botón Me sumo" que manda ManyChat desde la salida p
 
 ### `usuario_crm` y `usuario_crm_auditoria` (030)
 `usuario_crm`: quién entra al CRM (`email` en minúsculas, cuenta @taquion.com.ar), con qué `rol` (`marketing` o `general`), si es `admin` (gestiona usuarios) y si es `fijo` (no se cambia desde el panel). `usuario_crm_auditoria`: cada alta, cambio y baja, con quién la hizo. Las dos se leen y escriben solo con las funciones de 030 (pestaña Usuarios). Detalle en [`specs/2026-10-21-sso-cloudflare-y-roles.md`](../../specs/2026-10-21-sso-cloudflare-y-roles.md).
-
-### ~~`usuario_cliente` (005)~~
-Nunca se aplicó: 030 y 031 la reemplazan. Todos los usuarios ven todos los clientes.
 
 ## Vistas
 

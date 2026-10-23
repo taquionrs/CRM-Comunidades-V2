@@ -17,7 +17,7 @@
 --      (_exigir_marketing, al principio de cada una). Se copian tal cual de su última versión.
 --   5. EXECUTE de las funciones: nada por defecto para anon/authenticated; cada una se habilita explícitamente.
 --
--- Reemplaza a db/003 (lectura abierta temporal) y a db/005 (que no se aplica). Idempotente.
+-- Reemplaza a db/003 (lectura abierta temporal) y al diseño de la vieja db/005 (borrada sin aplicarse). Idempotente.
 -- ============================================================================
 set search_path = crm_comunidades_v2, public;
 

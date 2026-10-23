@@ -1,6 +1,6 @@
 # SSO con Cloudflare y roles del CRM (2026-10-21)
 
-> **Estado: implementado en la rama `sso-cloudflare`, a validar por Juan antes de desplegar.** Las decisiones de este documento las tomó Feli (Tecnología) el 21/10/2026. Las preguntas abiertas para Juan están en [A validar](#a-validar-por-juan).
+> **Estado: implementado en la rama `sso-cloudflare` y validado por Juan (22/10/2026).** Las decisiones de este documento las tomó Feli (Tecnología) el 21/10/2026; las respuestas de Juan están en [Validación](#validación-de-juan-22102026). Falta el despliegue, en el orden de [configurar el login](../docs/how-to/configurar-sso-cloudflare.md#orden-de-despliegue).
 
 ## Contexto
 
@@ -19,7 +19,7 @@ Pedido: SSO con Cloudflare igual que Pulso, acceso para cuentas `@taquion.com.ar
 | 5 | **Dos roles + administrador** (detalle en [Qué ve cada rol](#qué-ve-cada-rol)): **Marketing** ve y edita todo; **General** ve conteos, sin plata ni datos personales, y solo lee. **Administrador** se suma a cualquiera de los dos y gestiona usuarios desde la pestaña **Usuarios**. | Es lo que pide la tarea: Marketing + Admin, y un rol general sin la información sensible o financiera. | — |
 | 6 | **Administradores fijos**: `felipe.pampin@taquion.com.ar`, `nicolas.piantanida@taquion.com.ar` y `marketing@taquion.com.ar`, todos con rol Marketing. No se pueden quitar ni cambiar desde la pantalla. | Así nunca se pierde el acceso de administración. | — |
 | 7 | **Nadie puede cambiar ni quitar su propio acceso**, y cada alta, cambio o baja queda en una auditoría (quién, cuándo, qué). | Igual que Pulso. | — |
-| 8 | **Todos los usuarios ven todos los clientes.** La asignación por cliente de `db/005` no se usa: `005` queda reemplazada por `030` y `031` y **no se aplica**. | Son usuarios internos de Taquion: es más simple de administrar. Se puede agregar la asignación por cliente más adelante. | Asignar clientes a cada usuario (`db/005`). |
+| 8 | **Todos los usuarios ven todos los clientes.** La asignación por cliente de la vieja `db/005` no se usa, y esa migración se borró sin haberse aplicado. | Son usuarios internos de Taquion: es más simple de administrar. Se puede agregar la asignación por cliente más adelante. | Asignar clientes a cada usuario (vieja `db/005`). |
 | 9 | **A quien pasa Cloudflare pero no está dado de alta no se le crea usuario en Supabase**, y ve "sin acceso". | El proyecto Supabase es el mismo que el del CRM V1: no se crean usuarios de más. | — |
 | 10 | **n8n deja de usar la clave anon para leer `comunidad`**: el nombre de la comunidad para la planilla sale de una función nueva protegida con el mismo secreto que `registrar_envio_planilla`. | Al cerrar la lectura anónima, el nodo actual de n8n dejaría de funcionar. | Dejar la tabla `comunidad` legible con la clave pública. |
 | 11 | **Las Edge Functions que llama el panel exigen un usuario Marketing**: `meta-en-vivo` y `nominacion-sync`. `windsor-sync` y `panel-data` aceptan además la clave de servicio. | Hoy cualquiera con la clave anon puede dispararlas. | — |
@@ -65,11 +65,15 @@ El orden de despliegue está en [configurar el login](../docs/how-to/configurar-
 - **Una lección que quedó en `031`:** una vista con `security_invoker` usada adentro de otra con permisos del dueño sigue leyendo con los permisos de quien consulta. Por eso `comunidad_performance` calcula el primer contacto adentro, en lugar de usar `evento_deduplicado`.
 - **Lo que no se pudo probar:** el Cloudflare y el Supabase reales (hacen falta los secretos y el despliegue).
 
-## A validar por Juan
+## Validación de Juan (22/10/2026)
 
-- [ ] ¿Está bien lo que ve el rol **General**? En particular: ¿puede ver las métricas de Meta que no son plata (conversaciones, impresiones, CTR, clientes potenciales)?
-- [ ] ¿`marketing@taquion.com.ar` es el usuario de marketing que va como administrador fijo?
-- [ ] ¿Está bien que **todos vean todos los clientes**, o hace falta asignar clientes por usuario?
-- [ ] ¿Se mantiene la **clave de carga** en Cargar miembros o la sacamos?
-- [ ] ¿Se puede borrar `db/005` del repo, ya que queda reemplazada y nunca se aplicó?
-- [ ] ¿Te sirve el **orden de despliegue**, incluido el cambio del nodo de n8n?
+- [x] **Rol General**: está bien. Ve conversaciones, impresiones, CTR y clientes potenciales, sin inversión, costos ni datos personales, y solo lee.
+- [x] **Administradores fijos**: `marketing@taquion.com.ar` es la cuenta correcta, junto con Felipe y Nicolás P.
+- [x] **Clientes**: que todos vean todos sirve por ahora. **A futuro**, si hace falta asignar clientes por persona (por ejemplo, Todo un País), tiene que poder hacerlo un administrador con rol Marketing desde la pestaña **Usuarios**, como en Pulso, sin SQL.
+- [x] **Clave de carga**: se mantiene por ahora. Se saca en una PR aparte cuando el SSO esté estable.
+- [x] **`db/005`**: borrada del repo.
+- [x] **Orden de despliegue**: secretos, `030`, `auth-cloudflare`, cambio del nodo de n8n y recién después fusionar, aplicar `031` y redeployar `meta-en-vivo`, `nominacion-sync` y `windsor-sync`. Juan carga los secretos directo en Supabase. `030` y `031` se aplican con el procedimiento de siempre: primero un ensayo con rollback (ver la guía).
+- [x] **Consulta de Juan: ¿las tablas que `031` no nombra quedan cerradas?** Sí. Son `miembro_grupo`, `miembro_comunidad`, `carga_miembros`, `webhook_intento_sin_cliente`, `config_n8n` (en el listado figuraba cortado como `config_n`), `config_carga_miembros`, `windsor_entrega_log`, `windsor_sync_log`, `usuario_crm` y `usuario_crm_auditoria`.
+  - `031` activa RLS en **todas** las tablas del esquema y no les crea política, así que solo se llega a ellas con funciones `security definer` o con la clave de servicio.
+  - La clave anon no tiene ningún permiso; para un usuario con sesión, devuelven 0 filas o `permission denied` (`config_*`, `usuario_crm*`).
+  - Lo verifica `npm run test:db` con una prueba que arma la lista desde la base (no fija). Cualquier tabla nueva sin política queda cubierta.

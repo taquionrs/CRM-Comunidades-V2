@@ -3,7 +3,7 @@
 ## Base de datos (una sola vez)
 
 1. Abrir el SQL Editor del proyecto Supabase compartido con V1.
-2. Correr en este orden: `db/001_init.sql`, `002`, `003`, `004` y `006` (ya aplicadas en producción al 2026-09-30). **No correr `005_rls_por_cliente.sql`**: quedó reemplazada por `030` y `031` (login con SSO y roles), que tienen su propio orden en [configurar el login](configurar-sso-cloudflare.md#orden-de-despliegue). Forma rápida con la CLI, dentro de una transacción: `supabase db query --linked -f archivo.sql`.
+2. Correr en este orden: `db/001_init.sql`, `002`, `003`, `004` y `006` (ya aplicadas en producción al 2026-09-30). `030` y `031` (login con SSO y roles) tienen su propio orden: ver [configurar el login](configurar-sso-cloudflare.md#orden-de-despliegue). Forma rápida con la CLI, dentro de una transacción: `supabase db query --linked -f archivo.sql`.
 3. Dar de alta al menos un cliente: [agregar un cliente](agregar-un-cliente.md).
 4. En **Project Settings → Data API**, agregar `crm_comunidades_v2` a la lista de schemas expuestos (no es automático — mismo paso que V1).
 

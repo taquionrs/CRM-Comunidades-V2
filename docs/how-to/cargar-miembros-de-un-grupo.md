@@ -24,11 +24,11 @@ Cada carga queda en **Consultas** con el tipo "Carga de miembros" (archivo, modo
 - Un número repetido dentro del archivo cuenta una vez, con su fecha más antigua. Las filas sin teléfono válido se descartan y se cuentan.
 - Si alguien que había salido vuelve a aparecer, se reactiva como nuevo ingreso.
 
-## Seguridad (excepción hasta que haya login)
-Esto se construyó **antes del login**, por decisión del usuario del 14/10/2026. Hasta que exista el login (`db/005`):
-- Las tablas con teléfonos no se pueden leer ni escribir desde el panel: solo las funciones de `db/019` y `db/020`, y todas piden la **clave de carga**.
-- La clave se guarda como hash en la base. El valor real no está en el repositorio. Quien la sepa puede cargar y ver teléfonos: compartirla solo con quien lo necesita.
-- Cuando haya login, esto se reemplaza por acceso por usuario y la clave deja de hacer falta.
+## Seguridad
+- Las tablas con teléfonos no se pueden leer ni escribir desde el panel: solo las funciones de `db/019` y `db/020`.
+- Con el login con SSO (`db/031`), esas funciones exigen además un usuario con rol **Marketing**.
+- Todas piden también la **clave de carga**. La clave se guarda como hash en la base y el valor real no está en el repositorio: compartirla solo con quien la necesita.
+- La clave se mantiene por ahora. Se saca en una PR aparte cuando el SSO esté estable (decisión del 22/10/2026).
 
 ## Límites
 - La lista de miembros se carga a mano (no hay forma automática de leer un grupo de WhatsApp).

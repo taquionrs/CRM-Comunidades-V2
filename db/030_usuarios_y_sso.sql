@@ -4,7 +4,7 @@
 --
 -- SOLO AGREGA: no cambia ninguna política ni permiso existente, así que se puede aplicar antes de que el panel
 -- tenga login sin romper nada. El cierre del acceso anónimo es db/031 (se aplica junto con el panel con login).
--- Reemplaza el diseño de db/005 (asignación por cliente), que nunca se aplicó y ya no se aplica.
+-- Reemplaza el diseño de la vieja db/005 (asignación por cliente), que nunca se aplicó y se borró del repo.
 --
 --   usuario_crm            quién entra al CRM, con qué rol (marketing / general) y si administra usuarios
 --   usuario_crm_auditoria  cada alta, cambio y baja: quién, cuándo, qué

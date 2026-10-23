@@ -6,3 +6,4 @@ node_modules/
 public/config.js
 supabase/.temp/
 SECRETO-*.txt
+ensayo_*.sql

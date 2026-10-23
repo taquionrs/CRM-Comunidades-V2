@@ -27,6 +27,18 @@ before(async () => {
     insert into config_n8n (clave_hash) values (encode(extensions.digest('${SECRETO_N8N}', 'sha256'), 'hex'));
     insert into usuario_crm (email, rol, admin) values ('general@taquion.com.ar', 'general', false),
                                                        ('mkt@taquion.com.ar', 'marketing', false);
+    -- Tablas sin política (solo se usan desde funciones o con la clave de servicio): con datos, para probar que no se leen.
+    insert into usuario_crm_auditoria (por, accion, email, rol, admin) values ('seed', 'alta', 'x@taquion.com.ar', 'general', false);
+    insert into config_carga_miembros (clave_hash) values ('hash-de-prueba');
+    insert into carga_miembros (id, cliente_id, comunidad_id, numeros_validos)
+      values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', 1);
+    insert into miembro_grupo (carga_id, cliente_id, comunidad_id, telefono_id)
+      values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', '5491100000001');
+    insert into miembro_comunidad (comunidad_id, cliente_id, telefono_id, fecha)
+      values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000c1', '5491100000001', '2026-10-01');
+    insert into webhook_intento_sin_cliente (slug_recibido, estado, motivo, payload) values ('desconocido', 404, 'Cliente inexistente', '{"contact":{"name":"Ana"}}');
+    insert into windsor_entrega_log (tabla, operacion, filas) values ('windsor_raw.facebook_ads', 'insert', 1);
+    insert into windsor_sync_log (tabla) values ('windsor_raw.facebook_ads');
   `);
   for (const email of ["felipe.pampin@taquion.com.ar", "general@taquion.com.ar", "mkt@taquion.com.ar", "nadie@taquion.com.ar", "vencido@taquion.com.ar"]) {
     const { rows: [u] } = await db.query(`insert into auth.users (email) values ($1) returning id`, [email]);
@@ -164,7 +176,7 @@ test("Administrador: gestiona usuarios con sus reglas y queda auditoría", async
   assert.equal(alta.c.rol, "marketing");
   assert.equal(alta.q, true);
   assert.deepEqual(alta.aud.slice(0, 3).map((a) => a.accion), ["baja", "cambio", "alta"]);
-  assert.ok(alta.aud.every((a) => a.por === "felipe.pampin@taquion.com.ar"));
+  assert.ok(alta.aud.slice(0, 3).every((a) => a.por === "felipe.pampin@taquion.com.ar"));
 
   await falla(ctx, `select ${S}.guardar_usuario_crm('alguien@gmail.com', 'general', false)`, /@taquion\.com\.ar/);
   await falla(ctx, `select ${S}.guardar_usuario_crm('x@taquion.com.ar', 'jefe', false)`, /Rol inválido/);
@@ -216,4 +228,27 @@ test("con solo db/030 aplicada (antes del deploy del panel con login) nada cambi
   assert.deepEqual(leidas, { comunidad: 1, kpis: 1, rango: 1 });
   const fijos = await intermedia.query(`select count(*)::int as n from crm_comunidades_v2.usuario_crm where fijo`);
   assert.equal(fijos.rows[0].n, 3);
+});
+
+test("las tablas sin política (cargas de miembros, configuración, registros de Windsor, rechazos sin cliente, usuarios) no las lee nadie desde el panel", async () => {
+  // La lista sale de la base, no de una lista fija: cualquier tabla nueva sin política queda cubierta por esta prueba.
+  const { rows } = await db.query(`
+    select c.relname as t, c.relrowsecurity as rls,
+           (select count(*) from pg_policies p where p.schemaname = 'crm_comunidades_v2' and p.tablename = c.relname)::int as politicas
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'crm_comunidades_v2' and c.relkind = 'r'`);
+  assert.deepEqual(rows.filter((r) => !r.rls).map((r) => r.t), [], "todas las tablas tienen RLS activa");
+  const sinPolitica = rows.filter((r) => r.politicas === 0).map((r) => r.t).sort();
+  for (const t of ["miembro_grupo", "webhook_intento_sin_cliente", "config_n8n", "config_carga_miembros", "usuario_crm"]) {
+    assert.ok(sinPolitica.includes(t), `${t} no tiene políticas`);
+  }
+  for (const t of sinPolitica) {
+    const total = (await db.query(`select count(*)::int as n from ${S}.${t}`)).rows[0].n;
+    assert.ok(total > 0, `${t}: la prueba necesita al menos una fila`);
+    await falla(ANON, `select * from ${S}.${t}`, /permission denied/);
+    for (const k of ["general", "mkt", "felipe"]) {
+      const visto = await como(db, sesion(k), (tx) => tx.query(`select * from ${S}.${t}`).then((r) => r.rows.length, () => "denegado"));
+      assert.ok(visto === 0 || visto === "denegado", `${t} como ${k}: devolvió ${visto} filas`);
+    }
+  }
 });

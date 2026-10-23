@@ -59,7 +59,7 @@ Para generar `SESSION_SECRET` en Windows (PowerShell): `$b = New-Object byte[] 4
 
 ### 3. Base: `030` (solo agrega, no rompe nada)
 
-Con el procedimiento de siempre (ensayo con rollback y aplicación en transacción): `supabase db query --linked -f db/030_usuarios_y_sso.sql`.
+Con el procedimiento de siempre: primero el ensayo con rollback (ver [abajo](#ensayo-con-rollback-de-030-y-031)) y después la aplicación en una transacción: `supabase db query --linked -f db/030_usuarios_y_sso.sql`.
 
 Crea el registro de usuarios con los tres administradores fijos (`felipe.pampin@`, `nicolas.piantanida@` y `marketing@taquion.com.ar`), las funciones de acceso y `datos_comunidad_planilla` para n8n. El panel actual sigue funcionando igual. La migración empieza comprobando que se puede leer `auth.sessions`: si falla ahí, aplicarla como `postgres`.
 
@@ -82,7 +82,7 @@ Probalo con un contacto de prueba antes de seguir: la fila tiene que caer en la 
 ### 6. Panel con login + cierre (`031`), todo junto
 
 1. Fusionar la PR del login en `master`: Vercel deploya el panel nuevo. Con `030` aplicada ya se puede entrar con la cuenta de Taquion.
-2. Aplicar `supabase db query --linked -f db/031_cerrar_acceso_por_rol.sql`.
+2. Ensayo con rollback de `031` (ver [abajo](#ensayo-con-rollback-de-030-y-031)) y después `supabase db query --linked -f db/031_cerrar_acceso_por_rol.sql`.
 3. Redeployar las funciones con control de rol:
 
    ```bash
@@ -101,6 +101,35 @@ Probalo con un contacto de prueba antes de seguir: la fila tiene que caer en la 
 4. **Clave anon:** sin login, el esquema queda cerrado. Este pedido tiene que responder 401 o `permission denied`:
    `curl "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/evento_crudo?select=*" -H "apikey: <anon>" -H "Accept-Profile: crm_comunidades_v2"`.
 5. **n8n:** un contacto nuevo sigue llegando a la planilla, y en Data_Cruda aparece como "registrado".
+
+## Ensayo con rollback de 030 y 031
+
+Se arma un archivo con la migración entre `begin` y `rollback`, más unas consultas de verificación, y se corre contra el proyecto: aplica todo, muestra el resultado y lo deshace. Desde la raíz del repo, en Git Bash (en PowerShell, el mismo contenido armado con `Get-Content`):
+
+```bash
+( echo "begin;"; cat db/030_usuarios_y_sso.sql
+  echo "select (select count(*) from crm_comunidades_v2.usuario_crm where fijo)::int as admins_fijos,
+    (select count(*) from pg_proc where pronamespace = 'crm_comunidades_v2'::regnamespace and proname in ('mi_acceso','es_usuario_crm','es_marketing','es_admin_crm','usuarios_crm','guardar_usuario_crm','quitar_usuario_crm','datos_comunidad_planilla'))::int as funciones_nuevas,
+    has_table_privilege('anon', 'crm_comunidades_v2.evento_crudo', 'select') as anon_lee_evento_crudo;"
+  echo "rollback;" ) > ensayo_030.sql
+supabase db query --linked -f ensayo_030.sql
+```
+
+Esperado: `admins_fijos = 3`, `funciones_nuevas = 8` y `anon_lee_evento_crudo = true` (030 no cierra nada).
+
+Para `031` (con `030` ya aplicada), lo mismo con `db/031_cerrar_acceso_por_rol.sql` y esta verificación:
+
+```sql
+select has_table_privilege('anon', 'crm_comunidades_v2.evento_crudo', 'select') as anon_lee_evento_crudo,
+  (select count(*) from pg_policies where schemaname = 'crm_comunidades_v2' and policyname = 'lectura_abierta')::int as lecturas_abiertas,
+  (select count(*) from pg_policies where schemaname = 'crm_comunidades_v2')::int as politicas,
+  (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'crm_comunidades_v2' and c.relkind = 'r' and not c.relrowsecurity)::int as tablas_sin_rls;
+```
+
+Esperado: `anon_lee_evento_crudo = false`, `lecturas_abiertas = 0`, `politicas = 22` y `tablas_sin_rls = 0`.
+
+Los valores esperados salen de correr lo mismo sobre el Postgres local de `npm run test:db`. Borrar el archivo `ensayo_*.sql` después: no se sube al repo.
 
 ## Usuarios: altas, bajas y administradores
 
