@@ -59,19 +59,26 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/comunidad?id=eq.{{ $('Webhook (desde Supabase)').first().json.body.record.comunidad_id }}&select=nombre,cliente(nombre,slug)",
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/datos_comunidad_planilla",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpCustomAuth",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Accept-Profile",
+              "name": "apikey",
+              "value": "PEGAR_PUBLISHABLE_KEY"
+            },
+            {
+              "name": "Content-Profile",
               "value": "crm_comunidades_v2"
             }
           ]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_comunidad: $('Webhook (desde Supabase)').first().json.body.record.comunidad_id }) }}",
         "options": {}
       },
       "id": "b2222222-2222-4222-8222-222222222222",
@@ -83,15 +90,15 @@
         -80
       ],
       "credentials": {
-        "httpCustomAuth": {
+        "httpHeaderAuth": {
           "id": "REEMPLAZAR",
-          "name": "Supabase CRM (Custom Auth)"
+          "name": "Webhook CRM (Header Auth)"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const entrada = $('Webhook (desde Supabase)').first().json.body;\nconst rec = entrada.record || {};\nconst resp = $input.first().json;\nconst com = (Array.isArray(resp) ? resp[0] : resp) || {};\n\nconst ahora = rec.recibido_en ? new Date(rec.recibido_en) : new Date();\nconst zona = 'America/Argentina/Buenos_Aires';\nconst fecha = new Intl.DateTimeFormat('en-CA', { timeZone: zona }).format(ahora);\nconst hora = new Intl.DateTimeFormat('en-GB', { timeZone: zona, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ahora);\n\nconst contacto = (rec.payload && rec.payload.contact) || {};\nconst nombre = String(contacto.name || contacto.first_name || '').trim();\n\n// Nombre de la pestaña en la planilla, según cliente y comunidad\nconst HOJAS = {\n  'Cortado en Jarrito / Boedo': 'Cortado-Boedo',\n  'Cortado en Jarrito / Villa Devoto': 'Cortado-Devoto',\n  'Cortado en Jarrito / Palermo': 'Cortado-Palermo',\n  'Cortado en Jarrito / Cortado en Jarrito (general)': 'Cortado-General',\n  'Todo un País / La Toma': 'Todounpais-LaToma',\n  'Todo un País / Quines': 'Todounpais-Quines',\n  'Todo un País / San Luis Capital': 'Todounpais-SanLuis',\n  'Todo un País / Todo un País (general)': 'Todounpais-General',\n};\nconst cliente = (com.cliente && com.cliente.nombre) || '';\nconst hoja = HOJAS[cliente + ' / ' + (com.nombre || '')] || 'SIN-HOJA';\n\nreturn [{ json: {\n  Hoja: hoja,\n  Fecha: fecha,\n  Hora: hora,\n  'Teléfono': '+' + String(rec.telefono_id),\n  Nombre: nombre\n} }];"
+        "jsCode": "const entrada = $('Webhook (desde Supabase)').first().json.body;\nconst rec = entrada.record || {};\nconst resp = $input.first().json;\nconst com = (Array.isArray(resp) ? resp[0] : resp) || {};\n\nconst ahora = rec.recibido_en ? new Date(rec.recibido_en) : new Date();\nconst zona = 'America/Argentina/Buenos_Aires';\nconst fecha = new Intl.DateTimeFormat('en-CA', { timeZone: zona }).format(ahora);\nconst hora = new Intl.DateTimeFormat('en-GB', { timeZone: zona, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(ahora);\n\nconst contacto = (rec.payload && rec.payload.contact) || {};\nconst nombre = String(contacto.name || contacto.first_name || '').trim();\n\n// Nombre de la pestaña en la planilla, según cliente y comunidad\nconst HOJAS = {\n  'Cortado en Jarrito / Boedo': 'Cortado-Boedo',\n  'Cortado en Jarrito / Villa Devoto': 'Cortado-Devoto',\n  'Cortado en Jarrito / Palermo': 'Cortado-Palermo',\n  'Cortado en Jarrito / Cortado en Jarrito (general)': 'Cortado-General',\n  'Todo un País / La Toma': 'Todounpais-LaToma',\n  'Todo un País / Quines': 'Todounpais-Quines',\n  'Todo un País / San Luis Capital': 'Todounpais-SanLuis',\n  'Todo un País / Todo un País (general)': 'Todounpais-General',\n};\nconst cliente = com.cliente || '';\nconst hoja = HOJAS[cliente + ' / ' + (com.comunidad || '')] || 'SIN-HOJA';\n\nreturn [{ json: {\n  Hoja: hoja,\n  Fecha: fecha,\n  Hora: hora,\n  'Teléfono': '+' + String(rec.telefono_id),\n  Nombre: nombre\n} }];"
       },
       "id": "c3333333-3333-4333-8333-333333333333",
       "name": "Armar fila",

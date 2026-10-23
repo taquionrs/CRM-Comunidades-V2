@@ -16,6 +16,7 @@ Organizada según [Diátaxis](https://diataxis.fr/): agrupa por lo que necesitá
 ## Guías prácticas
 
 - [Desplegar](how-to/desplegar.md)
+- [Configurar el login con SSO (Cloudflare) y los usuarios](how-to/configurar-sso-cloudflare.md)
 - [Agregar un cliente](how-to/agregar-un-cliente.md)
 - [Configurar Windsor.ai](how-to/configurar-windsor-ai.md)
 - [Configurar el webhook y la nominación de ManyChat](how-to/configurar-webhook-manychat.md)

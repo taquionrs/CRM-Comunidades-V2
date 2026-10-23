@@ -37,7 +37,7 @@ Recomendación para datos de clientes: **Claude API directo**. OpenRouter queda 
 
 ## Depende de
 - Decisión del proveedor y presupuesto mensual.
-- Login con acceso por usuario (`db/005`), para saber quién consulta.
+- Login con acceso por usuario (SSO, `db/030` y `db/031`), para saber quién consulta.
 - Definiciones de métricas cerradas (documento de definiciones).
 - Validación de Legal para cualquier dato nominado.
 

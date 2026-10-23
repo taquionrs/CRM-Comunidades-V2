@@ -9,17 +9,20 @@
 // Secreto necesario: WINDSOR_API_KEY (Supabase → Edge Functions → Secrets). Sin él responde 501 en lugar de fallar en silencio.
 // La clave de Windsor NUNCA se devuelve ni se registra: se enmascara en cualquier mensaje de error.
 //
-// Seguridad: se despliega con --no-verify-jwt (el panel todavía no tiene login) y se protege con un tope de 31 días y una pausa de 45 segundos
-// entre consultas (en la base). Ver docs/how-to/meta-en-vivo.md.
+// Seguridad: exige la sesión de un usuario del CRM con rol Marketing (_shared/acceso.mjs, db/030). Se despliega con
+// --no-verify-jwt porque el control lo hace la función; además hay un tope de 31 días y una pausa de 45 segundos entre
+// consultas (en la base). Ver docs/how-to/meta-en-vivo.md.
 //
 // Deploy: supabase functions deploy meta-en-vivo --use-api --no-verify-jwt
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { exigirMarketing } from "../_shared/acceso.mjs";
 import { CAMPOS_WINDSOR, dividirVentanas, prepararFilas, validarRango } from "./ventanas.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const WINDSOR_API_KEY = Deno.env.get("WINDSOR_API_KEY");
+const ACCESO = { supabaseUrl: SUPABASE_URL, anonKey: Deno.env.get("SUPABASE_ANON_KEY")! };
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -58,6 +61,8 @@ async function consultarVentana(clave: string, desde: string, hasta: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Método no soportado, usar POST" }, 405);
+  const acceso = await exigirMarketing(req, ACCESO);
+  if (!acceso.ok) return json({ error: acceso.error }, acceso.status);
   if (!WINDSOR_API_KEY) return json({ error: "Falta cargar la clave de Windsor como secreto de la función (WINDSOR_API_KEY)" }, 501);
 
   let cuerpo: { desde?: string; hasta?: string };

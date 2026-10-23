@@ -67,7 +67,8 @@ test("cubreDesglose: completo si coincide con la tabla (hasta $1 por redondeo); 
 test("el panel carga el desglose sin romper la tabla si falla, y lo dibuja debajo de la tabla", () => {
   assert.match(html, /rpc\('desglose_campanas'/);
   assert.match(html, /if \(error\) \{ console\.warn\('desglose_campanas:'[^}]*return null;/);
-  assert.match(html, /<\/table><\/div>\s*<\/div>\s*\$\{renderDesglose\(/);
+  // Debajo de la tabla y solo para el rol Marketing (para General la base no devuelve el desglose: db/031).
+  assert.match(html, /<\/table><\/div>\s*<\/div>\s*\$\{!esMarketing\(\) \? '' : renderDesglose\(/);
 });
 
 test("CPL se renombró a CPMI (costo por mensaje iniciado) en la tabla, en Overview y en el desglose, sin cambiar el id de la columna", () => {

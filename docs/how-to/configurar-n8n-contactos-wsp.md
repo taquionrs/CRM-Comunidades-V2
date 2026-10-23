@@ -29,21 +29,32 @@ En la **fila 1 de cada pestaña**, un encabezado por celda, de A a D: `Fecha`, `
 Si llega una comunidad que no está en la tabla, la pestaña queda como `SIN-HOJA` y el nodo da error (queda registrado como "Error" en el CRM). Una comunidad nueva necesita su pestaña y una línea nueva en la tabla del nodo "Armar fila".
 
 ## 2. Credenciales en n8n
-- **Header Auth** ("Webhook CRM (Header Auth)"): nombre del encabezado `x-crm-secret` (también se acepta `Webhook-crm-secret`; lo importante es usar **el mismo nombre y el mismo valor** en la credencial de n8n y en el encabezado del webhook de Supabase) y, como valor, un secreto largo que inventes. Se usa en el nodo Webhook y en los tres nodos "Avisar al CRM".
-- **Custom Auth** ("Supabase CRM"), para el nodo "Buscar comunidad y cliente". Con la **Publishable key** del proyecto (Project Settings → API Keys; nunca la Secret):
-
-  ```json
-  {"headers": {"apikey": "TU_PUBLISHABLE_KEY"}}
-  ```
-  Si da error 401, usar la clave anon antigua (pestaña Legacy API keys) con `{"headers": {"apikey": "TU_CLAVE_ANON", "Authorization": "Bearer TU_CLAVE_ANON"}}`.
+- **Header Auth** ("Webhook CRM (Header Auth)"): nombre del encabezado `x-crm-secret` (también se acepta `Webhook-crm-secret`; lo importante es usar **el mismo nombre y el mismo valor** en la credencial de n8n y en el encabezado del webhook de Supabase) y, como valor, un secreto largo que inventes. Se usa en el nodo Webhook, en "Buscar comunidad y cliente" y en los tres nodos "Avisar al CRM".
+- ~~**Custom Auth** ("Supabase CRM")~~: ya no hace falta. Desde el login del CRM (2026-10), la clave pública no lee las tablas y "Buscar comunidad y cliente" usa la credencial Header Auth (ver [el cambio](#cambio-por-el-login-del-crm-2026-10)).
 - **Google Sheets**: recomendado **Service Account** (no vence). En Google Cloud: activar *Google Sheets API* y *Google Drive API*, crear una cuenta de servicio, bajar su clave en JSON y pegar en n8n el `client_email` y el `private_key` completo (de `-----BEGIN PRIVATE KEY-----` a `-----END PRIVATE KEY-----`, sin comillas). Después **compartir la planilla con ese correo como Editor**. El archivo JSON es un secreto: no se sube a ningún lado.
 
 ## 3. Nodos del flujo
 Importar el JSON y completar:
 - **Agregar o actualizar en la hoja de la comunidad:** pegar el ID de la planilla (lo que está entre `/d/` y `/edit` en la URL, sin el `d/`); *Sheet* en modo **By Name** con la expresión `{{ $json.Hoja }}`; *Mapping Column Mode* = manual con los 4 campos (`Fecha`, `Hora`, `Teléfono`, `Nombre`); *Column to match on* = `Teléfono`; en *Options* → *Cell Format* = **Use format from n8n** (así el `+` del teléfono se conserva y la búsqueda para no duplicar funciona). El nodo tiene activada la salida de error.
-- **Los tres nodos "Avisar al CRM":** reemplazar `PEGAR_PUBLISHABLE_KEY` por la Publishable key y usar la credencial Header Auth de arriba.
+- **"Buscar comunidad y cliente" y los tres nodos "Avisar al CRM":** reemplazar `PEGAR_PUBLISHABLE_KEY` por la Publishable key y usar la credencial Header Auth de arriba.
 
 Si ya tenías el flujo armado y no querés reimportar, agregá a mano esos tres nodos (HTTP Request, POST a `https://<proyecto>.supabase.co/rest/v1/rpc/registrar_envio_planilla`, encabezados `apikey` y `Content-Profile: crm_comunidades_v2`, cuerpo JSON con `p_evento_id` = `{{ $('Webhook (desde Supabase)').first().json.body.record.id }}` y `p_estado` = `registrado`, `ignorado` o `error` según la rama; el de error suma `p_motivo`), y poné el nodo de Sheets en *Settings → On Error → Continue (using error output)*.
+
+## Cambio por el login del CRM (2026-10)
+
+Con el login con SSO, `db/031` le saca a la clave pública la lectura de las tablas. El nodo **Buscar comunidad y cliente (Supabase)** ya no puede leer `comunidad` con ella: pasa a usar la función `datos_comunidad_planilla` (db/030), que exige el mismo secreto que `registrar_envio_planilla`. **Hacer este cambio antes de aplicar `031`** (orden completo en [configurar el login](configurar-sso-cloudflare.md#orden-de-despliegue)).
+
+Si no reimportás el JSON, cambiá a mano:
+- **Buscar comunidad y cliente (Supabase):**
+  - *Method* `POST`, URL `https://<proyecto>.supabase.co/rest/v1/rpc/datos_comunidad_planilla`.
+  - *Authentication* → *Generic Credential Type* → **Header Auth**, con la misma credencial "Webhook CRM (Header Auth)".
+  - Encabezados `apikey` (la Publishable key) y `Content-Profile: crm_comunidades_v2`. Sacar `Accept-Profile`.
+  - *Send Body* → JSON: `{{ JSON.stringify({ p_comunidad: $('Webhook (desde Supabase)').first().json.body.record.comunidad_id }) }}`.
+- **Armar fila:** la respuesta ahora trae `comunidad`, `cliente` y `cliente_slug`. Cambiar estas dos líneas:
+  - `const cliente = com.cliente || '';`
+  - `const hoja = HOJAS[cliente + ' / ' + (com.comunidad || '')] || 'SIN-HOJA';`
+
+Probar con un contacto de prueba: tiene que caer en su pestaña (no en `SIN-HOJA`) y quedar "registrado" en Data_Cruda.
 
 ## 4. Base de datos (una vez)
 1. Aplicar `db/023_envio_planilla.sql` (tabla `envio_planilla` y función `registrar_envio_planilla`) y después `db/024_envio_planilla_encabezados.sql`, que hace que la función acepte el secreto con cualquiera de los dos nombres de encabezado.

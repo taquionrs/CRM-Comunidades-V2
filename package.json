@@ -3,6 +3,10 @@
   "private": true,
   "scripts": {
     "build": "node scripts/generate-config.js",
-    "test": "node --test \"tests/**/*.test.mjs\""
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:db": "node --test \"tests/db/*.dbtest.mjs\""
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.5"
   }
 }
