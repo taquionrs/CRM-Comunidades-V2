@@ -802,3 +802,11 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - **Error encontrado y corregido:** las vistas de la base devuelven `comunidad_id` pero el panel buscaba `id`, así que el selector de comunidad de Control_Comunidades y de Base_Limpia no filtraba (recibía "undefined") y el botón Guardar de Mi/Mf en Overview no tenía a qué comunidad apuntar. Ahora las filas llevan `id` (`conIdComunidad`).
 - **Aviso nuevo:** la API entrega hasta 1000 filas por pedido; Base_Limpia y Data_Deduplicada ahora piden el total real y avisan cuando la lista está recortada.
 - No hay cambios de base. Pruebas: 7 nuevas (115 en total); se ajustó una de `panel-roles` por el cambio de Overview.
+
+## 4 tricies quaterdecies. PR #59 — CTR del botón "Me sumo" en Control_Comunidades (2026-10-26)
+
+- **Pedido (minuta del 20/10):** CTR del botón = clics en "Me sumo" ÷ triggers entregados.
+- **Qué cambia:** columna nueva **CTR del botón "Me sumo"** en el grupo ManyChat de Control_Comunidades, por comunidad y en el total del cliente. Se divide por canal con el filtro de Canal (igual que triggers y clics). Sin triggers o sin clics registrados muestra "Sin fuente", no 0 %. La ayuda aclara que los clics se registran desde el 09/10: un período que empieza antes da un valor más bajo que el real.
+- Quien ya tenía un orden de columnas guardado la ve al final; el botón "Restablecer" del panel Columnas la acomoda junto a las de ManyChat.
+- No hay cambios de base. Pruebas: 3 nuevas (118 en total).
+- **Pendiente de definir:** el "doble CPA" (Meta y efectivo).
