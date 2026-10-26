@@ -86,8 +86,8 @@ test("total de bajas y de fuga: suman solo las comunidades donde se pueden calcu
 });
 
 // ---- Filtro de canal (db/022): solo lo que viene del flow de ManyChat se divide por canal
-test("canal: solo trigger, clics en Me sumo, entradas y clic/entradas se dividen por canal", () => {
-  assert.deepEqual(COLUMNAS_CONTROL.filter((c) => c.porCanal).map((c) => c.id).sort(), ["clics_me_sumo", "entradas", "tasa_me_sumo", "trigger"]);
+test("canal: solo trigger, clics en Me sumo, CTR del botón, entradas y clic/entradas se dividen por canal", () => {
+  assert.deepEqual(COLUMNAS_CONTROL.filter((c) => c.porCanal).map((c) => c.id).sort(), ["clics_me_sumo", "ctr_boton", "entradas", "tasa_me_sumo", "trigger"]);
   // lo que usa Meta, los miembros o la inversión no se divide (incluye entradas / conversaciones, que usa las conversaciones de Meta)
   for (const id of ["inversion", "conversaciones", "cpl", "leads", "costo_lead", "ctr", "entradas_conv", "mi", "mf", "crecimiento", "bajas", "costo_entrada", "costo_clic", "cpmn", "fuga"]) {
     assert.ok(!col(id).porCanal, id);
@@ -98,4 +98,26 @@ test("canal: el estado 'No se divide' explica por qué", () => {
   const html2 = api.vacio("no_canal");
   assert.match(html2, /No se divide/);
   assert.match(html2, /data-ayuda="[^"]*canal/);
+});
+
+// ---- CTR del botón: clics en "Me sumo" ÷ triggers entregados
+const razon = (n, d, f = 1) => (d > 0 ? (n / d) * f : null);
+
+test("CTR del botón: clics ÷ triggers, por comunidad y en el total", () => {
+  assert.match(col("ctr_boton").celda({ triggers_entregados: 40, clics_me_sumo: 10 }), /25,0%/);
+  assert.match(col("ctr_boton").total({ trig: 80, clicsms: 20, razon }), /25,0%/);
+  assert.equal(col("ctr_boton").grupo, "ManyChat");
+  assert.ok(col("ctr_boton").porCanal);
+});
+
+test("CTR del botón: sin triggers o sin clics registrados dice 'Sin fuente', no 0 %", () => {
+  assert.match(col("ctr_boton").celda({ triggers_entregados: 0, clics_me_sumo: 5 }), /Sin fuente/);
+  assert.match(col("ctr_boton").celda({ triggers_entregados: 30, clics_me_sumo: 0 }), /Sin fuente/);
+  assert.match(col("ctr_boton").total({ trig: 0, clicsms: 0, razon }), /Sin fuente/);
+  assert.match(col("ctr_boton").total({ trig: 50, clicsms: 0, razon }), /Sin fuente/);
+});
+
+test("CTR del botón: explica que los clics se registran desde el 09/10", () => {
+  assert.match(col("ctr_boton").info, /desde el 09\/10/);
+  assert.match(col("ctr_boton").info, /Trigger entregados/);
 });
