@@ -787,3 +787,9 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - **Panel:** bloque "Contactos repetidos" arriba del registro de Data_Cruda, con filtros de comunidad y fechas, chips por tipo (todos / misma comunidad / más de una comunidad) y botón para exportar CSV.
 - **Límite:** el CRM no puede saber el motivo de la repetición (prueba, reingreso o doble toque): muestra los datos para que el equipo lo decida. La atribución de las métricas sigue siendo por primer contacto (Data_Deduplicada).
 - Pruebas: 4 nuevas (104 en total) y 6 de base en `tests/db/contactos-repetidos.dbtest.mjs` (18 en `npm run test:db`). El ensayo `exportes/ensayo-032.sql` se corrió también contra el Postgres local antes de entregarlo (la primera versión tenía un paréntesis de menos). **Pendiente:** ensayar y aplicar db/032.
+
+## 4 tricies duodecies. PR #57 — Leyendas explicativas en Overview (2026-10-26)
+
+- **Pedido (reunión con la PO del 22/10):** que cada métrica de Overview explique su sigla, porque habrá usuarios que no vienen de marketing; en particular CPMI, CPME y la forma de calcular la tasa de fuga.
+- **Qué cambia:** botón "i" junto a cada tarjeta de Overview (inversión, conversaciones, CPMI, entradas, miembros efectivos, CPME, tasa de fuga) y junto a cada encabezado de la tabla de distribución (Mi, entradas, bajas, Mf, % participación). Usa el mismo globo flotante que Control_Comunidades. Las explicaciones están juntas en un solo glosario (`AYUDAS_OVERVIEW`) y la de CPMI coincide con la de Control_Comunidades.
+- No hay cambios de base. Pruebas: 4 nuevas (108 en total).
