@@ -779,3 +779,11 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - **Pedido (minuta del 20/10):** renombrar CPL como CPMI: costo por mensaje iniciado. La fórmula no cambia (inversión ÷ conversaciones iniciadas en Meta).
 - Cambia el nombre en la tabla de Control_Comunidades, en el KPI global de Overview ("CPMI global") y en el desglose de campañas. El identificador interno de la columna se mantiene, así que el orden y las columnas ocultas que cada persona guardó siguen valiendo. No hay cambios de base.
 - Pruebas: 1 nueva (78 en total).
+
+## 4 tricies undecies. PR #56 — Contactos repetidos en Data_Cruda (2026-10-26)
+
+- **Pedido:** un filtro que cuente todos los contactos que se registraron varias veces, por pruebas o porque entraron a una comunidad, salieron y volvieron a ingresar.
+- **Base (`db/032_contactos_repetidos.sql`, requiere 031):** `contactos_repetidos(cliente, desde, hasta, comunidad, límite)` devuelve un resumen (contactos, eventos, repetidos, registros de más, repetidos dentro de una misma comunidad y en más de una) y el detalle por contacto (veces, primer y último registro, comunidades, nombre). Cuenta eventos aceptados de **toda la historia**, no solo los últimos 200. Fechas en hora de Buenos Aires. Solo Marketing.
+- **Panel:** bloque "Contactos repetidos" arriba del registro de Data_Cruda, con filtros de comunidad y fechas, chips por tipo (todos / misma comunidad / más de una comunidad) y botón para exportar CSV.
+- **Límite:** el CRM no puede saber el motivo de la repetición (prueba, reingreso o doble toque): muestra los datos para que el equipo lo decida. La atribución de las métricas sigue siendo por primer contacto (Data_Deduplicada).
+- Pruebas: 4 nuevas (104 en total) y 6 de base en `tests/db/contactos-repetidos.dbtest.mjs` (18 en `npm run test:db`). El ensayo `exportes/ensayo-032.sql` se corrió también contra el Postgres local antes de entregarlo (la primera versión tenía un paréntesis de menos). **Pendiente:** ensayar y aplicar db/032.
