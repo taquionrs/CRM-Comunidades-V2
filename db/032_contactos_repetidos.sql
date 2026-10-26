@@ -58,7 +58,7 @@ begin
       'filas', coalesce((
         select jsonb_agg(to_jsonb(r) order by r.veces desc, r.ultima desc)
           from (select telefono_id, veces, primera, ultima, n_comunidades, comunidades, nombre, usuario_instagram
-                  from rep order by veces desc, ultima desc limit v_limite) r), '[]'::jsonb));
+                  from rep order by veces desc, ultima desc limit v_limite) r), '[]'::jsonb)));
 end;
 $f$;
 
