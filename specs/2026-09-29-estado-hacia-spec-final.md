@@ -810,3 +810,12 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - Quien ya tenía un orden de columnas guardado la ve al final; el botón "Restablecer" del panel Columnas la acomoda junto a las de ManyChat.
 - No hay cambios de base. Pruebas: 3 nuevas (118 en total).
 - **Pendiente de definir:** el "doble CPA" (Meta y efectivo).
+
+## 4 tricies quindecies. PR #60 — Sección "Objetivos", chequeos de integridad y auditoría de métricas (2026-10-26)
+
+- **Pedido:** una sección con los objetivos del puesto (los tres números del mes 3 y los del motor) y asegurar que las métricas de todo el CRM sean correctas.
+- **Base (`db/033_objetivos_puesto.sql`, requiere 032):** `objetivos_puesto(cliente, desde, hasta)` devuelve (solo conteos, solo Marketing) el % de ingresos sin toque humano, la tasa de triaje por comunidad con tres numeradores (I1 entradas, I2 clics en "Me sumo", I3 ingresos al grupo según las listas, sin la lista de partida) sobre las conversaciones de Meta, las horas manuales registradas y 8 chequeos de integridad. Tabla nueva `registro_horas_manuales` (minutos de trabajo manual, solo Marketing) para levantar la línea de base de "horas de carga manual eliminadas".
+- **Panel:** pestaña **Objetivos** (solo Marketing): tarjetas de los tres números, tabla de triaje por comunidad (nunca promediada; el total suma), estado de los cuatro números del motor (CPME, TRG propuesto, CPMR y K-Factor sin fuente), formulario para registrar minutos manuales y lista de chequeos. Comparte el período con Overview y Control_Comunidades.
+- **Auditoría:** `docs/reference/auditoria-de-metricas.md` revisa cada métrica (fórmula, fuente, límites). Hallazgos: el alias `id` (ya corregido en #58), el tope de 1000 filas (#58), "Entradas ÷ conversaciones" mal nombrada como tasa de triaje (se aclara en su ayuda) y la falta de controles automáticos (los 8 chequeos).
+- **Para decidir:** definición de TRG, fecha real de las bajas, separar entradas orgánicas de las pagas.
+- Pruebas: 8 de panel nuevas y 6 de base (126 de Node y 24 de base). Ensayo: `exportes/ensayo-033.sql` (se corrió también contra el Postgres local). **Pendiente:** ensayar y aplicar db/033.
