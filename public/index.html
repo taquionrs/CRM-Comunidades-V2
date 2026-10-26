@@ -1715,6 +1715,25 @@ async function loadEnviosPlanilla(){
 }
 
 /* ================= TAB 5: Data_Cruda ================= */
+/* REPETIDOS:INICIO */
+// Contactos que se registraron más de una vez (db/032). Un registro es un evento aceptado. La cuenta sale de la base sobre toda la historia.
+const TIPOS_REPETIDO = [['todos', 'Todos'], ['misma', 'En una misma comunidad'], ['varias', 'En más de una comunidad']];
+function filtrarRepetidos(filas, tipo){
+  const l = Array.isArray(filas) ? filas : [];
+  if (tipo === 'misma') return l.filter(f => Number(f.n_comunidades) === 1);
+  if (tipo === 'varias') return l.filter(f => Number(f.n_comunidades) > 1);
+  return l;
+}
+function intervaloRepetido(f){
+  const ms = new Date(f.ultima).getTime() - new Date(f.primera).getTime();
+  if (!(ms >= 0)) return '—';
+  const dias = Math.floor(ms / 86400000);
+  if (dias >= 1) return dias + (dias === 1 ? ' día' : ' días');
+  const h = Math.floor(ms / 3600000);
+  return h >= 1 ? h + ' h' : 'menos de 1 h';
+}
+/* REPETIDOS:FIN */
+
 function haceCuanto(v){
   const s = Math.max(0, Math.round((Date.now() - new Date(v).getTime()) / 1000));
   if (s < 60) return 'hace ' + s + ' s';
@@ -1808,6 +1827,86 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro, envios = new Ma
     <div class="tbl-wrap"><table><thead><tr><th>Recibido</th><th>Resultado</th><th>Planilla <span class="hint" title="Resultado de enviar el contacto a la planilla de Google (n8n): Registrado, Ignorado (Instagram) o Error. Sin registro = n8n no avisó.">ⓘ</span></th><th>Contacto</th>${thNombre}<th>Comunidad asignada</th><th>Texto recibido</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
+/* ---------- Contactos repetidos (db/032) ---------- */
+async function loadContactosRepetidos(f){
+  const { data, error } = await supabase.rpc('contactos_repetidos', {
+    p_cliente: state.clienteId, p_desde: f.desde || null, p_hasta: f.hasta || null, p_comunidad: f.comunidad || null, p_limite: 2000,
+  });
+  if (error) { console.warn('contactos_repetidos:', error.message); return null; }
+  return data || null;
+}
+const MAX_FILAS_REPETIDOS = 100;
+function renderRepetidos(datos, comunidades, f){
+  const comOpc = '<option value="">Todas las comunidades</option>' + comunidades.map(c => `<option value="${c.id}" ${f.comunidad === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
+  const filtros = `<div class="filters" style="margin:8px 0">
+      <label>Comunidad<select id="repCom">${comOpc}</select></label>
+      <label>Desde<input type="date" id="repDesde" value="${esc(f.desde)}"></label>
+      <label>Hasta<input type="date" id="repHasta" value="${esc(f.hasta)}"></label>
+      <button class="btn" id="repLimpiar" type="button">Todo el histórico</button>
+    </div>`;
+  if (!datos) return `<div class="card"><h3>Contactos repetidos</h3><div class="sub">No se pudo cargar. El registro de eventos de abajo no cambia.</div>${filtros}</div>`;
+  const r = datos.resumen || {};
+  const todas = Array.isArray(datos.filas) ? datos.filas : [];
+  const filas = filtrarRepetidos(todas, f.tipo);
+  const chips = TIPOS_REPETIDO.map(([k, label]) => {
+    const n = k === 'todos' ? Number(r.contactos_repetidos) || 0 : k === 'misma' ? Number(r.misma_comunidad) || 0 : Number(r.varias_comunidades) || 0;
+    return `<button class="btn${f.tipo === k ? ' btn-on' : ''}" type="button" data-rep-tipo="${k}">${label} (${fmtInt(n)})</button>`;
+  }).join('');
+  const visibles = filas.slice(0, MAX_FILAS_REPETIDOS);
+  const cuerpo = visibles.length ? visibles.map(x => `<tr>
+      <td class="mono" style="white-space:nowrap">${canalPill(x.telefono_id)} ${esc(idVisible(x.telefono_id, { contact: { ig_username: x.usuario_instagram } }))}</td>
+      <td>${esc(x.nombre || '—')}</td>
+      <td class="num"><b>${fmtInt(x.veces)}</b></td>
+      <td class="mono">${fmtFecha(x.primera)}</td>
+      <td class="mono">${fmtFecha(x.ultima)}</td>
+      <td>${esc(intervaloRepetido(x))}</td>
+      <td>${(x.comunidades || []).map(esc).join(', ')}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">${Number(r.contactos_repetidos) ? 'Ningún contacto de este tipo en el período.' : 'No hay contactos repetidos en el período elegido.'}</td></tr>`;
+  const nota = filas.length > MAX_FILAS_REPETIDOS ? `Mostrando los ${MAX_FILAS_REPETIDOS} con más registros de ${fmtInt(filas.length)}; el CSV trae todos.` : '';
+  return `<div class="card"><h3>Contactos repetidos</h3>
+    <div class="sub">Personas que tienen más de un registro en el CRM: por pruebas, porque entraron a una comunidad, salieron y volvieron, o tocaron más de una vez. Se cuentan los eventos aceptados de toda la historia (no solo los últimos 200). El CRM no puede saber el motivo: acá se ven los datos para decidirlo. Con una comunidad elegida solo se cuentan los eventos de esa comunidad.</div>
+    ${filtros}
+    ${kpiGrid([
+      [fmtInt(r.contactos_repetidos), `Contactos repetidos (de ${fmtInt(r.contactos)} contactos)`],
+      [fmtInt(r.registros_de_mas), 'Registros de más (eventos − 1 por contacto)'],
+      [fmtInt(r.misma_comunidad), 'Repetidos dentro de una misma comunidad'],
+      [fmtInt(r.varias_comunidades), 'Aparecen en más de una comunidad'],
+    ])}
+    <div style="display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; align-items:center">${chips}
+      <button class="btn" id="repExport" type="button" ${filas.length ? '' : 'disabled'}>Exportar CSV (${fmtInt(filas.length)})</button>
+      <span class="sub" id="repExportEstado" style="margin:0">${esc(nota)}</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Contacto</th><th>Nombre</th><th class="num">Veces</th><th>Primer registro</th><th>Último registro</th><th>Entre el primero y el último</th><th>Comunidades</th></tr></thead><tbody>${cuerpo}</tbody></table></div>
+  </div>`;
+}
+function exportarCsvRepetidos(datos, f){
+  const sep = state.crudoSep || ';';
+  const filas = filtrarRepetidos((datos && datos.filas) || [], f.tipo);
+  const cab = ['canal', 'contacto', 'usuario_instagram', 'nombre', 'veces', 'primer_registro_ar', 'ultimo_registro_ar', 'comunidades', 'cantidad_comunidades'];
+  const lineas = filas.map(x => [
+    celdaCsv(esInstagram(x.telefono_id) ? 'Instagram' : 'WhatsApp'), celdaContacto(x.telefono_id), celdaCsv(x.usuario_instagram), celdaCsv(x.nombre),
+    celdaCsv(x.veces), celdaCsv(fechaAr(x.primera)), celdaCsv(fechaAr(x.ultima)), celdaCsv((x.comunidades || []).join(' | ')), celdaCsv(x.n_comunidades),
+  ].join(sep));
+  const csv = [cab.map(celdaCsv).join(sep), ...lineas].join('\r\n') + '\r\n';
+  const cliente = state.clientes.find(c => c.id === state.clienteId);
+  const nombre = `contactos_repetidos_${cliente ? cliente.slug : 'cliente'}_${fechaAr(new Date()).slice(0, 10)}.csv`;
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const el = document.getElementById('repExportEstado'); if (el) el.textContent = `Listo: ${filas.length} contactos → ${nombre}`;
+}
+function wireRepetidos(datos){
+  const f = state.repetidos || (state.repetidos = { desde: '', hasta: '', comunidad: '', tipo: 'todos' });
+  const set = (id, campo) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[campo] = el.value || ''; renderAll(); }; };
+  set('repCom', 'comunidad'); set('repDesde', 'desde'); set('repHasta', 'hasta');
+  const limpiar = document.getElementById('repLimpiar');
+  if (limpiar) limpiar.onclick = () => { f.desde = ''; f.hasta = ''; f.comunidad = ''; renderAll(); };
+  document.querySelectorAll('[data-rep-tipo]').forEach(b => { b.onclick = () => { f.tipo = b.dataset.repTipo; renderAll(); }; });
+  const exp = document.getElementById('repExport');
+  if (exp) exp.onclick = () => exportarCsvRepetidos(datos, f);
+}
+
 /* ---------- Exportar CSV de Data_Cruda: toda la historia del cliente, no solo las 200 filas visibles ---------- */
 const COLUMNAS_CSV = ['fecha_hora_ar','fecha_hora_utc','resultado','codigo_http','canal','contacto','usuario_instagram','nombre','comunidad','comunidad_enviada','mensaje_de_la_persona','motivo_rechazo','payload_json'];
 const fechaAr = v => v ? new Date(v).toLocaleString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }) : '';
@@ -2042,9 +2141,11 @@ async function renderAll(){
       content.innerHTML = renderDedup(eventos, byId);
 
     } else if (state.tab === 'crudo') {
-      const [eventos, intentos, comunidades, envios] = await Promise.all([loadEventoCrudo(), loadIntentosRechazados(), loadComunidades(), loadEnviosPlanilla()]);
+      state.repetidos = state.repetidos || { desde: '', hasta: '', comunidad: '', tipo: 'todos' };
+      const [eventos, intentos, comunidades, envios, repetidos] = await Promise.all([loadEventoCrudo(), loadIntentosRechazados(), loadComunidades(), loadEnviosPlanilla(), loadContactosRepetidos(state.repetidos)]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
-      content.innerHTML = renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios);
+      content.innerHTML = renderRepetidos(repetidos, comunidades, state.repetidos) + renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios);
+      wireRepetidos(repetidos);
       wireCrudo();
     }
   } catch (err) {
