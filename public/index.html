@@ -328,16 +328,60 @@ function kpiGrid(items){
   return '<div class="kpi-grid">' + items.map(([v,l,,info]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}${info ? ` <button type="button" class="info-btn" data-info="${esc(info)}" aria-label="Qué significa: ${esc(l)}">i</button>` : ''}</div></div>`).join('') + '</div>';
 }
 
+/* FILTROS-DATOS:INICIO */
+// Filtros de fecha y comunidad de Overview, Base_Limpia, Data_Deduplicada y Data_Cruda. Las fechas se toman en hora de Buenos Aires (UTC-3, sin horario de verano).
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+function limitesFecha(desde, hasta){
+  const mas1 = (f) => { const [a, m, d] = f.split('-').map(Number); return new Date(Date.UTC(a, m - 1, d + 1)).toISOString().slice(0, 10); };
+  return {
+    gte: desde && FECHA_ISO.test(desde) ? `${desde}T00:00:00-03:00` : null,
+    lt: hasta && FECHA_ISO.test(hasta) ? `${mas1(hasta)}T00:00:00-03:00` : null,   // hasta incluido: el límite es el día siguiente
+  };
+}
+// Agrega a una consulta de supabase-js el período y la comunidad. colComunidad puede ser null si la tabla no la tiene.
+function aplicarFiltrosDatos(q, f, colFecha, colComunidad){
+  const l = limitesFecha(f && f.desde, f && f.hasta);
+  if (l.gte) q = q.gte(colFecha, l.gte);
+  if (l.lt) q = q.lt(colFecha, l.lt);
+  if (f && f.comunidad && colComunidad) q = q.eq(colComunidad, f.comunidad);
+  return q;
+}
+const hayFiltroDatos = (f) => !!(f && (f.desde || f.hasta || f.comunidad));
+// Los totales de Overview a partir de las filas por comunidad (las mismas de Control_Comunidades, para el período elegido).
+function kpisDesdeComunidades(cs){
+  const l = Array.isArray(cs) ? cs : [];
+  const suma = (campo) => l.reduce((s, c) => s + (Number(c[campo]) || 0), 0);
+  const redondeo = (v) => (v == null ? null : Math.round(v * 100) / 100);
+  const inv = l.some(c => c.inversion != null) ? suma('inversion') : null;    // null si el rol no ve la plata
+  const conv = suma('conversaciones_meta'), mi = suma('miembros_iniciales'), mf = suma('miembros_finales');
+  const medidas = l.filter(c => c.bajas_estimadas != null);
+  const bajas = medidas.reduce((s, c) => s + (Number(c.bajas_estimadas) || 0), 0);
+  const mfMedidas = medidas.reduce((s, c) => s + (Number(c.miembros_finales) || 0), 0);
+  return {
+    inversion_total: inv,
+    conversaciones_totales: conv,
+    cpl_global: inv != null && conv > 0 ? redondeo(inv / conv) : null,
+    clics_unicos_totales: suma('clics_unicos'),
+    miembros_efectivos_totales: mf,
+    cpme_global: inv != null && mf - mi > 0 ? redondeo(inv / (mf - mi)) : null,
+    tasa_fuga_global_pct: medidas.length && bajas + mfMedidas > 0 ? redondeo(bajas / (bajas + mfMedidas) * 100) : null,
+  };
+}
+/* FILTROS-DATOS:FIN */
+
 /* ---------- loaders ---------- */
 async function loadKpisMacro(){
   const { data, error } = await supabase.from('kpis_macro').select('*').eq('cliente_id', state.clienteId).maybeSingle();
   if (error) throw error;
   return data;
 }
+// Las vistas devuelven comunidad_id; el panel identifica cada comunidad por `id` (selectores, filtros y el botón Guardar de Overview).
+// Sin este alias esos controles recibían "undefined" y no filtraban ni guardaban.
+const conIdComunidad = (filas) => (filas || []).map((r) => ({ ...r, id: r.id ?? r.comunidad_id }));
 async function loadComunidadesPerformance(){
   const { data, error } = await supabase.from('comunidad_performance').select('*').eq('cliente_id', state.clienteId).order('nombre');
   if (error) throw error;
-  return data || [];
+  return conIdComunidad(data);
 }
 // Matriz de Control_Comunidades filtrable por fechas (db/006). desde/hasta nulos = todo el histórico.
 async function loadComunidadesRango(desde, hasta, canal){
@@ -345,7 +389,7 @@ async function loadComunidadesRango(desde, hasta, canal){
     p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_canal: canal || 'todos',
   });
   if (error) throw error;
-  return data || [];
+  return conIdComunidad(data);
 }
 // Desglose por campaña de lo que cuenta (db/029). Si falla, devuelve null: la tabla de arriba se muestra igual.
 async function loadDesgloseCampanas(desde, hasta, comunidad){
@@ -371,26 +415,98 @@ async function loadMetaAdsMetrica(){
   if (error) throw error;
   return data || [];
 }
-async function loadBaseLimpia(){
-  const { data, error } = await supabase.from('base_limpia').select('*').eq('cliente_id', state.clienteId).order('fecha_primer_contacto', { ascending:false });
+// Estas listas pueden tener más de 1000 filas y la API entrega hasta 1000 por pedido: se pide también el total real (count) para avisar cuando la lista está recortada.
+async function loadBaseLimpia(f){
+  const q = supabase.from('base_limpia').select('*', { count: 'exact' }).eq('cliente_id', state.clienteId);
+  const { data, error, count } = await aplicarFiltrosDatos(q, f, 'fecha_primer_contacto', 'comunidad_atribuida_id').order('fecha_primer_contacto', { ascending:false });
   if (error) throw error;
-  return data || [];
+  return { filas: data || [], total: count ?? (data || []).length };
 }
-async function loadEventoDeduplicado(){
-  const { data, error } = await supabase.from('evento_deduplicado').select('*').eq('cliente_id', state.clienteId).order('fecha_primer_contacto', { ascending:false });
+async function loadEventoDeduplicado(f){
+  const q = supabase.from('evento_deduplicado').select('*', { count: 'exact' }).eq('cliente_id', state.clienteId);
+  const { data, error, count } = await aplicarFiltrosDatos(q, f, 'fecha_primer_contacto', 'comunidad_atribuida_id').order('fecha_primer_contacto', { ascending:false });
   if (error) throw error;
-  return data || [];
+  return { filas: data || [], total: count ?? (data || []).length };
 }
-async function loadEventoCrudo(){
-  const { data, error } = await supabase.from('evento_crudo').select('*').eq('cliente_id', state.clienteId).order('recibido_en', { ascending:false }).limit(200);
+async function loadEventoCrudo(f){
+  const q = supabase.from('evento_crudo').select('*').eq('cliente_id', state.clienteId);
+  const { data, error } = await aplicarFiltrosDatos(q, f, 'recibido_en', 'comunidad_id').order('recibido_en', { ascending:false }).limit(200);
   if (error) throw error;
   return data || [];
 }
 
-async function loadIntentosRechazados(){
-  const { data, error } = await supabase.from('webhook_intento').select('*').eq('cliente_id', state.clienteId).order('creado_en', { ascending:false }).limit(200);
+// Los rechazados guardan el id de comunidad que mandó el flow (comunidad_recibida): con una comunidad elegida se filtra por ese valor.
+async function loadIntentosRechazados(f){
+  const q = supabase.from('webhook_intento').select('*').eq('cliente_id', state.clienteId);
+  const { data, error } = await aplicarFiltrosDatos(q, f, 'creado_en', 'comunidad_recibida').order('creado_en', { ascending:false }).limit(200);
   if (error) return []; // si la tabla todavía no existe (db/007), Data_Cruda sigue mostrando los aceptados
   return data || [];
+}
+
+/* ---------- barras de filtros ---------- */
+// Los datos de personas (Base_Limpia, Data_Deduplicada y Data_Cruda) comparten el mismo filtro de comunidad y fechas.
+const filtroDatos = () => state.datosFiltro || (state.datosFiltro = { comunidad: '', desde: '', hasta: '' });
+function renderFiltrosDatos(f, comunidades, nota = ''){
+  const opc = '<option value="">Todas las comunidades</option>' + comunidades.map(c => `<option value="${c.id}" ${f.comunidad === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
+  return `<div class="card"><h3>Filtros</h3>
+    <div class="filters" style="margin:8px 0">
+      <label>Comunidad<select id="fdCom">${opc}</select></label>
+      <label>Desde<input type="date" id="fdDesde" value="${esc(f.desde)}"></label>
+      <label>Hasta<input type="date" id="fdHasta" value="${esc(f.hasta)}"></label>
+      <button class="btn ${hayFiltroDatos(f) ? '' : 'on'}" id="fdLimpiar" type="button">Todo el histórico</button>
+    </div>
+    <div class="sub" style="margin:0">Valen para Base_Limpia, Data_Deduplicada y Data_Cruda. Las fechas son de Argentina y el día "hasta" está incluido.${nota ? ' ' + nota : ''}</div>
+  </div>`;
+}
+function wireFiltrosDatos(alCambiar){
+  const f = filtroDatos();
+  const set = (id, campo) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[campo] = el.value || ''; if (alCambiar) alCambiar(); renderAll(); }; };
+  set('fdCom', 'comunidad'); set('fdDesde', 'desde'); set('fdHasta', 'hasta');
+  const limpiar = document.getElementById('fdLimpiar');
+  if (limpiar) limpiar.onclick = () => { f.comunidad = ''; f.desde = ''; f.hasta = ''; if (alCambiar) alCambiar(); renderAll(); };
+}
+// Aviso cuando una lista tiene más filas que las que entrega la API por pedido.
+const avisoRecorte = (mostradas, total) => total > mostradas
+  ? `<div class="sub" style="color:var(--warn)">Se muestran ${fmtInt(mostradas)} de ${fmtInt(total)}: la lista está recortada. Acotá el período o la comunidad para ver el resto.</div>` : '';
+
+// Período rápido (Ayer, últimos 7 días…) usado por Overview y Control_Comunidades.
+function selAtajoHtml(desde, hasta){
+  const hoy = hoyAR();
+  const activo = ATAJOS_FECHAS.find(a => { const r = a.rango(hoy); return desde === r.desde && hasta === r.hasta; });
+  const vacio = (desde || hasta) && !activo ? 'Personalizado' : 'Elegir…';
+  return `<label>Período rápido<select id="selAtajo" aria-label="Período rápido"><option value="" ${activo ? '' : 'selected'}>${vacio}</option>` +
+    ATAJOS_FECHAS.map(a => `<option value="${a.id}" ${activo && activo.id === a.id ? 'selected' : ''}>${a.etiqueta}</option>`).join('') + '</select></label>';
+}
+// Los controles de comunidad y período que comparten Overview y Control_Comunidades (mismos ids, nunca están los dos en pantalla).
+function wireFiltrosPeriodo(){
+  const sel = document.getElementById('selFiltroComunidad');
+  if (sel) sel.onchange = () => { state.filtroComunidad = sel.value || null; renderAll(); };
+  const desde = document.getElementById('inpFechaDesde');
+  const hasta = document.getElementById('inpFechaHasta');
+  if (desde) desde.onchange = () => { state.fechaDesde = desde.value || null; renderAll(); };
+  if (hasta) hasta.onchange = () => { state.fechaHasta = hasta.value || null; renderAll(); };
+  const selAtajo = document.getElementById('selAtajo');
+  if (selAtajo) selAtajo.onchange = () => {
+    const a = ATAJOS_FECHAS.find(x => x.id === selAtajo.value);
+    if (!a) { renderAll(); return; }   // volvió a "Elegir…": se vuelve a mostrar el período que sigue vigente
+    const r = a.rango(hoyAR());
+    state.fechaDesde = r.desde; state.fechaHasta = r.hasta;
+    renderAll();
+  };
+  const limpiar = document.getElementById('btnFechasLimpiar');
+  if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
+}
+function renderFiltrosPeriodo(comunidades, filtroComunidad, desde, hasta){
+  const opc = '<option value="">Todas las comunidades</option>' + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
+  const sinFiltro = !desde && !hasta;
+  return `<div class="filters">
+      <label>Comunidad<select id="selFiltroComunidad">${opc}</select></label>
+      <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
+      <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
+      ${selAtajoHtml(desde, hasta)}
+      <button class="btn ${sinFiltro ? 'on' : ''}" id="btnFechasLimpiar" type="button" aria-pressed="${sinFiltro ? 'true' : 'false'}">Todo el histórico</button>
+    </div>
+    <div class="sub" style="margin:0 0 10px">El período y la comunidad valen también para Control_Comunidades. Las fechas son de Argentina.${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? ' <span style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</span>' : ''}</div>`;
 }
 
 /* ================= TAB 1: Overview ================= */
@@ -412,7 +528,8 @@ const AYUDAS_OVERVIEW = {
 };
 /* AYUDAS-OVERVIEW:FIN */
 const thAyuda = (texto, ayuda) => `<th>${texto} <button type="button" class="info-btn" data-info="${esc(ayuda)}" aria-label="Qué significa: ${esc(texto)}">i</button></th>`;
-function renderOverview(kpis, comunidades){
+// filtros: { todas, comunidad, desde, hasta } — `comunidades` ya viene filtrada por período y comunidad; `todas` alimenta el selector y el formulario de Mi/Mf.
+function renderOverview(kpis, comunidades, filtros = null){
   const k = kpis || {};
   const kpiCards = kpiGrid([
     [fmtMoney(k.inversion_total), 'Inversión total Meta', true, AYUDAS_OVERVIEW.inversion],
@@ -446,11 +563,11 @@ function renderOverview(kpis, comunidades){
         </tr>`
     : `<tr class="empty-row"><td colspan="6">Sin comunidades cargadas todavía — agregá una abajo.</td></tr>`;
 
-  return kpiCards +
+  return (filtros ? renderFiltrosPeriodo(filtros.todas, filtros.comunidad, filtros.desde, filtros.hasta) : '') + kpiCards +
     `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow se calculan solas (First-Contact Attribution) y las bajas salen de las cargas de la lista completa de cada grupo (desde la segunda carga).</div>
       <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th>${thAyuda('Miembros iniciales (Mi)', AYUDAS_OVERVIEW.mi)}${thAyuda('Entradas al flow (CRM)', AYUDAS_OVERVIEW.entradas_tabla)}${thAyuda('Bajas (B)', AYUDAS_OVERVIEW.bajas)}${thAyuda('Miembros efectivos finales (Mf)', AYUDAS_OVERVIEW.mf)}${thAyuda('% Participación', AYUDAS_OVERVIEW.participacion)}</tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
-    (esMarketing() ? renderComunidadesForm(comunidades) : '');
+    (esMarketing() ? renderComunidadesForm(filtros ? filtros.todas : comunidades) : '');
 }
 
 function renderComunidadesForm(comunidades){
@@ -810,12 +927,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       <label>Canal<select id="selCanal" aria-label="Canal"><option value="todos" ${canal === 'todos' ? 'selected' : ''}>Todos</option><option value="instagram" ${canal === 'instagram' ? 'selected' : ''}>Instagram</option><option value="whatsapp" ${canal === 'whatsapp' ? 'selected' : ''}>WhatsApp</option></select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
       <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
-      <label>Período rápido<select id="selAtajo" aria-label="Período rápido">${(() => {
-          const hoy = hoyAR();
-          const activo = ATAJOS_FECHAS.find(a => { const r = a.rango(hoy); return desde === r.desde && hasta === r.hasta; });
-          const vacio = (desde || hasta) && !activo ? 'Personalizado' : 'Elegir…';
-          return `<option value="" ${activo ? '' : 'selected'}>${vacio}</option>` + ATAJOS_FECHAS.map(a => `<option value="${a.id}" ${activo && activo.id === a.id ? 'selected' : ''}>${a.etiqueta}</option>`).join('');
-        })()}</select></label>
+      ${selAtajoHtml(desde, hasta)}
       <button class="btn ${!desde && !hasta ? 'on' : ''}" id="btnFechasLimpiar" type="button" aria-pressed="${!desde && !hasta ? 'true' : 'false'}">Todo el histórico</button>
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       ${esMarketing() ? `<button class="btn" id="btnCampanas" type="button" title="Elegir qué campañas de Meta cuentan para las métricas">Campañas</button>
@@ -890,24 +1002,9 @@ function wireControl(){
     document.addEventListener('click', cerrar);
     document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') cerrar(); });
   }
-  const sel = document.getElementById('selFiltroComunidad');
-  if (sel) sel.onchange = () => { state.filtroComunidad = sel.value || null; renderAll(); };
+  wireFiltrosPeriodo();
   const selCanal = document.getElementById('selCanal');
   if (selCanal) selCanal.onchange = () => { state.canalControl = selCanal.value || 'todos'; renderAll(); };
-  const desde = document.getElementById('inpFechaDesde');
-  const hasta = document.getElementById('inpFechaHasta');
-  if (desde) desde.onchange = () => { state.fechaDesde = desde.value || null; renderAll(); };
-  if (hasta) hasta.onchange = () => { state.fechaHasta = hasta.value || null; renderAll(); };
-  const selAtajo = document.getElementById('selAtajo');
-  if (selAtajo) selAtajo.onchange = () => {
-    const a = ATAJOS_FECHAS.find(x => x.id === selAtajo.value);
-    if (!a) { renderAll(); return; }   // volvió a "Elegir…": se vuelve a mostrar el período que sigue vigente
-    const r = a.rango(hoyAR());
-    state.fechaDesde = r.desde; state.fechaHasta = r.hasta;
-    renderAll();
-  };
-  const limpiar = document.getElementById('btnFechasLimpiar');
-  if (limpiar) limpiar.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   const consultas = document.getElementById('btnConsultas');
   if (consultas) consultas.onclick = abrirConsultasWindsor;
   const campanasBtn = document.getElementById('btnCampanas');
@@ -1634,13 +1731,10 @@ function renderAtribucion(){
 }
 
 /* ================= TAB 3: Base_Limpia ================= */
-function renderBaseLimpia(usuarios, comunidades, filtro){
-  const opciones = `<option value="">Todas</option>` + comunidades.map(c => `<option value="${c.id}" ${filtro.comunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
-
+function renderBaseLimpia(usuarios, comunidades, filtro, total = null, f = filtroDatos()){
   const stockCards = kpiGrid(comunidades.map(c => [fmtInt(c.miembros_finales), esc(c.nombre) + ' — miembros reales']));
 
-  let filtrados = usuarios;
-  if (filtro.comunidad) filtrados = filtrados.filter(u => u.comunidad_atribuida_id === filtro.comunidad);
+  let filtrados = usuarios;   // el período y la comunidad ya vienen filtrados desde la base (renderFiltrosDatos)
   if (filtro.busqueda) {
     const q = filtro.busqueda.toLowerCase();
     filtrados = filtrados.filter(u => (u.nombre||'').toLowerCase().includes(q) || (u.phone_id||'').includes(q));
@@ -1661,19 +1755,19 @@ function renderBaseLimpia(usuarios, comunidades, filtro){
         <td>${(u.etiquetas||[]).map(t=>`<span class="pill">${esc(t)}</span>`).join(' ') || '—'}</td>
         <td><span class="pill">${esc(u.estado)}</span></td>
       </tr>`).join('')
-    : `<tr class="empty-row"><td colspan="7">Sin usuarios todavía.</td></tr>`;
+    : `<tr class="empty-row"><td colspan="7">${hayFiltroDatos(f) || filtro.busqueda ? 'Sin usuarios con los filtros elegidos.' : 'Sin usuarios todavía.'}</td></tr>`;
 
-  return stockCards +
+  return stockCards + renderFiltrosDatos(f, comunidades, 'Se filtra por la fecha del primer contacto y la comunidad atribuida.') +
     `<div class="card">
       <h3>Usuarios nominados</h3>
       <div class="sub">Nombre/email se completan al correr "Sincronizar nombres" (requiere MANYCHAT_API_KEY configurada del lado del backend).</div>
       ${notaNombre}
       <div class="filters">
         <label>Buscar<input type="text" id="inpBuscarBaseLimpia" placeholder="Nombre o teléfono" value="${esc(filtro.busqueda||'')}"></label>
-        <label>Comunidad<select id="selFiltroComunidadBL">${opciones}</select></label>
         <button class="btn" id="btnNominacionSync" type="button">Sincronizar nombres</button>
         <div id="nominacionResultado" style="font-size:12px; align-self:center"></div>
       </div>
+      ${avisoRecorte(usuarios.length, total ?? usuarios.length)}
       <div class="tbl-wrap"><table><thead><tr><th>Contacto (ID)</th>${thNombre}<th>Email</th><th>Comunidad atribuida</th><th>Fecha 1º contacto</th><th>Etiquetas</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:12px; color:var(--text-muted)">
         <span>${filtrados.length} usuario(s) — página ${pagina} de ${totalPaginas}</span>
@@ -1688,8 +1782,7 @@ function renderBaseLimpia(usuarios, comunidades, filtro){
 function wireBaseLimpia(){
   const inp = document.getElementById('inpBuscarBaseLimpia');
   if (inp) inp.oninput = () => { state.baseLimpiaFiltro.busqueda = inp.value; state.baseLimpiaFiltro.pagina = 1; renderAll(); };
-  const sel = document.getElementById('selFiltroComunidadBL');
-  if (sel) sel.onchange = () => { state.baseLimpiaFiltro.comunidad = sel.value || null; state.baseLimpiaFiltro.pagina = 1; renderAll(); };
+  wireFiltrosDatos(() => { state.baseLimpiaFiltro.pagina = 1; });
   const prev = document.getElementById('btnPagPrev');
   if (prev) prev.onclick = () => { state.baseLimpiaFiltro.pagina = Math.max(1, (state.baseLimpiaFiltro.pagina||1)-1); renderAll(); };
   const next = document.getElementById('btnPagNext');
@@ -1712,16 +1805,17 @@ function wireBaseLimpia(){
 }
 
 /* ================= TAB 4: Data_Deduplicada ================= */
-function renderDedup(eventos, comunidadesById){
+function renderDedup(eventos, comunidadesById, total = null, f = filtroDatos(), comunidades = []){
   const rows = eventos.length
     ? eventos.map(e => `<tr>
         <td class="mono">${canalPill(e.telefono_id)} ${esc(e.telefono_id)}</td>
         <td>${esc(comunidadesById.get(e.comunidad_atribuida_id) || '—')}</td>
         <td class="mono">${fmtFecha(e.fecha_primer_contacto)}</td>
       </tr>`).join('')
-    : `<tr class="empty-row"><td colspan="3">Sin eventos todavía.</td></tr>`;
-  return `<div class="card"><h3>Primer evento por teléfono</h3>
-    <div class="sub">Vista técnica/auditable — permite verificar qué comunidad "ganó" la atribución cuando un usuario intentó unirse a varias.</div>
+    : `<tr class="empty-row"><td colspan="3">${hayFiltroDatos(f) ? 'Sin eventos en el período o la comunidad elegidos.' : 'Sin eventos todavía.'}</td></tr>`;
+  return renderFiltrosDatos(f, comunidades) + `<div class="card"><h3>Primer evento por teléfono</h3>
+    <div class="sub">Vista técnica/auditable — permite verificar qué comunidad "ganó" la atribución cuando un usuario intentó unirse a varias. Con filtros, se ven los contactos cuyo <b>primer</b> evento cae en el período y la comunidad elegidos.</div>
+    ${avisoRecorte(eventos.length, total ?? eventos.length)}
     <div class="tbl-wrap"><table><thead><tr><th>Contacto (ID)</th><th>Comunidad atribuida</th><th>Fecha de primer contacto</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
@@ -1825,7 +1919,7 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro, envios = new Ma
   const chips = FILTROS_CRUDO.map(([k, label]) =>
     `<button class="btn${filtro === k ? ' btn-on' : ''}" type="button" data-crudo-filtro="${k}">${label} (${conteo[k]})</button>`).join('');
   return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
-    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido. Nunca se edita ni se borra una fila acá. Los rechazos guardan el contenido completo del POST (botón Ver JSON). Los que no identifican a un cliente (encabezados ausentes o cliente inexistente) se guardan aparte y no se ven acá.</div>
+    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido (con el período y la comunidad de los filtros de arriba, si hay alguno). Con una comunidad elegida, los rechazados se filtran por el id de comunidad que mandó el flow. Nunca se edita ni se borra una fila acá. Los rechazos guardan el contenido completo del POST (botón Ver JSON). Los que no identifican a un cliente (encabezados ausentes o cliente inexistente) se guardan aparte y no se ven acá.</div>
     ${notaNombre}
     <div style="display:flex; gap:8px; margin:12px 0 0; flex-wrap:wrap">${chips}</div>
     <div style="display:flex; gap:14px; align-items:center; margin:10px 0 12px; flex-wrap:wrap">
@@ -1834,7 +1928,7 @@ function renderCrudo(eventos, intentos, comunidadesById, filtro, envios = new Ma
       <span class="sub" style="margin:0">cargado ${fmtFecha(new Date())}</span>
     </div>
     <div style="display:flex; gap:14px; align-items:center; margin:0 0 12px; flex-wrap:wrap">
-      <button class="btn" id="crudoExport" type="button">Exportar CSV (toda la base)</button>
+      <button class="btn" id="crudoExport" type="button">${hayFiltroDatos(filtroDatos()) ? 'Exportar CSV (según los filtros)' : 'Exportar CSV (toda la base)'}</button>
       <label style="font-size:12px; color:var(--text-muted); display:flex; gap:6px; align-items:center">Separador
         <select id="crudoSep" style="background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:6px 8px; border-radius:var(--r-in)">
           <option value=";">; (Excel en español)</option>
@@ -1855,14 +1949,8 @@ async function loadContactosRepetidos(f){
 }
 const MAX_FILAS_REPETIDOS = 100;
 function renderRepetidos(datos, comunidades, f){
-  const comOpc = '<option value="">Todas las comunidades</option>' + comunidades.map(c => `<option value="${c.id}" ${f.comunidad === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
-  const filtros = `<div class="filters" style="margin:8px 0">
-      <label>Comunidad<select id="repCom">${comOpc}</select></label>
-      <label>Desde<input type="date" id="repDesde" value="${esc(f.desde)}"></label>
-      <label>Hasta<input type="date" id="repHasta" value="${esc(f.hasta)}"></label>
-      <button class="btn" id="repLimpiar" type="button">Todo el histórico</button>
-    </div>`;
-  if (!datos) return `<div class="card"><h3>Contactos repetidos</h3><div class="sub">No se pudo cargar. El registro de eventos de abajo no cambia.</div>${filtros}</div>`;
+  // El período y la comunidad son los filtros de arriba (los mismos de toda la pestaña).
+  if (!datos) return `<div class="card"><h3>Contactos repetidos</h3><div class="sub">No se pudo cargar. El registro de eventos de abajo no cambia.</div></div>`;
   const r = datos.resumen || {};
   const todas = Array.isArray(datos.filas) ? datos.filas : [];
   const filas = filtrarRepetidos(todas, f.tipo);
@@ -1883,7 +1971,6 @@ function renderRepetidos(datos, comunidades, f){
   const nota = filas.length > MAX_FILAS_REPETIDOS ? `Mostrando los ${MAX_FILAS_REPETIDOS} con más registros de ${fmtInt(filas.length)}; el CSV trae todos.` : '';
   return `<div class="card"><h3>Contactos repetidos</h3>
     <div class="sub">Personas que tienen más de un registro en el CRM: por pruebas, porque entraron a una comunidad, salieron y volvieron, o tocaron más de una vez. Se cuentan los eventos aceptados de toda la historia (no solo los últimos 200). El CRM no puede saber el motivo: acá se ven los datos para decidirlo. Con una comunidad elegida solo se cuentan los eventos de esa comunidad.</div>
-    ${filtros}
     ${kpiGrid([
       [fmtInt(r.contactos_repetidos), `Contactos repetidos (de ${fmtInt(r.contactos)} contactos)`],
       [fmtInt(r.registros_de_mas), 'Registros de más (eventos − 1 por contacto)'],
@@ -1915,11 +2002,7 @@ function exportarCsvRepetidos(datos, f){
   const el = document.getElementById('repExportEstado'); if (el) el.textContent = `Listo: ${filas.length} contactos → ${nombre}`;
 }
 function wireRepetidos(datos){
-  const f = state.repetidos || (state.repetidos = { desde: '', hasta: '', comunidad: '', tipo: 'todos' });
-  const set = (id, campo) => { const el = document.getElementById(id); if (el) el.onchange = () => { f[campo] = el.value || ''; renderAll(); }; };
-  set('repCom', 'comunidad'); set('repDesde', 'desde'); set('repHasta', 'hasta');
-  const limpiar = document.getElementById('repLimpiar');
-  if (limpiar) limpiar.onclick = () => { f.desde = ''; f.hasta = ''; f.comunidad = ''; renderAll(); };
+  const f = state.repetidos || (state.repetidos = { tipo: 'todos' });
   document.querySelectorAll('[data-rep-tipo]').forEach(b => { b.onclick = () => { f.tipo = b.dataset.repTipo; renderAll(); }; });
   const exp = document.getElementById('repExport');
   if (exp) exp.onclick = () => exportarCsvRepetidos(datos, f);
@@ -1962,10 +2045,11 @@ function construirCsv(eventos, intentos, comunidadesById, sep){
   return [COLUMNAS_CSV.map(celdaCsv).join(sep), ...items.map(x => x.celdas.join(sep))].join('\r\n') + '\r\n';
 }
 // Trae todas las filas del cliente de a 1000 (el máximo por consulta). El orden secundario por id evita saltear o repetir filas entre páginas.
-async function traerTodo(tabla, columnaFecha){
+async function traerTodo(tabla, columnaFecha, filtros = null, columnaComunidad = null){
   const filas = [], PAG = 1000;
   for (let desde = 0; desde < 200000; desde += PAG) {
-    const { data, error } = await supabase.from(tabla).select('*').eq('cliente_id', state.clienteId)
+    const base = supabase.from(tabla).select('*').eq('cliente_id', state.clienteId);
+    const { data, error } = await aplicarFiltrosDatos(base, filtros, columnaFecha, columnaComunidad)
       .order(columnaFecha, { ascending:false }).order('id', { ascending:false }).range(desde, desde + PAG - 1);
     if (error) throw error;
     filas.push(...(data || []));
@@ -1983,8 +2067,8 @@ async function exportarCsvCrudo(){
   try {
     const sep = state.crudoSep || ';';
     const [eventos, intentos, comunidades] = await Promise.all([
-      traerTodo('evento_crudo', 'recibido_en'),
-      traerTodo('webhook_intento', 'creado_en').catch(() => []),
+      traerTodo('evento_crudo', 'recibido_en', filtroDatos(), 'comunidad_id'),
+      traerTodo('webhook_intento', 'creado_en', filtroDatos(), 'comunidad_recibida').catch(() => []),
       loadComunidades(),
     ]);
     const csv = construirCsv(eventos, intentos, new Map(comunidades.map(c => [c.id, c.nombre])), sep);
@@ -2132,8 +2216,11 @@ async function renderAll(){
 
   try {
     if (state.tab === 'overview') {
-      const [kpis, comunidades] = await Promise.all([loadKpisMacro(), loadComunidadesPerformance()]);
-      content.innerHTML = renderOverview(kpis, comunidades);
+      // Overview usa las mismas filas que Control_Comunidades para el período elegido; los totales se calculan con ellas.
+      const todas = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos');
+      const visibles = state.filtroComunidad ? todas.filter(c => c.id === state.filtroComunidad) : todas;
+      content.innerHTML = renderOverview(kpisDesdeComunidades(visibles), visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' });
+      wireFiltrosPeriodo();
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
@@ -2149,20 +2236,23 @@ async function renderAll(){
 
     } else if (state.tab === 'base_limpia') {
       state.baseLimpiaFiltro = state.baseLimpiaFiltro || { comunidad:null, busqueda:'', pagina:1 };
-      const [usuarios, comunidades] = await Promise.all([loadBaseLimpia(), loadComunidadesPerformance()]);
-      content.innerHTML = renderBaseLimpia(usuarios, comunidades, state.baseLimpiaFiltro);
+      const [lista, comunidades] = await Promise.all([loadBaseLimpia(filtroDatos()), loadComunidadesPerformance()]);
+      content.innerHTML = renderBaseLimpia(lista.filas, comunidades, state.baseLimpiaFiltro, lista.total, filtroDatos());
       wireBaseLimpia();
 
     } else if (state.tab === 'dedup') {
-      const [eventos, comunidades] = await Promise.all([loadEventoDeduplicado(), loadComunidades()]);
+      const [lista, comunidades] = await Promise.all([loadEventoDeduplicado(filtroDatos()), loadComunidades()]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
-      content.innerHTML = renderDedup(eventos, byId);
+      content.innerHTML = renderDedup(lista.filas, byId, lista.total, filtroDatos(), comunidades);
+      wireFiltrosDatos();
 
     } else if (state.tab === 'crudo') {
-      state.repetidos = state.repetidos || { desde: '', hasta: '', comunidad: '', tipo: 'todos' };
-      const [eventos, intentos, comunidades, envios, repetidos] = await Promise.all([loadEventoCrudo(), loadIntentosRechazados(), loadComunidades(), loadEnviosPlanilla(), loadContactosRepetidos(state.repetidos)]);
+      state.repetidos = state.repetidos || { tipo: 'todos' };
+      const fd = filtroDatos();
+      const [eventos, intentos, comunidades, envios, repetidos] = await Promise.all([loadEventoCrudo(fd), loadIntentosRechazados(fd), loadComunidades(), loadEnviosPlanilla(), loadContactosRepetidos(fd)]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
-      content.innerHTML = renderRepetidos(repetidos, comunidades, state.repetidos) + renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios);
+      content.innerHTML = renderFiltrosDatos(fd, comunidades, 'Contactos repetidos, el registro y el CSV usan estos filtros.') + renderRepetidos(repetidos, comunidades, state.repetidos) + renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios);
+      wireFiltrosDatos();
       wireRepetidos(repetidos);
       wireCrudo();
     }

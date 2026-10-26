@@ -39,6 +39,6 @@ test("las columnas de plata de Control_Comunidades están marcadas y solo se mue
 
 test("los botones y formularios de Marketing no se dibujan para General", () => {
   assert.match(html, /\$\{esMarketing\(\) \? `<button class="btn" id="btnCampanas"/);
-  assert.match(html, /\(esMarketing\(\) \? renderComunidadesForm\(comunidades\) : ''\)/);
+  assert.match(html, /\(esMarketing\(\) \? renderComunidadesForm\(filtros \? filtros\.todas : comunidades\) : ''\)/);
   assert.match(html, /\]\.filter\(\(\[, , plata\]\) => esMarketing\(\) \|\| !plata\)\);/);
 });
