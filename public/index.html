@@ -325,7 +325,7 @@ const notaNombre = `<div class="nota-campo">ⓘ ${esc(NOMBRE_ORIGEN)}</div>`;
 const naCell = (nota) => `<span class="na" title="${esc(nota)}">— sin fuente</span>`;
 
 function kpiGrid(items){
-  return '<div class="kpi-grid">' + items.map(([v,l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('') + '</div>';
+  return '<div class="kpi-grid">' + items.map(([v,l,,info]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}${info ? ` <button type="button" class="info-btn" data-info="${esc(info)}" aria-label="Qué significa: ${esc(l)}">i</button>` : ''}</div></div>`).join('') + '</div>';
 }
 
 /* ---------- loaders ---------- */
@@ -394,16 +394,34 @@ async function loadIntentosRechazados(){
 }
 
 /* ================= TAB 1: Overview ================= */
+/* AYUDAS-OVERVIEW:INICIO */
+// Qué significa cada sigla y cada métrica de Overview. Se muestran con el botón "i". Pensado para personas que no vienen de marketing.
+const AYUDAS_OVERVIEW = {
+  inversion: 'Lo gastado en publicidad de Meta (Facebook e Instagram) en las campañas que cuentan, las que se definen en Control_Comunidades → Campañas.',
+  conversaciones: 'Conversaciones iniciadas desde los anuncios de Meta: personas que tocaron el anuncio y escribieron por WhatsApp. Es el dato que informa Meta; no es lo mismo que entrar al flow.',
+  cpmi: 'CPMI = costo por mensaje iniciado. Inversión ÷ conversaciones iniciadas en Meta: cuánto costó cada vez que alguien empezó una conversación.',
+  entradas: 'Personas únicas que entraron al flow, contadas por su primer contacto, sumadas de todas las comunidades. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta.',
+  miembros_efectivos: 'Personas que hoy están en los grupos: suma de los miembros finales (Mf) de todas las comunidades. Es una carga manual.',
+  cpme: 'CPME = costo por miembro efectivo. Inversión ÷ (miembros finales − miembros iniciales): cuánto costó cada persona que sumó el grupo. Necesita Mi y Mf cargados.',
+  fuga: 'Tasa de fuga = bajas ÷ (bajas + miembros finales): de todas las personas que estuvieron en el grupo, cuántas se fueron. Se calcula desde la segunda carga de la lista completa de cada comunidad, porque antes no hay con qué comparar.',
+  mi: 'Miembros iniciales (Mi): cuántas personas había en el grupo al empezar. Hoy es una carga manual.',
+  entradas_tabla: 'Personas nuevas que entraron al flow, contadas por su primer contacto. Es un tope: entrar al flow no es lo mismo que unirse al grupo.',
+  bajas: 'Bajas (B): personas que quedaron como salidas al cargar la lista completa del grupo. Se puede calcular desde la segunda carga.',
+  mf: 'Miembros efectivos finales (Mf): cuántas personas hay hoy en el grupo. Carga manual.',
+  participacion: 'Qué parte del total de miembros finales tiene cada comunidad.',
+};
+/* AYUDAS-OVERVIEW:FIN */
+const thAyuda = (texto, ayuda) => `<th>${texto} <button type="button" class="info-btn" data-info="${esc(ayuda)}" aria-label="Qué significa: ${esc(texto)}">i</button></th>`;
 function renderOverview(kpis, comunidades){
   const k = kpis || {};
   const kpiCards = kpiGrid([
-    [fmtMoney(k.inversion_total), 'Inversión total Meta', true],
-    [fmtInt(k.conversaciones_totales), 'Conversaciones totales (Meta)'],
-    [fmtMoney(k.cpl_global), 'CPMI global', true],
-    [fmtInt(k.clics_unicos_totales), 'Entradas únicas al flow (todas las comunidades)'],
-    [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales'],
-    [fmtMoney(k.cpme_global), 'CPME global', true],
-    [fmtPct(k.tasa_fuga_global_pct), k.tasa_fuga_global_pct == null ? 'Tasa de fuga global (se calcula desde la segunda carga de la lista completa)' : 'Tasa de fuga global'],
+    [fmtMoney(k.inversion_total), 'Inversión total Meta', true, AYUDAS_OVERVIEW.inversion],
+    [fmtInt(k.conversaciones_totales), 'Conversaciones totales (Meta)', false, AYUDAS_OVERVIEW.conversaciones],
+    [fmtMoney(k.cpl_global), 'CPMI global', true, AYUDAS_OVERVIEW.cpmi],
+    [fmtInt(k.clics_unicos_totales), 'Entradas únicas al flow (todas las comunidades)', false, AYUDAS_OVERVIEW.entradas],
+    [fmtInt(k.miembros_efectivos_totales), 'Miembros efectivos totales', false, AYUDAS_OVERVIEW.miembros_efectivos],
+    [fmtMoney(k.cpme_global), 'CPME global', true, AYUDAS_OVERVIEW.cpme],
+    [fmtPct(k.tasa_fuga_global_pct), k.tasa_fuga_global_pct == null ? 'Tasa de fuga global (se calcula desde la segunda carga de la lista completa)' : 'Tasa de fuga global', false, AYUDAS_OVERVIEW.fuga],
   ].filter(([, , plata]) => esMarketing() || !plata));
 
   const totalMf = comunidades.reduce((s,c) => s + (c.miembros_finales||0), 0);
@@ -430,7 +448,7 @@ function renderOverview(kpis, comunidades){
 
   return kpiCards +
     `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow se calculan solas (First-Contact Attribution) y las bajas salen de las cargas de la lista completa de cada grupo (desde la segunda carga).</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th><th>Miembros iniciales (Mi)</th><th>Entradas al flow (CRM)</th><th>Bajas (B)</th><th>Miembros efectivos finales (Mf)</th><th>% Participación</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th>${thAyuda('Miembros iniciales (Mi)', AYUDAS_OVERVIEW.mi)}${thAyuda('Entradas al flow (CRM)', AYUDAS_OVERVIEW.entradas_tabla)}${thAyuda('Bajas (B)', AYUDAS_OVERVIEW.bajas)}${thAyuda('Miembros efectivos finales (Mf)', AYUDAS_OVERVIEW.mf)}${thAyuda('% Participación', AYUDAS_OVERVIEW.participacion)}</tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
     (esMarketing() ? renderComunidadesForm(comunidades) : '');
 }
