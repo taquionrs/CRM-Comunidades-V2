@@ -188,7 +188,6 @@ const supabase = (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY)
 const TABS = [
   { key:'overview', label:'Overview' },
   { key:'control', label:'Control_Comunidades' },
-  { key:'objetivos', label:'Objetivos' },
   { key:'atribucion', label:'Atribucion' },
   { key:'base_limpia', label:'Base_Limpia' },
   { key:'dedup', label:'Data_Deduplicada' },
@@ -197,7 +196,6 @@ const TABS = [
 const TAB_SUB = {
   overview:'Panel ejecutivo macro — KPIs globales y distribución por comunidad',
   control:'Métricas de performance por plataforma (Meta Ads · ManyChat · WhatsApp)',
-  objetivos:'Los números del primer ciclo del puesto, los del motor y los chequeos de integridad de las métricas',
   atribucion:'Modelo de atribución: qué anuncio o canal trajo a cada persona — en construcción',
   base_limpia:'Gestor de usuarios nominados — vista de cliente',
   dedup:'Log técnico de atribución — primer evento por teléfono',
@@ -207,7 +205,7 @@ const TAB_SUB = {
 /* ROLES:INICIO */
 // Qué ve cada rol (specs/2026-10-21-sso-cloudflare-y-roles.md). Quien decide es la base (db/031): esto solo evita mostrar
 // pestañas, columnas y botones que para el rol General vendrían vacíos o fallarían.
-const TABS_SOLO_MARKETING = ['objetivos', 'base_limpia', 'dedup', 'crudo'];
+const TABS_SOLO_MARKETING = ['base_limpia', 'dedup', 'crudo'];
 const esMarketing = () => !!state.acceso && state.acceso.rol === 'marketing';
 const esAdmin = () => !!state.acceso && state.acceso.admin === true;
 function tabsVisibles(){
@@ -750,7 +748,7 @@ const COLUMNAS_CONTROL = [
     info:'Personas nuevas que entraron al flow en el período, contadas por su primer contacto. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta: no distingue el origen.',
     celda:(c)=>vEntero(c.clics_unicos), total:(t)=>vEntero(t.ent) },
   { id:'entradas_conv', grupo:'CRM', etiqueta:'Entradas / conversaciones',
-    info:'Entradas al flow ÷ Conversaciones de Meta. Es un tope y puede pasar de 100 %: entrar al flow no es lo mismo que unirse al grupo, y las entradas incluyen a quienes no llegaron por la pauta. No es la tasa de triaje de los objetivos del puesto: esa cuenta ingresos al grupo y está en la sección Objetivos.',
+    info:'Entradas al flow ÷ Conversaciones de Meta. Es un tope y puede pasar de 100 %: entrar al flow no es lo mismo que unirse al grupo, y las entradas incluyen a quienes no llegaron por la pauta. No es la tasa de triaje del puesto: esa cuenta ingresos al grupo ÷ entradas al flow.',
     celda:(c)=>vPct(c.conversaciones_meta > 0 ? c.clics_unicos / c.conversaciones_meta * 100 : null), total:(t)=>vPct(t.razon(t.ent, t.conv, 100)) },
   { id:'tasa_me_sumo', porCanal:true, grupo:'CRM', etiqueta:'Clic en "Me sumo" / entradas',
     info:'Clics en "Me sumo" ÷ Entradas al flow: de cada 100 personas que entran, cuántas tocan el botón.',
@@ -2161,149 +2159,6 @@ function wireCrudo(){
   if (state.crudoAuto) crudoTimer = setInterval(refrescarCrudo, 30000);
 }
 
-/* ================= TAB: Objetivos del puesto (db/033) ================= */
-/* OBJETIVOS:INICIO */
-// Los números del primer ciclo del puesto, los del motor y los chequeos de integridad. Solo Marketing. Todo sale de la base: acá solo se muestra.
-const DIAS_LINEA_BASE = 5;   // días hábiles de registro de minutos manuales para levantar la línea de base
-function formatoMinutos(m){
-  const n = Math.max(0, Math.round(Number(m) || 0)), h = Math.floor(n / 60), r = n % 60;
-  return h && r ? `${h} h ${r} min` : h ? `${h} h` : `${r} min`;
-}
-function resumenHoras(h){
-  const x = h || {}, dias = Number(x.dias_con_registro) || 0;
-  return { texto: formatoMinutos(x.minutos), dias, faltan: Math.max(0, DIAS_LINEA_BASE - dias), completa: dias >= DIAS_LINEA_BASE };
-}
-// TRG (definición a confirmar): miembros que siguen ÷ (miembros que siguen + bajas), por grupo y nunca promediado. Sin bajas medidas no se calcula.
-function trgGrupo(c){
-  if (!c || c.bajas_estimadas == null) return null;
-  const mf = Number(c.miembros_finales) || 0, b = Number(c.bajas_estimadas) || 0;
-  return mf + b > 0 ? Math.round(mf / (mf + b) * 1000) / 10 : null;
-}
-function trgTotal(cs){
-  const med = (cs || []).filter(c => c.bajas_estimadas != null);
-  const mf = med.reduce((s, c) => s + (Number(c.miembros_finales) || 0), 0), b = med.reduce((s, c) => s + (Number(c.bajas_estimadas) || 0), 0);
-  return med.length && mf + b > 0 ? Math.round(mf / (mf + b) * 1000) / 10 : null;
-}
-function cpmeTotal(cs){
-  const l = cs || [];
-  if (!l.some(c => c.inversion != null)) return null;
-  const inv = l.reduce((s, c) => s + (Number(c.inversion) || 0), 0), mf = l.reduce((s, c) => s + (Number(c.miembros_finales) || 0), 0), mi = l.reduce((s, c) => s + (Number(c.miembros_iniciales) || 0), 0);
-  return mf - mi > 0 ? Math.round(inv / (mf - mi) * 100) / 100 : null;
-}
-function resumenChequeos(ch){
-  const l = Array.isArray(ch) ? ch : [], avisos = l.filter(x => x.estado !== 'ok').length;
-  return { total: l.length, avisos, ok: l.length - avisos };
-}
-/* OBJETIVOS:FIN */
-
-async function loadObjetivos(desde, hasta){
-  const { data, error } = await supabase.rpc('objetivos_puesto', { p_cliente: state.clienteId, p_desde: desde || null, p_hasta: hasta || null });
-  if (error) { console.warn('objetivos_puesto:', error.message); return null; }
-  return data || null;
-}
-async function loadRegistroHoras(){
-  const { data, error } = await supabase.from('registro_horas_manuales').select('*').order('fecha', { ascending: false }).order('creado_en', { ascending: false }).limit(50);
-  if (error) { console.warn('registro_horas_manuales:', error.message); return []; }
-  return data || [];
-}
-const TAREAS_MANUALES = ['Cargar conteo de miembros de los grupos', 'Importar o revisar datos de Windsor', 'Limpiar datos de prueba', 'Alta de un cliente o comunidad (flows y planilla)', 'Actualizar un tablero a mano', 'Corregir contactos en la planilla'];
-
-function renderObjetivos(d, comunidadesRango, registros, desde, hasta){
-  const barra = `<div class="filters">
-      <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
-      <label>Hasta<input type="date" id="inpFechaHasta" value="${esc(hasta)}"></label>
-      ${selAtajoHtml(desde, hasta)}
-      <button class="btn ${!desde && !hasta ? 'on' : ''}" id="btnFechasLimpiar" type="button">Todo el histórico</button>
-    </div>
-    <div class="sub" style="margin:0 0 10px">El período es el mismo de Overview y Control_Comunidades. Las fechas son de Argentina. Ninguna cifra de acá es un logro: son líneas de base y mediciones con su definición.</div>`;
-  if (!d) return barra + `<div class="card"><h3>Objetivos del puesto</h3><div class="sub">No se pudieron cargar. Recargá la página; si sigue igual, avisá a Tecnología.</div></div>`;
-
-  const st = d.sin_toque_humano || {}, tr = d.triaje || { comunidades: [], total: {} }, tot = tr.total || {};
-  const h = resumenHoras(d.horas_manuales);
-  const ch = resumenChequeos(d.chequeos);
-  const pctTxt = (v) => v == null ? '—' : fmtPct(v);
-  const cpme = cpmeTotal(comunidadesRango);
-
-  const tarjetas = kpiGrid([
-    [pctTxt(st.pct), `Ingresos sin toque humano (${fmtInt(st.automaticas)} de ${fmtInt(st.personas)} personas)`, false,
-      'Personas cuyo primer evento llegó solo por el webhook, sin recuperarlo a mano, sobre las personas cuyo primer contacto cae en el período. Línea de base v0 (corte 10/10): 69,9 % en todo el período y 100 % desde el 08/10, cuando el flow quedó estable. Es una cota superior: no mide correcciones manuales de estado ni la carga de MI y MF.'],
-    [fmtInt(tot.entradas), 'Entradas al flow de ManyChat (KPI principal)', false,
-      'Personas que mandaron la frase de la campaña de WhatsApp y entraron al flow, contadas por su primer contacto en el período. Es el KPI principal: las campañas son de WhatsApp y el disparador es una frase armada, así que la entrada al flow es el primer paso medible de cada persona. Incluye pruebas del equipo y personas que no llegaron por la pauta.'],
-    [pctTxt(tot.tasa_triaje), 'Tasa de triaje: ingresos al grupo ÷ entradas al flow (meta: más de 50 %)', false,
-      'De cada 100 personas que entran al flow, cuántas están en el grupo: personas que aparecen como ingresos en las listas cargadas de los grupos (sin contar la lista de partida) ÷ entradas al flow, con los totales de las comunidades y nunca promediando tasas. Abajo está el paso intermedio: quienes tocaron "Me sumo".'],
-    [h.texto, `Carga manual registrada (${h.dias} de ${DIAS_LINEA_BASE} días)`, false,
-      `Tiempo de trabajo manual que registraste en este período. La línea de base de "horas de carga manual eliminadas" necesita ${DIAS_LINEA_BASE} días hábiles de registro antes de cualquier mejora.${h.completa ? ' Ya tenés los días necesarios.' : ' Faltan ' + h.faltan + ' días.'}`],
-  ]);
-
-  const fila = (c, esTotal) => `<tr${esTotal ? ' class="totales"' : ''}><td>${esTotal ? '<b>Total del cliente</b>' : esc(c.nombre)}</td>
-      <td class="num"><b>${fmtInt(c.entradas)}</b></td><td class="num">${fmtInt(c.clics_me_sumo)}</td><td class="num">${fmtInt(c.ingresos_grupo)}</td>
-      <td class="num">${pctTxt(c.tasa_clics)}</td><td class="num"><b>${pctTxt(c.tasa_triaje)}</b>${c.tasa_triaje != null && c.tasa_triaje > 50 ? ' ✓' : ''}</td>
-      <td class="num">${fmtInt(c.conversaciones)}</td><td class="num">${pctTxt(c.entradas_por_conversacion)}</td></tr>`;
-  const triaje = `<div class="card"><h3>Entradas al flow y tasa de triaje por comunidad</h3>
-    <div class="sub">Las campañas son de WhatsApp y el disparador es una frase armada: lo que se mide es la <b>entrada al flow</b> (I1). La <b>tasa de triaje</b> es I3 ÷ I1: de cada 100 personas que entran, cuántas están en el grupo. I2 (clic en "Me sumo") es el paso del medio. Las conversaciones de Meta son un dato de contexto, no el KPI: sirven para ver cuántas se convierten en entradas. El total suma numeradores y denominadores: no promedia las tasas.</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th><th class="num">I1 · Entradas al flow</th><th class="num">I2 · Clics en "Me sumo"</th><th class="num">I3 · Ingresos al grupo</th><th class="num">I2 ÷ I1</th><th class="num">Tasa de triaje (I3 ÷ I1)</th><th class="num">Conversaciones (Meta, contexto)</th><th class="num">Entradas ÷ conversaciones</th></tr></thead>
-    <tbody>${(tr.comunidades || []).map(c => fila(c, false)).join('') || '<tr class="empty-row"><td colspan="8">Sin comunidades.</td></tr>'}${fila(tot, true)}</tbody></table></div>
-    <div class="sub" style="margin-top:8px">I3 sale de las fechas de las listas de miembros que se cargan a mano. Si una lista no trae fecha de ingreso, se usa el día de la carga. Las entradas y los clics pueden incluir personas que no llegaron por la pauta. "Entradas ÷ conversaciones" puede pasar de 100 %: muestra cuánto del tráfico del flow no viene de las conversaciones de Meta.</div></div>`;
-
-  const motor = `<div class="card"><h3>Los cuatro números del motor</h3>
-    <div class="tbl-wrap"><table><thead><tr><th>Número</th><th>Valor hoy</th><th>Estado</th></tr></thead><tbody>
-      <tr><td><b>Tasa de triaje</b> (meta &gt; 50 %)</td><td>${pctTxt(tot.tasa_triaje)} <span class="sub" style="margin:0">(I3 ÷ I1)</span></td><td>Se mide por comunidad, abajo. Depende de cargar las listas de miembros.</td></tr>
-      <tr><td><b>CPME</b> (costo por miembro efectivo)</td><td>${cpme == null ? '—' : fmtMoney(cpme)}</td><td>Se mide: inversión ÷ (MF − MI). Cuenta el crecimiento desde la lista de partida (14/10).</td></tr>
-      <tr><td><b>CPMR</b> (costo por miembro que se queda)</td><td>—</td><td>Sin fuente: necesita los pulsos de retención de ManyChat (a los 7 y 30 días).</td></tr>
-      <tr><td><b>TRG por grupo</b> <span class="hint" title="Definición propuesta a confirmar: miembros que siguen ÷ (miembros que siguen + bajas), por grupo, nunca promediado.">ⓘ</span></td>
-          <td>${(comunidadesRango || []).filter(c => trgGrupo(c) != null).map(c => `${esc(c.nombre)}: ${fmtPct(trgGrupo(c))}`).join(' · ') || '—'}${trgTotal(comunidadesRango) != null ? `<div class="sub" style="margin:2px 0 0">Total del cliente: ${fmtPct(trgTotal(comunidadesRango))}</div>` : ''}</td>
-          <td>Definición propuesta, por confirmar. Se calcula desde la segunda carga de lista completa.</td></tr>
-      <tr><td><b>K-Factor</b> (cuántos miembros trae cada miembro)</td><td>—</td><td>Sin fuente ni definición: necesita saber quién invitó a quién (enlace único por miembro).</td></tr>
-    </tbody></table></div></div>`;
-
-  const lista = (registros || []).map(r => `<tr><td class="mono">${esc(fmtDia(r.fecha))}</td><td>${esc(r.tarea)}</td><td class="num">${fmtInt(r.minutos)} min</td><td>${esc(r.nota || '')}</td><td>${esc(r.por || '')}</td>
-      <td><button class="btn btn-mini" type="button" data-hm-borrar="${esc(r.id)}" aria-label="Borrar este registro">Borrar</button></td></tr>`).join('');
-  const horas = `<div class="card"><h3>Horas de carga manual</h3>
-    <div class="sub">Registrá cada tarea que hacés a mano (cargar conteos, importar datos, limpiar pruebas…). Con ${DIAS_LINEA_BASE} días hábiles de registro queda la <b>línea de base</b>; sin ella no hay claim de horas eliminadas. En este período: <b>${h.texto}</b> en ${h.dias} ${h.dias === 1 ? 'día' : 'días'}${h.completa ? ' — línea de base completa.' : `, faltan ${h.faltan}.`}</div>
-    ${(d.horas_manuales && d.horas_manuales.por_tarea || []).length ? `<div class="sub">${(d.horas_manuales.por_tarea).map(t => `${esc(t.tarea)}: ${formatoMinutos(t.minutos)}`).join(' · ')}</div>` : ''}
-    <div class="filters" style="margin:10px 0">
-      <label>Fecha<input type="date" id="hmFecha" value="${esc(hoyAR())}"></label>
-      <label>Tarea<input type="text" id="hmTarea" list="hmTareas" placeholder="Qué hiciste a mano" style="min-width:260px"><datalist id="hmTareas">${TAREAS_MANUALES.map(t => `<option value="${esc(t)}">`).join('')}</datalist></label>
-      <label>Minutos<input type="number" id="hmMin" min="1" max="720" value="15" style="width:90px"></label>
-      <label>Nota (opcional)<input type="text" id="hmNota" maxlength="500" style="min-width:200px"></label>
-      <button class="btn" id="hmGuardar" type="button">Registrar</button>
-    </div>
-    <div class="sub" id="hmEstado" role="status" style="margin:0 0 8px"></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Fecha</th><th>Tarea</th><th class="num">Tiempo</th><th>Nota</th><th>Registró</th><th></th></tr></thead><tbody>${lista || '<tr class="empty-row"><td colspan="6">Todavía no hay registros. Empezá hoy.</td></tr>'}</tbody></table></div></div>`;
-
-  const chequeos = `<div class="card"><h3>Chequeos de integridad de las métricas</h3>
-    <div class="sub">${ch.avisos ? `<span style="color:var(--warn)">${ch.avisos} de ${ch.total} chequeos con aviso.</span>` : `Los ${ch.total} chequeos están en orden.`} Cada uno compara una métrica con la fuente de la que sale: si algo no cierra, se ve acá antes de que llegue a un reporte.</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Chequeo</th><th>Estado</th><th>Detalle</th></tr></thead><tbody>${(d.chequeos || []).map(x => `<tr><td>${esc(x.titulo)}</td><td><span class="pill ${x.estado === 'ok' ? 'pill-ok' : 'badge-warn'}">${x.estado === 'ok' ? 'En orden' : 'Aviso'}</span></td><td>${esc(x.detalle)}</td></tr>`).join('')}</tbody></table></div></div>`;
-
-  return barra + tarjetas + triaje + motor + horas + chequeos;
-}
-function wireObjetivos(){
-  wireFiltrosPeriodo();
-  const estado = (t, error) => { const el = document.getElementById('hmEstado'); if (el) { el.textContent = t; el.style.color = error ? 'var(--danger)' : ''; } };
-  const guardar = document.getElementById('hmGuardar');
-  if (guardar) guardar.onclick = async () => {
-    const fecha = document.getElementById('hmFecha').value, tarea = document.getElementById('hmTarea').value.trim();
-    const minutos = Number(document.getElementById('hmMin').value), nota = document.getElementById('hmNota').value.trim();
-    if (!fecha) return estado('Elegí la fecha.', true);
-    if (tarea.length < 3) return estado('Escribí qué hiciste (mínimo 3 letras).', true);
-    if (!Number.isInteger(minutos) || minutos < 1 || minutos > 720) return estado('Los minutos tienen que ser un número entre 1 y 720.', true);
-    guardar.disabled = true; estado('Guardando…');
-    const { error } = await supabase.from('registro_horas_manuales').insert({ fecha, tarea, minutos, nota: nota || null });
-    guardar.disabled = false;
-    if (error) return estado('No se pudo guardar: ' + error.message, true);
-    renderAll();
-  };
-  document.querySelectorAll('[data-hm-borrar]').forEach(b => {
-    b.onclick = async () => {
-      if (!confirm('¿Borrar este registro?')) return;
-      b.disabled = true;
-      const { error } = await supabase.from('registro_horas_manuales').delete().eq('id', b.dataset.hmBorrar);
-      if (error) { b.disabled = false; return estado('No se pudo borrar: ' + error.message, true); }
-      renderAll();
-    };
-  });
-}
-
 /* ---------- render principal ---------- */
 /* ---------- usuarios (solo administradores; reglas en db/030) ---------- */
 const VERBO_AUDITORIA = { alta:'dio de alta a', cambio:'cambió el acceso de', baja:'quitó a' };
@@ -2435,17 +2290,6 @@ async function renderAll(){
       const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
       content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose);
       wireControl();
-
-    } else if (state.tab === 'objetivos') {
-      const [datos, rango, registros, global] = await Promise.all([
-        loadObjetivos(state.fechaDesde, state.fechaHasta),
-        loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos').catch(() => []),
-        loadRegistroHoras(),
-        loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
-      ]);
-      // El CPME es del cliente: incluye el gasto de las campañas globales (sin comunidad).
-      content.innerHTML = renderObjetivos(datos, global ? [...rango, global] : rango, registros, state.fechaDesde || '', state.fechaHasta || '');
-      wireObjetivos();
 
     } else if (state.tab === 'atribucion') {
       content.innerHTML = renderAtribucion();

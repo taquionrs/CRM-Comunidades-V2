@@ -839,3 +839,10 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - **Decisión del usuario (27/10):** las campañas son de WhatsApp y el disparador es una frase armada, así que el KPI principal es la **entrada al flow de ManyChat**, no las conversaciones de Meta (dato de contexto). La tasa de triaje pasa a ser I3 ÷ I1 y reemplaza a la definición v0 (entradas ÷ conversaciones); la sección Objetivos muestra las entradas como KPI principal y las conversaciones como contexto.
 - **Para decidir:** definición de TRG, fecha real de las bajas, separar entradas orgánicas de las pagas, y sacar la v1 del documento de líneas de base.
 - Pruebas: 8 de panel nuevas y 6 de base (126 de Node y 24 de base). Ensayo: `exportes/ensayo-033.sql` (se corrió también contra el Postgres local). **Pendiente:** ensayar y aplicar db/033.
+
+## 4 tricies duodevicies. PR #63 — Se quita la pestaña "Objetivos" (2026-10-27)
+
+- **Decisión del usuario:** "no necesito esa pestaña". Se quitan la pestaña, su carga de datos y el registro de horas manuales que traía la PR #60.
+- **Base:** `db/033_objetivos_puesto.sql` **nunca se aplicó** en producción (la PR #60 se fusionó en el panel, pero la migración no llegó a correrse): se borra del repo junto con sus pruebas y el ensayo. La numeración salta de la 032 a la 034 (campañas globales, que sí está aplicada). No hay nada que deshacer en la base.
+- **Se conserva:** la auditoría de métricas (`docs/reference/auditoria-de-metricas.md`, ajustada) y la decisión de definición: el KPI principal es la **entrada al flow de ManyChat** y la tasa de triaje es ingresos al grupo ÷ entradas al flow; las conversaciones de Meta son contexto. La ayuda de "Entradas ÷ conversaciones" dice que no es la tasa de triaje del puesto.
+- Pruebas: 128 de Node y 26 de base.
