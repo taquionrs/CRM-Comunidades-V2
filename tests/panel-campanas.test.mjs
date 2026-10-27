@@ -9,7 +9,7 @@ const ini = html.indexOf("/* CAMPANAS:INICIO */");
 const fin = html.indexOf("/* CAMPANAS:FIN */");
 assert.ok(ini >= 0 && fin > ini, "no se encontró el bloque CAMPANAS en public/index.html");
 const api = new Function(html.slice(ini, fin) +
-  "\nreturn { estadoCampana, agruparCampanas, resumenCampanas, filtrarCampanas, valorDestinoCampana, interpretarDestinoCampana, claveTexto, claveCliente, perteneceAlCliente, filasDelCliente, esComunidadGeneral };")();
+  "\nreturn { estadoCampana, agruparCampanas, resumenCampanas, filtrarCampanas, valorDestinoCampana, interpretarDestinoCampana, claveTexto, claveCliente, perteneceAlCliente, filasDelCliente };")();
 
 const fila = (campana, adset, gasto, reglaId = null, cuenta = null, comunidad = null, cliente = null) => ({
   campana, adset, gasto, conversaciones: 1, clics: 10, impresiones: 100, desde: "2026-10-01", hasta: "2026-10-10",
@@ -108,17 +108,10 @@ test("cliente: no confunde nombres parecidos y, sin cliente elegido, muestra tod
   assert.deepEqual(api.filasDelCliente(undefined, CORTADO), []);
 });
 
-test("global: las comunidades '(general)' reciben las campañas globales", () => {
-  assert.ok(api.esComunidadGeneral("Cortado en Jarrito (general)"));
-  assert.ok(api.esComunidadGeneral("Todo un País (GENERAL)"));
-  assert.ok(!api.esComunidadGeneral("Palermo"));
-  assert.ok(!api.esComunidadGeneral("Servicio general de Palermo"));   // "general" sin paréntesis no cuenta
-});
-
-test("el modal arranca en el cliente elegido, ofrece 'Global' primero y las comunidades solo si el anuncio apunta a una", () => {
+test("el modal arranca en el cliente elegido, ofrece solo sus comunidades y avisa que (general) es una comunidad real", () => {
   assert.match(html, /cliente = state\.clienteId \|\| ''/);
-  assert.match(html, /Global · ' \+ c\.nombre \+ ' \(todas las comunidades\)/);
-  assert.match(html, /Solo si apunta a una comunidad ·/);
   assert.match(html, /filasDelCliente\(filas, clienteElegido\)/);
-  assert.match(html, /<b>Campaña global<\/b>: en las campañas de WhatsApp el prospecto elige su comunidad/);
+  assert.match(html, /<b>No las asignes a "\(general\)"<\/b>: esa es una comunidad real/);
+  assert.doesNotMatch(html, /Global · '/);   // la (general) NO es un destino "global": es el grupo y el bot de cada cliente
+  assert.doesNotMatch(html, /esComunidadGeneral/);
 });

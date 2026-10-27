@@ -811,10 +811,11 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - No hay cambios de base. Pruebas: 3 nuevas (118 en total).
 - **Pendiente de definir:** el "doble CPA" (Meta y efectivo).
 
-## 4 tricies sexdecies. PR #61 — Campañas por cliente y asignación global (2026-10-27)
+## 4 tricies sexdecies. PR #61 — Campañas por cliente (2026-10-27)
 
 - **Pedido:** en la sección Campañas aparecían las campañas de todas las cuentas de Windsor (de todos los clientes de Taquion) y, al elegir un cliente, pedía una comunidad aunque la campaña sea global: en las campañas de WhatsApp el prospecto elige su comunidad dentro del flow.
 - **Por cliente:** el modal abre en el cliente elegido arriba y muestra solo sus campañas: las que nombran al cliente (por el nombre o el slug, sin importar mayúsculas, tildes ni guiones bajos) y las que ya tienen una regla suya. Las de otros clientes quedan ocultas y se avisa cuántas; "Todos los clientes" las muestra. Con un cliente elegido, el selector de destino ofrece solo sus destinos.
-- **Global:** cada cliente ofrece primero **"Global · cliente (todas las comunidades)"**, que usa la comunidad "(general)" del cliente (el gasto queda en esa fila de Control_Comunidades); las comunidades concretas quedan aparte, "solo si el anuncio apunta a una". Sin cambios de base: es la misma regla de siempre apuntando a la comunidad "(general)".
-- **Límite que queda:** el gasto de una campaña global queda en la fila "(general)" y no se reparte entre las comunidades; los costos por comunidad (por entrada, por clic) no lo incluyen. El total del cliente sí. Repartirlo (por ejemplo, proporcional a las entradas) es una decisión de análisis pendiente.
-- Pruebas: 5 nuevas (123 en total). Sin migración ni ensayo.
+- **Corrección (27/10):** una primera versión de esta PR ofrecía "Global" apuntando a la comunidad "(general)". Estaba mal: **"(general)" es una comunidad real** (el grupo y el bot que dispara los triggers de WhatsApp, con su pestaña `Cortado-General`, sus miembros y sus bajas; ya constaba en la PR #40). Mezclarle gasto contamina sus métricas. Se sacó.
+- **Qué queda:** solo el filtro por cliente y los destinos del cliente elegido; un aviso dice que las campañas globales todavía no tienen destino propio y que no se asignen a "(general)".
+- **Pendiente (próxima PR):** destino "global del cliente" sin comunidad (gasto a nivel cliente, fila propia en Control_Comunidades, incluido en los totales y en el desglose). Necesita migración.
+- Pruebas: 4 nuevas (122 en total). Sin migración ni ensayo.

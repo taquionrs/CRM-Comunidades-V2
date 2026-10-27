@@ -1110,8 +1110,6 @@ function perteneceAlCliente(f, cliente){
   return k.trim().length > 0 && claveTexto(f.campana).includes(k);
 }
 const filasDelCliente = (filas, cliente) => (cliente ? (filas || []).filter((f) => perteneceAlCliente(f, cliente)) : (filas || []));
-// Las comunidades "(general)" reciben el gasto de las campañas globales: el prospecto elige su comunidad dentro del flow, no la campaña.
-const esComunidadGeneral = (nombre) => /\(general\)/i.test(String(nombre ?? ''));
 /* CAMPANAS:FIN */
 
 /* ================= Botón "Campañas": qué campañas de Meta cuentan (pantalla completa) ================= */
@@ -1161,11 +1159,7 @@ async function abrirCampanas(){
     const visibles = clientes.filter((c) => !cliente || cliente === 'sin' || c.id === cliente || comunidades.some((x) => x.cliente_id === c.id && valorActual === 'c:' + x.id));
     const grupos = visibles.map((c) => {
       const cs = comunidades.filter((x) => x.cliente_id === c.id);
-      const global = cs.find((x) => esComunidadGeneral(x.nombre));
-      const otras = cs.filter((x) => x !== global);
-      const opt = (x, texto) => `<option value="c:${x.id}" ${valorActual === 'c:' + x.id ? 'selected' : ''}>${esc(texto)}</option>`;
-      return (global ? `<optgroup label="Campaña global de ${esc(c.nombre)}">${opt(global, 'Global · ' + c.nombre + ' (todas las comunidades)')}</optgroup>` : '') +
-        (otras.length ? `<optgroup label="Solo si apunta a una comunidad · ${esc(c.nombre)}">${otras.map((x) => opt(x, x.nombre)).join('')}</optgroup>` : '');
+      return cs.length ? `<optgroup label="Cuenta en · ${esc(c.nombre)}">${cs.map((x) => `<option value="c:${x.id}" ${valorActual === 'c:' + x.id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</optgroup>` : '';
     }).join('');
     return (conMixto ? '<option value="" selected disabled>Mixto: ver conjuntos</option>' : '') +
       `<option value="sin" ${valorActual === 'sin' ? 'selected' : ''}>Sin asignar (no suma)</option>` +
@@ -1221,7 +1215,7 @@ async function abrirCampanas(){
       <div class="tbl-wrap"><table><thead><tr><th></th><th>Campaña / conjunto</th><th>Gasto</th><th>Conversaciones</th><th>Clics</th><th>Estado</th><th>Destino</th></tr></thead>
         <tbody>${filasHtml || '<tr class="empty-row"><td colspan="7">No hay campañas para este filtro.</td></tr>'}</tbody></table></div>
       <div class="sub" style="margin-top:10px">Lo que no tiene regla (Sin asignar) no suma. "No cuenta" conserva la regla y su gasto se registra en Consultas. Cada cambio queda en el historial con tu nombre.</div>
-      <div class="sub" style="margin-top:6px"><b>Campaña global</b>: en las campañas de WhatsApp el prospecto elige su comunidad dentro del flow, no la campaña. Esas se asignan a <b>Global · cliente</b>: el gasto queda en la fila "(general)" de Control_Comunidades y las personas se reparten por comunidad según lo que elige cada una. Asignala a una comunidad concreta solo si el anuncio apunta a ese barrio.</div>`;
+      <div class="sub" style="margin-top:6px"><b>Campañas globales</b> (el prospecto elige su comunidad dentro del flow): todavía no tienen un destino propio a nivel cliente, está en preparación. <b>No las asignes a "(general)"</b>: esa es una comunidad real (el grupo y el bot que dispara los triggers) y se le sumaría gasto que no es suyo.</div>`;
 
     cuerpo.querySelectorAll('[data-cp-estado]').forEach((b) => { b.onclick = () => { estado = b.dataset.cpEstado; pintar(); }; });
     cuerpo.querySelectorAll('[data-cp-abrir]').forEach((b) => { b.onclick = () => { const k = b.dataset.cpAbrir; if (abiertas.has(k)) abiertas.delete(k); else abiertas.add(k); pintar(); }; });
