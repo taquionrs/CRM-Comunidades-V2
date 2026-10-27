@@ -115,3 +115,21 @@ test("el modal arranca en el cliente elegido, ofrece solo sus comunidades y avis
   assert.doesNotMatch(html, /Global · '/);   // la (general) NO es un destino "global": es el grupo y el bot de cada cliente
   assert.doesNotMatch(html, /esComunidadGeneral/);
 });
+
+// ---- Campañas globales del cliente (db/034)
+test("destino global: una regla que cuenta sin comunidad es 'Global · cliente' y se traduce a la acción cuenta_global", () => {
+  const global = fila("CAMP_G", "", 10, "r9", true, null, "cli-cortado");
+  assert.equal(api.valorDestinoCampana(global), "g:cli-cortado");
+  assert.deepEqual(api.interpretarDestinoCampana("g:cli-cortado"), { accion: "cuenta_global", comunidad: null, cliente: "cli-cortado" });
+  assert.equal(api.interpretarDestinoCampana("g:"), null);
+  // lo de siempre no cambia
+  assert.equal(api.valorDestinoCampana(fila("CAMP_C", "", 10, "r8", true, "c-boedo", "cli-1")), "c:c-boedo");
+  assert.deepEqual(api.interpretarDestinoCampana("c:c-boedo"), { accion: "cuenta", comunidad: "c-boedo" });
+});
+
+test("el modal ofrece 'Global · cliente (sin comunidad)' y manda el cliente al guardar; nunca apunta a '(general)'", () => {
+  assert.match(html, /Global · \$\{esc\(c\.nombre\)\} \(sin comunidad\)/);
+  assert.match(html, /Solo si apunta a una comunidad ·/);
+  assert.match(html, /p_cliente: accion\.cliente \|\| null/);
+  assert.match(html, /<b>No las asignes a "\(general\)"<\/b>/);
+});
