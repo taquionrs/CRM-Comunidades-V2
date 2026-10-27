@@ -5,8 +5,10 @@
 --                             sin registro no hay línea de base. Solo Marketing lee, agrega y borra; nada se edita.
 --   objetivos_puesto(cliente, desde, hasta)   un JSON con:
 --     sin_toque_humano   personas cuyo primer evento llegó solo por el webhook (sin la marca _recuperado), sobre las personas cuyo primer contacto cae en el período.
---     triaje             por comunidad, nunca promediado: conversaciones iniciadas en Meta (denominador) y tres numeradores,
---                        I1 entradas al flow, I2 clics en "Me sumo", I3 ingresos al grupo según las listas cargadas (sin contar la lista de partida usada como MI).
+--     triaje             por comunidad, nunca promediado. Las campañas son de WhatsApp y el disparador es una frase armada: el KPI principal es la ENTRADA AL FLOW de ManyChat (I1).
+--                        Tasa de triaje = I3 ÷ I1 (de cada 100 personas que entran al flow, cuántas están en el grupo; meta de la carta: más de 50 %),
+--                        con I2 (clics en "Me sumo") como paso intermedio. I3 = ingresos al grupo según las listas cargadas, sin contar la lista de partida usada como MI.
+--                        Las conversaciones de Meta son un dato de contexto, no el KPI: se devuelven para ver cuántas se convierten en entradas (cobertura del tracking).
 --                        La fila "total" suma numeradores y denominadores; no promedia tasas.
 --     horas_manuales     minutos registrados, días con registro y detalle por tarea en el período.
 --     chequeos           controles de integridad que dicen si las métricas se pueden creer (ok / aviso, con el detalle).
@@ -63,7 +65,7 @@ begin
      and (p_desde is null or (d.fecha_primer_contacto at time zone v_zona)::date >= p_desde)
      and (p_hasta is null or (d.fecha_primer_contacto at time zone v_zona)::date <= p_hasta);
 
-  -- 2) Tasa de triaje por comunidad: denominador = conversaciones de Meta; numeradores = I1 entradas, I2 clics en "Me sumo", I3 ingresos al grupo.
+  -- 2) Tasa de triaje por comunidad: denominador = I1 entradas al flow; numeradores = I2 clics en "Me sumo" e I3 ingresos al grupo. Las conversaciones de Meta son contexto.
   with com as (
     select c.id, c.nombre from crm_comunidades_v2.comunidad c where c.cliente_id = p_cliente
   ), conv as (
@@ -95,15 +97,15 @@ begin
     'comunidades', coalesce((select jsonb_agg(jsonb_build_object(
         'comunidad_id', f.comunidad_id, 'nombre', f.nombre, 'conversaciones', f.conversaciones, 'entradas', f.entradas,
         'clics_me_sumo', f.clics_me_sumo, 'ingresos_grupo', f.ingresos_grupo,
-        'tasa_entradas', round(f.entradas::numeric / nullif(f.conversaciones, 0) * 100, 1),
-        'tasa_clics', round(f.clics_me_sumo::numeric / nullif(f.conversaciones, 0) * 100, 1),
-        'tasa_ingresos', round(f.ingresos_grupo::numeric / nullif(f.conversaciones, 0) * 100, 1)) order by f.nombre) from fila f), '[]'::jsonb),
+        'tasa_triaje', round(f.ingresos_grupo::numeric / nullif(f.entradas, 0) * 100, 1),
+        'tasa_clics', round(f.clics_me_sumo::numeric / nullif(f.entradas, 0) * 100, 1),
+        'entradas_por_conversacion', round(f.entradas::numeric / nullif(f.conversaciones, 0) * 100, 1)) order by f.nombre) from fila f), '[]'::jsonb),
     'total', (select jsonb_build_object(
         'conversaciones', coalesce(sum(f.conversaciones), 0), 'entradas', coalesce(sum(f.entradas), 0),
         'clics_me_sumo', coalesce(sum(f.clics_me_sumo), 0), 'ingresos_grupo', coalesce(sum(f.ingresos_grupo), 0),
-        'tasa_entradas', round(sum(f.entradas)::numeric / nullif(sum(f.conversaciones), 0) * 100, 1),
-        'tasa_clics', round(sum(f.clics_me_sumo)::numeric / nullif(sum(f.conversaciones), 0) * 100, 1),
-        'tasa_ingresos', round(sum(f.ingresos_grupo)::numeric / nullif(sum(f.conversaciones), 0) * 100, 1)) from fila f))
+        'tasa_triaje', round(sum(f.ingresos_grupo)::numeric / nullif(sum(f.entradas), 0) * 100, 1),
+        'tasa_clics', round(sum(f.clics_me_sumo)::numeric / nullif(sum(f.entradas), 0) * 100, 1),
+        'entradas_por_conversacion', round(sum(f.entradas)::numeric / nullif(sum(f.conversaciones), 0) * 100, 1)) from fila f))
     into v_triaje;
 
   -- 3) Horas manuales registradas en el período

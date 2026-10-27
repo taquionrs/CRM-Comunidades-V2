@@ -59,9 +59,10 @@ test("la pestaña Objetivos existe, es solo para Marketing y pide los datos a la
   assert.match(html, /state\.tab === 'objetivos'/);
 });
 
-test("el panel dice cuáles son los tres números del mes 3 y que I3 es la definición de la carta", () => {
+test("el panel dice cuáles son los números del mes 3, que el KPI principal es la entrada al flow y que las conversaciones son contexto", () => {
   assert.match(html, /Ingresos sin toque humano/);
-  assert.match(html, /Tasa de triaje: ingresos al grupo ÷ conversaciones/);
+  assert.match(html, /Entradas al flow de ManyChat \(KPI principal\)/);
+  assert.match(html, /Tasa de triaje: ingresos al grupo ÷ entradas al flow/);
+  assert.match(html, /Las conversaciones de Meta son un dato de contexto, no el KPI/);
   assert.match(html, /Carga manual registrada/);
-  assert.match(html, /I3, ingresos al grupo<\/b>, es la definición de la carta/);
 });

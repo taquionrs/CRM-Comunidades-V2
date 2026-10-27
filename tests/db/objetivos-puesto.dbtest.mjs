@@ -64,17 +64,18 @@ test("% de ingresos sin toque humano: cuenta personas, no eventos, y marca como 
   assert.equal(todo.sin_toque_humano.personas, 5);   // suma la persona de septiembre
 });
 
-test("tasa de triaje por comunidad: tres numeradores sobre las conversaciones, y el total suma sin promediar", async () => {
+test("tasa de triaje por comunidad: ingresos ÷ entradas al flow (las conversaciones de Meta son contexto), y el total suma sin promediar", async () => {
   const { triaje } = await obj(sesion("mkt"));
   const p = triaje.comunidades.find((c) => c.nombre === "Palermo");
   assert.deepEqual([p.conversaciones, p.entradas, p.clics_me_sumo, p.ingresos_grupo], [15, 3, 1, 3]);   // los 3 ingresos: sin contar la lista de partida
-  assert.deepEqual([p.tasa_entradas, p.tasa_clics, p.tasa_ingresos], [20, 6.7, 20]);
+  assert.deepEqual([p.tasa_triaje, p.tasa_clics, p.entradas_por_conversacion], [100, 33.3, 20]);   // 3 ÷ 3 · 1 ÷ 3 · 3 ÷ 15
   const b = triaje.comunidades.find((c) => c.nombre === "Boedo");
   assert.deepEqual([b.conversaciones, b.entradas, b.clics_me_sumo, b.ingresos_grupo], [4, 1, 1, 1]);
   const s = triaje.comunidades.find((c) => c.nombre === "Sin carga");
-  assert.equal(s.tasa_entradas, null);                // sin conversaciones no hay tasa
+  assert.deepEqual([s.tasa_triaje, s.entradas_por_conversacion], [null, null]);   // sin entradas ni conversaciones no hay tasa
   assert.deepEqual([triaje.total.conversaciones, triaje.total.entradas, triaje.total.ingresos_grupo], [19, 4, 4]);
-  assert.equal(triaje.total.tasa_entradas, 21.1);     // 4 / 19, no el promedio de 20 y 25
+  assert.equal(triaje.total.entradas_por_conversacion, 21.1);   // 4 / 19, no el promedio de 20 y 25
+  assert.deepEqual([triaje.total.tasa_triaje, triaje.total.tasa_clics], [100, 50]);   // 4 ÷ 4 · 2 ÷ 4
 });
 
 test("horas manuales: las puede registrar y borrar Marketing, General no, y el resumen suma por tarea", async () => {

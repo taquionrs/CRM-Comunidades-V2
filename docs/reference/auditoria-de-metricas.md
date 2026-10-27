@@ -22,7 +22,7 @@ Revisión de cada métrica que muestra el CRM: qué dice la fórmula, de dónde 
 | Trigger entregados | Personas distintas que recibieron el primer mensaje | Correcta | |
 | Clics en "Me sumo" | Personas distintas que tocaron el botón | Correcta | Se registra desde el 09/10: un período anterior queda subcontado |
 | CTR del botón | Clics en "Me sumo" ÷ trigger entregados | Correcta | Mismo límite de fecha de los clics |
-| Entradas ÷ conversaciones | Entradas al flow ÷ conversaciones de Meta | Correcta como cuenta, **mal nombrada** antes | Puede pasar de 100 % (Palermo: 110 entradas contra 21 conversaciones). Ya **no se llama tasa de triaje** |
+| Entradas ÷ conversaciones | Entradas al flow ÷ conversaciones de Meta | Correcta como cuenta, **mal nombrada** antes | Es un dato de contexto, no un KPI: muestra cuánto del tráfico del flow se explica por las conversaciones de Meta. Puede pasar de 100 % (Palermo: 110 entradas contra 21 conversaciones). Ya **no se llama tasa de triaje** |
 | Clic en "Me sumo" ÷ entradas | Clics ÷ entradas | Correcta | |
 | Contactos repetidos | Personas con más de un evento aceptado | Correcta | No sabe el motivo (prueba, reingreso, doble toque) |
 
@@ -43,7 +43,9 @@ Revisión de cada métrica que muestra el CRM: qué dice la fórmula, de dónde 
 | Métrica | Fórmula | Límites |
 |---|---|---|
 | % de ingresos sin toque humano | Personas cuyo primer evento no lleva la marca `_recuperado` ÷ personas del período | Cota superior: no mide correcciones manuales de estado ni la carga de MI y MF |
-| Tasa de triaje (I1, I2, I3) | Entradas, clics en "Me sumo" o ingresos al grupo ÷ conversaciones de Meta, por comunidad; el total suma, no promedia | **I3 es la definición de la carta.** Sale de las fechas de las listas de miembros (sin contar la lista de partida); si una lista no trae fecha, se usa el día de la carga |
+| Entradas al flow (I1) | Personas que entran al flow en el período | **KPI principal.** Las campañas son de WhatsApp y el disparador es una frase armada: la entrada al flow es el primer paso medible de cada persona |
+| Tasa de triaje | I3 ÷ I1: ingresos al grupo ÷ entradas al flow, por comunidad; el total suma, no promedia. I2 ÷ I1 (clic en "Me sumo") es el paso del medio | Definición del 27/10, **reemplaza a la v0** (entradas ÷ conversaciones). I3 sale de las fechas de las listas de miembros (sin contar la lista de partida); si una lista no trae fecha, se usa el día de la carga |
+| Conversaciones de Meta | Suma de las conversaciones iniciadas | Dato de contexto, no es el KPI principal |
 | Horas de carga manual | Minutos registrados a mano | Necesita 5 días hábiles de registro para ser línea de base |
 | TRG por grupo | Miembros que siguen ÷ (siguen + bajas) | **Definición propuesta, por confirmar** |
 | CPMR y K-Factor | — | Sin fuente: faltan los pulsos de retención y el enlace único por miembro |
@@ -62,3 +64,4 @@ Revisión de cada métrica que muestra el CRM: qué dice la fórmula, de dónde 
 1. **TRG:** confirmar la definición (propuesta: miembros que siguen ÷ siguen + bajas).
 2. **Fecha de las bajas:** si se quiere la fecha real de salida, hay que pedirla en la carga o cargar la lista cada vez que se detecta una salida.
 3. **Entradas que no vienen de la pauta:** para que la tasa de triaje no se distorsione, definir cómo separar entradas orgánicas de las pagas.
+4. **Documento de líneas de base:** la v0 define el triaje como entradas ÷ conversaciones. Hay que sacar una v1 con la definición nueva (I3 ÷ I1) y el KPI principal, y pedir la aprobación del manager.

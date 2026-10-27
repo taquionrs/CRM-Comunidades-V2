@@ -2179,24 +2179,27 @@ function renderObjetivos(d, comunidadesRango, registros, desde, hasta){
   const tarjetas = kpiGrid([
     [pctTxt(st.pct), `Ingresos sin toque humano (${fmtInt(st.automaticas)} de ${fmtInt(st.personas)} personas)`, false,
       'Personas cuyo primer evento llegó solo por el webhook, sin recuperarlo a mano, sobre las personas cuyo primer contacto cae en el período. Línea de base v0 (corte 10/10): 69,9 % en todo el período y 100 % desde el 08/10, cuando el flow quedó estable. Es una cota superior: no mide correcciones manuales de estado ni la carga de MI y MF.'],
-    [pctTxt(tot.tasa_ingresos), 'Tasa de triaje: ingresos al grupo ÷ conversaciones (meta: más de 50 %)', false,
-      'Chat iniciado → miembro, como lo define la carta: personas que aparecen como ingresos en las listas cargadas de los grupos (sin contar la lista de partida) ÷ conversaciones iniciadas en Meta, con los totales de las comunidades y nunca promediando tasas. Abajo están las tres versiones: entradas al flow, clics en "Me sumo" e ingresos al grupo.'],
+    [fmtInt(tot.entradas), 'Entradas al flow de ManyChat (KPI principal)', false,
+      'Personas que mandaron la frase de la campaña de WhatsApp y entraron al flow, contadas por su primer contacto en el período. Es el KPI principal: las campañas son de WhatsApp y el disparador es una frase armada, así que la entrada al flow es el primer paso medible de cada persona. Incluye pruebas del equipo y personas que no llegaron por la pauta.'],
+    [pctTxt(tot.tasa_triaje), 'Tasa de triaje: ingresos al grupo ÷ entradas al flow (meta: más de 50 %)', false,
+      'De cada 100 personas que entran al flow, cuántas están en el grupo: personas que aparecen como ingresos en las listas cargadas de los grupos (sin contar la lista de partida) ÷ entradas al flow, con los totales de las comunidades y nunca promediando tasas. Abajo está el paso intermedio: quienes tocaron "Me sumo".'],
     [h.texto, `Carga manual registrada (${h.dias} de ${DIAS_LINEA_BASE} días)`, false,
       `Tiempo de trabajo manual que registraste en este período. La línea de base de "horas de carga manual eliminadas" necesita ${DIAS_LINEA_BASE} días hábiles de registro antes de cualquier mejora.${h.completa ? ' Ya tenés los días necesarios.' : ' Faltan ' + h.faltan + ' días.'}`],
   ]);
 
   const fila = (c, esTotal) => `<tr${esTotal ? ' class="totales"' : ''}><td>${esTotal ? '<b>Total del cliente</b>' : esc(c.nombre)}</td>
-      <td class="num">${fmtInt(c.conversaciones)}</td><td class="num">${fmtInt(c.entradas)}</td><td class="num">${fmtInt(c.clics_me_sumo)}</td><td class="num">${fmtInt(c.ingresos_grupo)}</td>
-      <td class="num">${pctTxt(c.tasa_entradas)}</td><td class="num">${pctTxt(c.tasa_clics)}</td><td class="num"><b>${pctTxt(c.tasa_ingresos)}</b>${c.tasa_ingresos != null && c.tasa_ingresos > 50 ? ' ✓' : ''}</td></tr>`;
-  const triaje = `<div class="card"><h3>Tasa de triaje por comunidad</h3>
-    <div class="sub">Conversaciones iniciadas en Meta (denominador) y tres formas de contar a quien avanzó. <b>I3, ingresos al grupo</b>, es la definición de la carta; I1 e I2 son cotas superiores (entrar al flow o tocar el botón no es estar en el grupo). El total suma numeradores y denominadores: no promedia las tasas de las comunidades.</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th><th class="num">Conversaciones (Meta)</th><th class="num">I1 · Entradas al flow</th><th class="num">I2 · Clics en "Me sumo"</th><th class="num">I3 · Ingresos al grupo</th><th class="num">I1 ÷ conv.</th><th class="num">I2 ÷ conv.</th><th class="num">I3 ÷ conv.</th></tr></thead>
+      <td class="num"><b>${fmtInt(c.entradas)}</b></td><td class="num">${fmtInt(c.clics_me_sumo)}</td><td class="num">${fmtInt(c.ingresos_grupo)}</td>
+      <td class="num">${pctTxt(c.tasa_clics)}</td><td class="num"><b>${pctTxt(c.tasa_triaje)}</b>${c.tasa_triaje != null && c.tasa_triaje > 50 ? ' ✓' : ''}</td>
+      <td class="num">${fmtInt(c.conversaciones)}</td><td class="num">${pctTxt(c.entradas_por_conversacion)}</td></tr>`;
+  const triaje = `<div class="card"><h3>Entradas al flow y tasa de triaje por comunidad</h3>
+    <div class="sub">Las campañas son de WhatsApp y el disparador es una frase armada: lo que se mide es la <b>entrada al flow</b> (I1). La <b>tasa de triaje</b> es I3 ÷ I1: de cada 100 personas que entran, cuántas están en el grupo. I2 (clic en "Me sumo") es el paso del medio. Las conversaciones de Meta son un dato de contexto, no el KPI: sirven para ver cuántas se convierten en entradas. El total suma numeradores y denominadores: no promedia las tasas.</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Comunidad</th><th class="num">I1 · Entradas al flow</th><th class="num">I2 · Clics en "Me sumo"</th><th class="num">I3 · Ingresos al grupo</th><th class="num">I2 ÷ I1</th><th class="num">Tasa de triaje (I3 ÷ I1)</th><th class="num">Conversaciones (Meta, contexto)</th><th class="num">Entradas ÷ conversaciones</th></tr></thead>
     <tbody>${(tr.comunidades || []).map(c => fila(c, false)).join('') || '<tr class="empty-row"><td colspan="8">Sin comunidades.</td></tr>'}${fila(tot, true)}</tbody></table></div>
-    <div class="sub" style="margin-top:8px">I3 sale de las fechas de las listas de miembros que se cargan a mano. Si una lista no trae fecha de ingreso, se usa el día de la carga. Entradas y clics pueden incluir personas que no llegaron por la pauta.</div></div>`;
+    <div class="sub" style="margin-top:8px">I3 sale de las fechas de las listas de miembros que se cargan a mano. Si una lista no trae fecha de ingreso, se usa el día de la carga. Las entradas y los clics pueden incluir personas que no llegaron por la pauta. "Entradas ÷ conversaciones" puede pasar de 100 %: muestra cuánto del tráfico del flow no viene de las conversaciones de Meta.</div></div>`;
 
   const motor = `<div class="card"><h3>Los cuatro números del motor</h3>
     <div class="tbl-wrap"><table><thead><tr><th>Número</th><th>Valor hoy</th><th>Estado</th></tr></thead><tbody>
-      <tr><td><b>Tasa de triaje</b> (meta &gt; 50 %)</td><td>${pctTxt(tot.tasa_ingresos)} <span class="sub" style="margin:0">(I3)</span></td><td>Se mide por comunidad, abajo. Depende de cargar las listas de miembros.</td></tr>
+      <tr><td><b>Tasa de triaje</b> (meta &gt; 50 %)</td><td>${pctTxt(tot.tasa_triaje)} <span class="sub" style="margin:0">(I3 ÷ I1)</span></td><td>Se mide por comunidad, abajo. Depende de cargar las listas de miembros.</td></tr>
       <tr><td><b>CPME</b> (costo por miembro efectivo)</td><td>${cpme == null ? '—' : fmtMoney(cpme)}</td><td>Se mide: inversión ÷ (MF − MI). Cuenta el crecimiento desde la lista de partida (14/10).</td></tr>
       <tr><td><b>CPMR</b> (costo por miembro que se queda)</td><td>—</td><td>Sin fuente: necesita los pulsos de retención de ManyChat (a los 7 y 30 días).</td></tr>
       <tr><td><b>TRG por grupo</b> <span class="hint" title="Definición propuesta a confirmar: miembros que siguen ÷ (miembros que siguen + bajas), por grupo, nunca promediado.">ⓘ</span></td>
