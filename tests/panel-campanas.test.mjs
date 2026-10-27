@@ -9,7 +9,7 @@ const ini = html.indexOf("/* CAMPANAS:INICIO */");
 const fin = html.indexOf("/* CAMPANAS:FIN */");
 assert.ok(ini >= 0 && fin > ini, "no se encontró el bloque CAMPANAS en public/index.html");
 const api = new Function(html.slice(ini, fin) +
-  "\nreturn { estadoCampana, agruparCampanas, resumenCampanas, filtrarCampanas, valorDestinoCampana, interpretarDestinoCampana };")();
+  "\nreturn { estadoCampana, agruparCampanas, resumenCampanas, filtrarCampanas, valorDestinoCampana, interpretarDestinoCampana, claveTexto, claveCliente, perteneceAlCliente, filasDelCliente, esComunidadGeneral };")();
 
 const fila = (campana, adset, gasto, reglaId = null, cuenta = null, comunidad = null, cliente = null) => ({
   campana, adset, gasto, conversaciones: 1, clics: 10, impresiones: 100, desde: "2026-10-01", hasta: "2026-10-10",
@@ -81,4 +81,44 @@ test("destino: el valor mostrado para cada fila es coherente con su estado", () 
   assert.equal(api.valorDestinoCampana(fila("N", "", 1)), "sin");
   assert.equal(api.valorDestinoCampana(fila("N", "", 1, "r", false, "c", "k")), "no");
   assert.equal(api.valorDestinoCampana(fila("N", "", 1, "r", true, "c-x", "k")), "c:c-x");
+});
+
+// ---- Campañas por cliente y campaña global
+const CORTADO = { id: "cli-cortado", nombre: "Cortado en Jarrito", slug: "cortado-en-jarrito" };
+const TUP = { id: "cli-tup", nombre: "Todo un País", slug: "todo-un-pais" };
+
+test("cliente: una campaña es de un cliente si lo nombra (sin importar mayúsculas, guiones bajos ni tildes)", () => {
+  assert.ok(api.perteneceAlCliente(fila("TQN_AON_META_CON_LEADS_MANUAL_CORTADO_EN_JARRITO_INSTAGRAM", "", 1), CORTADO));
+  assert.ok(api.perteneceAlCliente(fila("TQN_AON_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS", "", 1), TUP));
+  assert.ok(!api.perteneceAlCliente(fila("TQN_AON_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS", "", 1), CORTADO));
+  assert.ok(!api.perteneceAlCliente(fila("TQN_META_TRAFICO_REGISTROS_MANUAL_CAMPOS_BOCA", "", 1), CORTADO));
+  assert.ok(!api.perteneceAlCliente(fila("TQN_META_TRAFICO_REGISTROS_MANUAL_CAMPOS_BOCA", "", 1), TUP));
+});
+
+test("cliente: una campaña que no nombra al cliente pero ya tiene una regla suya se sigue mostrando", () => {
+  assert.ok(api.perteneceAlCliente(fila("CAMPAÑA_SIN_NOMBRE_DEL_CLIENTE", "", 1, "r", true, "c-1", "cli-cortado"), CORTADO));
+  assert.ok(!api.perteneceAlCliente(fila("CAMPAÑA_SIN_NOMBRE_DEL_CLIENTE", "", 1, "r", true, "c-1", "cli-tup"), CORTADO));
+});
+
+test("cliente: no confunde nombres parecidos y, sin cliente elegido, muestra todo", () => {
+  assert.ok(!api.perteneceAlCliente(fila("CAMPAÑA_CORTADO_EN_JARRITOS_EXTRA", "", 1), CORTADO));   // otra palabra: no es el mismo nombre
+  const filas = [fila("X_CORTADO_EN_JARRITO_Y", "", 1), fila("OTRA", "", 1)];
+  assert.equal(api.filasDelCliente(filas, CORTADO).length, 1);
+  assert.equal(api.filasDelCliente(filas, null).length, 2);
+  assert.deepEqual(api.filasDelCliente(undefined, CORTADO), []);
+});
+
+test("global: las comunidades '(general)' reciben las campañas globales", () => {
+  assert.ok(api.esComunidadGeneral("Cortado en Jarrito (general)"));
+  assert.ok(api.esComunidadGeneral("Todo un País (GENERAL)"));
+  assert.ok(!api.esComunidadGeneral("Palermo"));
+  assert.ok(!api.esComunidadGeneral("Servicio general de Palermo"));   // "general" sin paréntesis no cuenta
+});
+
+test("el modal arranca en el cliente elegido, ofrece 'Global' primero y las comunidades solo si el anuncio apunta a una", () => {
+  assert.match(html, /cliente = state\.clienteId \|\| ''/);
+  assert.match(html, /Global · ' \+ c\.nombre \+ ' \(todas las comunidades\)/);
+  assert.match(html, /Solo si apunta a una comunidad ·/);
+  assert.match(html, /filasDelCliente\(filas, clienteElegido\)/);
+  assert.match(html, /<b>Campaña global<\/b>: en las campañas de WhatsApp el prospecto elige su comunidad/);
 });
