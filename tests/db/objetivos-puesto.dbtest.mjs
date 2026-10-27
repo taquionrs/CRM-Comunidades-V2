@@ -112,6 +112,20 @@ test("chequeos de integridad: marcan lo que no cierra y dejan en verde lo que s�
   assert.match(c.mf_vs_listas.detalle, /Palermo \(MF 4 contra 3/);
 });
 
+test("las campañas globales (sin comunidad) cuentan en las conversaciones del total y en el chequeo del desglose", async () => {
+  await db.exec(`insert into ${S}.meta_ads_metrica_global (cliente_id, fecha, inversion, conversaciones_meta) values ('${CLI}', '2026-10-15', 400, 10)`);
+  try {
+    const { triaje, chequeos } = await obj(sesion("mkt"));
+    assert.equal(triaje.total.conversaciones, 29);                        // 19 de las comunidades + 10 globales
+    assert.equal(triaje.total.entradas_por_conversacion, 13.8);           // 4 ÷ 29
+    assert.equal(triaje.comunidades.find((c) => c.nombre === "Palermo").conversaciones, 15);   // las comunidades no cambian
+    const c = chequeos.find((x) => x.id === "desglose_vs_tabla");
+    assert.match(c.detalle, /700/);                                       // faltan 300 de Boedo + 400 globales sin detalle
+  } finally {
+    await db.exec(`delete from ${S}.meta_ads_metrica_global where cliente_id = '${CLI}'`);
+  }
+});
+
 test("solo Marketing: General y la clave pública no pueden pedir los objetivos; la clave de servicio sí", async () => {
   await assert.rejects(obj(sesion("general")), /Necesitás el rol Marketing/);
   await assert.rejects(obj({ rol: "anon" }), /permission denied/);

@@ -9,7 +9,7 @@ const ini = html.indexOf("/* CAMPANAS:INICIO */");
 const fin = html.indexOf("/* CAMPANAS:FIN */");
 assert.ok(ini >= 0 && fin > ini, "no se encontró el bloque CAMPANAS en public/index.html");
 const api = new Function(html.slice(ini, fin) +
-  "\nreturn { estadoCampana, agruparCampanas, resumenCampanas, filtrarCampanas, valorDestinoCampana, interpretarDestinoCampana };")();
+  "\nreturn { estadoCampana, agruparCampanas, resumenCampanas, filtrarCampanas, valorDestinoCampana, interpretarDestinoCampana, claveTexto, claveCliente, perteneceAlCliente, filasDelCliente };")();
 
 const fila = (campana, adset, gasto, reglaId = null, cuenta = null, comunidad = null, cliente = null) => ({
   campana, adset, gasto, conversaciones: 1, clics: 10, impresiones: 100, desde: "2026-10-01", hasta: "2026-10-10",
@@ -81,4 +81,55 @@ test("destino: el valor mostrado para cada fila es coherente con su estado", () 
   assert.equal(api.valorDestinoCampana(fila("N", "", 1)), "sin");
   assert.equal(api.valorDestinoCampana(fila("N", "", 1, "r", false, "c", "k")), "no");
   assert.equal(api.valorDestinoCampana(fila("N", "", 1, "r", true, "c-x", "k")), "c:c-x");
+});
+
+// ---- Campañas por cliente y campaña global
+const CORTADO = { id: "cli-cortado", nombre: "Cortado en Jarrito", slug: "cortado-en-jarrito" };
+const TUP = { id: "cli-tup", nombre: "Todo un País", slug: "todo-un-pais" };
+
+test("cliente: una campaña es de un cliente si lo nombra (sin importar mayúsculas, guiones bajos ni tildes)", () => {
+  assert.ok(api.perteneceAlCliente(fila("TQN_AON_META_CON_LEADS_MANUAL_CORTADO_EN_JARRITO_INSTAGRAM", "", 1), CORTADO));
+  assert.ok(api.perteneceAlCliente(fila("TQN_AON_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS", "", 1), TUP));
+  assert.ok(!api.perteneceAlCliente(fila("TQN_AON_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS", "", 1), CORTADO));
+  assert.ok(!api.perteneceAlCliente(fila("TQN_META_TRAFICO_REGISTROS_MANUAL_CAMPOS_BOCA", "", 1), CORTADO));
+  assert.ok(!api.perteneceAlCliente(fila("TQN_META_TRAFICO_REGISTROS_MANUAL_CAMPOS_BOCA", "", 1), TUP));
+});
+
+test("cliente: una campaña que no nombra al cliente pero ya tiene una regla suya se sigue mostrando", () => {
+  assert.ok(api.perteneceAlCliente(fila("CAMPAÑA_SIN_NOMBRE_DEL_CLIENTE", "", 1, "r", true, "c-1", "cli-cortado"), CORTADO));
+  assert.ok(!api.perteneceAlCliente(fila("CAMPAÑA_SIN_NOMBRE_DEL_CLIENTE", "", 1, "r", true, "c-1", "cli-tup"), CORTADO));
+});
+
+test("cliente: no confunde nombres parecidos y, sin cliente elegido, muestra todo", () => {
+  assert.ok(!api.perteneceAlCliente(fila("CAMPAÑA_CORTADO_EN_JARRITOS_EXTRA", "", 1), CORTADO));   // otra palabra: no es el mismo nombre
+  const filas = [fila("X_CORTADO_EN_JARRITO_Y", "", 1), fila("OTRA", "", 1)];
+  assert.equal(api.filasDelCliente(filas, CORTADO).length, 1);
+  assert.equal(api.filasDelCliente(filas, null).length, 2);
+  assert.deepEqual(api.filasDelCliente(undefined, CORTADO), []);
+});
+
+test("el modal arranca en el cliente elegido, ofrece solo sus comunidades y avisa que (general) es una comunidad real", () => {
+  assert.match(html, /cliente = state\.clienteId \|\| ''/);
+  assert.match(html, /filasDelCliente\(filas, clienteElegido\)/);
+  assert.match(html, /<b>No las asignes a "\(general\)"<\/b>: esa es una comunidad real/);
+  assert.doesNotMatch(html, /Global · '/);   // la (general) NO es un destino "global": es el grupo y el bot de cada cliente
+  assert.doesNotMatch(html, /esComunidadGeneral/);
+});
+
+// ---- Campañas globales del cliente (db/034)
+test("destino global: una regla que cuenta sin comunidad es 'Global · cliente' y se traduce a la acción cuenta_global", () => {
+  const global = fila("CAMP_G", "", 10, "r9", true, null, "cli-cortado");
+  assert.equal(api.valorDestinoCampana(global), "g:cli-cortado");
+  assert.deepEqual(api.interpretarDestinoCampana("g:cli-cortado"), { accion: "cuenta_global", comunidad: null, cliente: "cli-cortado" });
+  assert.equal(api.interpretarDestinoCampana("g:"), null);
+  // lo de siempre no cambia
+  assert.equal(api.valorDestinoCampana(fila("CAMP_C", "", 10, "r8", true, "c-boedo", "cli-1")), "c:c-boedo");
+  assert.deepEqual(api.interpretarDestinoCampana("c:c-boedo"), { accion: "cuenta", comunidad: "c-boedo" });
+});
+
+test("el modal ofrece 'Global · cliente (sin comunidad)' y manda el cliente al guardar; nunca apunta a '(general)'", () => {
+  assert.match(html, /Global · \$\{esc\(c\.nombre\)\} \(sin comunidad\)/);
+  assert.match(html, /Solo si apunta a una comunidad ·/);
+  assert.match(html, /p_cliente: accion\.cliente \|\| null/);
+  assert.match(html, /<b>No las asignes a "\(general\)"<\/b>/);
 });

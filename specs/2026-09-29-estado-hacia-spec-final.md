@@ -811,6 +811,25 @@ Al probar "Traer de Meta ahora" con el tramo 14/08 al 12/09, Windsor devolvió 3
 - No hay cambios de base. Pruebas: 3 nuevas (118 en total).
 - **Pendiente de definir:** el "doble CPA" (Meta y efectivo).
 
+## 4 tricies sexdecies. PR #61 — Campañas por cliente (2026-10-27)
+
+- **Pedido:** en la sección Campañas aparecían las campañas de todas las cuentas de Windsor (de todos los clientes de Taquion) y, al elegir un cliente, pedía una comunidad aunque la campaña sea global: en las campañas de WhatsApp el prospecto elige su comunidad dentro del flow.
+- **Por cliente:** el modal abre en el cliente elegido arriba y muestra solo sus campañas: las que nombran al cliente (por el nombre o el slug, sin importar mayúsculas, tildes ni guiones bajos) y las que ya tienen una regla suya. Las de otros clientes quedan ocultas y se avisa cuántas; "Todos los clientes" las muestra. Con un cliente elegido, el selector de destino ofrece solo sus destinos.
+- **Corrección (27/10):** una primera versión de esta PR ofrecía "Global" apuntando a la comunidad "(general)". Estaba mal: **"(general)" es una comunidad real** (el grupo y el bot que dispara los triggers de WhatsApp, con su pestaña `Cortado-General`, sus miembros y sus bajas; ya constaba en la PR #40). Mezclarle gasto contamina sus métricas. Se sacó.
+- **Qué queda:** solo el filtro por cliente y los destinos del cliente elegido; un aviso dice que las campañas globales todavía no tienen destino propio y que no se asignen a "(general)".
+- **Pendiente (próxima PR):** destino "global del cliente" sin comunidad (gasto a nivel cliente, fila propia en Control_Comunidades, incluido en los totales y en el desglose). Necesita migración.
+- Pruebas: 4 nuevas (122 en total). Sin migración ni ensayo.
+
+## 4 tricies septemdecies. PR #62 — Campañas globales del cliente: el gasto a nivel cliente, no en una comunidad (2026-10-27)
+
+- **Pedido y decisiones del usuario (27/10):** las campañas de WhatsApp son globales, el prospecto elige su comunidad dentro del flow; la fila de campañas globales en Control_Comunidades "no sirve tanto pero no se oculta ni se borra"; **sin reparto** del gasto entre comunidades. Qué campañas de Cortado son globales (la de leads de Instagram y la de tráfico a WhatsApp, que hoy tiene conjuntos por barrio) lo quiere chequear el usuario antes de asignarlas.
+- **Base (`db/034_campanas_globales.sql`, requiere 032):** una regla de campaña puede no tener comunidad (campaña global del cliente). `meta_ads_metrica_global` guarda el gasto por cliente y día; `ads_campana_dia` admite filas sin comunidad (el desglose las llama "Campañas globales (sin comunidad)"); `_windsor_aplicar` las escribe y las limpia igual que lo demás; `guardar_regla_campana` suma la acción `cuenta_global` (cambia la firma: se reemplaza la anterior); `metricas_globales_cliente` devuelve lo global de un período (Marketing ve la inversión; General solo los conteos). Lo ya asignado a comunidades no cambia.
+- **Panel:** en Campañas, cada cliente ofrece **"Global · cliente (sin comunidad)"** primero y las comunidades aparte ("solo si apunta a una comunidad"). Control_Comunidades suma la fila "Campañas globales (sin comunidad)" al final, que cuenta en "Total del cliente"; Overview incluye ese gasto en sus KPIs (CPMI global y CPME) pero no en la tabla de comunidades. Con una comunidad elegida la fila no aparece.
+- **Por qué no la "(general)":** es una comunidad real (el grupo y el bot que dispara los triggers); recibir gasto que no es suyo contaminaba su costo por miembro y su crecimiento.
+- **Límite:** el costo por entrada y por clic de cada comunidad no incluye el gasto global (no se reparte); el del total del cliente sí.
+- **Pestaña Objetivos (PR #60):** suma el gasto y las conversaciones globales en el chequeo "desglose vs tabla", en el total de conversaciones del triaje y en el CPME (resuelto al fusionar esa PR con master).
+- Pruebas: 8 de base nuevas (`tests/db/campanas-globales.dbtest.mjs`, 26 de base) y 6 de panel (128 de Node). Ensayo: `exportes/ensayo-034.sql` (corrido también contra el Postgres local). **Pendiente:** ensayar y aplicar db/034.
+
 ## 4 tricies quindecies. PR #60 — Sección "Objetivos", chequeos de integridad y auditoría de métricas (2026-10-26)
 
 - **Pedido:** una sección con los objetivos del puesto (los tres números del mes 3 y los del motor) y asegurar que las métricas de todo el CRM sean correctas.

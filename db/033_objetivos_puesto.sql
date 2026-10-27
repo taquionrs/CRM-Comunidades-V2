@@ -12,6 +12,7 @@
 --                        La fila "total" suma numeradores y denominadores; no promedia tasas.
 --     horas_manuales     minutos registrados, días con registro y detalle por tarea en el período.
 --     chequeos           controles de integridad que dicen si las métricas se pueden creer (ok / aviso, con el detalle).
+-- El gasto y las conversaciones de las campañas globales del cliente (db/034, sin comunidad) cuentan en el total del cliente y en el chequeo del desglose.
 -- Las fechas se toman en hora de Buenos Aires. Solo devuelve conteos y nombres de comunidades: nunca teléfonos. Solo Marketing. Aplicar después de 032.
 
 create table if not exists crm_comunidades_v2.registro_horas_manuales (
@@ -92,6 +93,9 @@ begin
            coalesce(conv.n, 0) as conversaciones, coalesce(i1.n, 0) as entradas, coalesce(i2.n, 0) as clics_me_sumo, coalesce(i3.n, 0) as ingresos_grupo
       from com left join conv on conv.comunidad_id = com.id left join i1 on i1.comunidad_id = com.id
                left join i2 on i2.comunidad_id = com.id left join i3 on i3.comunidad_id = com.id
+  ), glob as (
+    select coalesce(sum(g.conversaciones_meta), 0)::bigint as n from crm_comunidades_v2.meta_ads_metrica_global g
+     where g.cliente_id = p_cliente and (p_desde is null or g.fecha >= p_desde) and (p_hasta is null or g.fecha <= p_hasta)
   )
   select jsonb_build_object(
     'comunidades', coalesce((select jsonb_agg(jsonb_build_object(
@@ -101,11 +105,11 @@ begin
         'tasa_clics', round(f.clics_me_sumo::numeric / nullif(f.entradas, 0) * 100, 1),
         'entradas_por_conversacion', round(f.entradas::numeric / nullif(f.conversaciones, 0) * 100, 1)) order by f.nombre) from fila f), '[]'::jsonb),
     'total', (select jsonb_build_object(
-        'conversaciones', coalesce(sum(f.conversaciones), 0), 'entradas', coalesce(sum(f.entradas), 0),
+        'conversaciones', coalesce(sum(f.conversaciones), 0) + (select n from glob), 'entradas', coalesce(sum(f.entradas), 0),
         'clics_me_sumo', coalesce(sum(f.clics_me_sumo), 0), 'ingresos_grupo', coalesce(sum(f.ingresos_grupo), 0),
         'tasa_triaje', round(sum(f.ingresos_grupo)::numeric / nullif(sum(f.entradas), 0) * 100, 1),
         'tasa_clics', round(sum(f.clics_me_sumo)::numeric / nullif(sum(f.entradas), 0) * 100, 1),
-        'entradas_por_conversacion', round(sum(f.entradas)::numeric / nullif(sum(f.conversaciones), 0) * 100, 1)) from fila f))
+        'entradas_por_conversacion', round(sum(f.entradas)::numeric / nullif(sum(f.conversaciones) + (select n from glob), 0) * 100, 1)) from fila f))
     into v_triaje;
 
   -- 3) Horas manuales registradas en el período
@@ -124,6 +128,8 @@ begin
    where d.cliente_id = p_cliente and (p_desde is null or d.fecha >= p_desde) and (p_hasta is null or d.fecha <= p_hasta);
   select coalesce(sum(m.inversion), 0) into v_tabla from crm_comunidades_v2.meta_ads_metrica m
    where m.cliente_id = p_cliente and (p_desde is null or m.fecha >= p_desde) and (p_hasta is null or m.fecha <= p_hasta);
+  v_tabla := v_tabla + coalesce((select sum(g.inversion) from crm_comunidades_v2.meta_ads_metrica_global g
+                                  where g.cliente_id = p_cliente and (p_desde is null or g.fecha >= p_desde) and (p_hasta is null or g.fecha <= p_hasta)), 0);
   v_dif := round(v_tabla - v_det, 2);
   v_chequeos := v_chequeos || jsonb_build_object('id', 'desglose_vs_tabla', 'titulo', 'El desglose por campaña suma lo mismo que la tabla',
     'estado', case when abs(v_dif) <= 1 then 'ok' else 'aviso' end,

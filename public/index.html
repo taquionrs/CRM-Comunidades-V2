@@ -393,6 +393,31 @@ async function loadComunidadesRango(desde, hasta, canal){
   if (error) throw error;
   return conIdComunidad(data);
 }
+/* GLOBAL-CLIENTE:INICIO */
+// Lo que gastan y logran las campañas globales del cliente (db/034): no pertenecen a ninguna comunidad, así que van en una fila propia y en los totales.
+// La fila lleva las mismas columnas que una comunidad; las de miembros y entradas quedan vacías. Sin datos no hay fila.
+const NOMBRE_FILA_GLOBAL = 'Campañas globales (sin comunidad)';
+function filaGlobalCliente(g){
+  if (!g) return null;
+  const n = (v) => Number(v) || 0;
+  const inv = g.inversion == null ? null : n(g.inversion), conv = n(g.conversaciones_meta), imp = n(g.impresiones), clics = n(g.clics), leads = n(g.leads_meta);
+  if (!(n(g.inversion) || conv || imp || clics || leads)) return null;
+  const razon = (a, b) => (a != null && b > 0 ? Math.round(a / b * 100) / 100 : null);
+  return {
+    id: '__global__', comunidad_id: null, es_global: true, nombre: NOMBRE_FILA_GLOBAL,
+    miembros_iniciales: 0, miembros_finales: 0, crecimiento_neto: 0, bajas_estimadas: null, tasa_fuga_pct: null,
+    inversion: inv, conversaciones_meta: conv, impresiones: imp, clics, leads_meta: leads,
+    ctr_anuncio_pct: imp > 0 ? Math.round(clics / imp * 10000) / 100 : null,
+    clics_unicos: 0, triggers_entregados: 0, clics_me_sumo: 0,
+    cpl: razon(inv, conv), costo_por_lead: razon(inv, leads), cpcu: null, cpmn: null, costo_por_clic_me_sumo: null,
+  };
+}
+/* GLOBAL-CLIENTE:FIN */
+async function loadGlobalCliente(desde, hasta){
+  const { data, error } = await supabase.rpc('metricas_globales_cliente', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta });
+  if (error) { console.warn('metricas_globales_cliente:', error.message); return null; }   // si falla, las comunidades se ven igual
+  return filaGlobalCliente(Array.isArray(data) ? data[0] : data);
+}
 // Desglose por campaña de lo que cuenta (db/029). Si falla, devuelve null: la tabla de arriba se muestra igual.
 async function loadDesgloseCampanas(desde, hasta, comunidad){
   const { data, error } = await supabase.rpc('desglose_campanas', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_comunidad: comunidad });
@@ -876,7 +901,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
 }
 
 function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null){
-  const opciones = `<option value="">Todas las comunidades</option>` + comunidades.map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
+  const opciones = `<option value="">Todas las comunidades</option>` + comunidades.filter(c => !c.es_global).map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
   const cfg = state.columnasControl || (state.columnasControl = leerColumnasControl());
@@ -1094,13 +1119,26 @@ function filtrarCampanas(grupos, { estado = 'todos', cliente = '', texto = '' } 
   return grupos.map((g) => ({ ...g, filas: g.filas.filter((f) => cumple(f, g)) })).filter((g) => g.filas.length);
 }
 // Valor del selector de destino de una fila o grupo, y su traducción a la acción que se guarda.
-const valorDestinoCampana = (f) => { const e = estadoCampana(f); return e === 'cuenta' ? 'c:' + f.comunidad_id : e === 'no_cuenta' ? 'no' : 'sin'; };
+// Una regla "cuenta" sin comunidad es una campaña global del cliente (db/034): el prospecto elige su comunidad dentro del flow.
+const valorDestinoCampana = (f) => { const e = estadoCampana(f); return e === 'cuenta' ? (f.comunidad_id ? 'c:' + f.comunidad_id : 'g:' + f.cliente_id) : e === 'no_cuenta' ? 'no' : 'sin'; };
 function interpretarDestinoCampana(valor){
   if (valor === 'sin') return { accion: 'sin_asignar', comunidad: null };
   if (valor === 'no') return { accion: 'no_cuenta', comunidad: null };
   if (typeof valor === 'string' && valor.startsWith('c:') && valor.length > 2) return { accion: 'cuenta', comunidad: valor.slice(2) };
+  if (typeof valor === 'string' && valor.startsWith('g:') && valor.length > 2) return { accion: 'cuenta_global', comunidad: null, cliente: valor.slice(2) };
   return null;
 }
+// A qué cliente pertenece una campaña: por el nombre (la campaña nombra al cliente, por ejemplo ..._CORTADO_EN_JARRITO_...) o porque ya tiene una regla de ese cliente.
+// Todas las campañas de Windsor llegan juntas (la cuenta publicitaria es una sola y tiene campañas de muchos clientes de Taquion): acá se separan.
+const claveTexto = (s) => ' ' + String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+const claveCliente = (c) => claveTexto((c && (c.slug || c.nombre)) || '');
+function perteneceAlCliente(f, cliente){
+  if (!cliente) return true;
+  if (f.cliente_id && f.cliente_id === cliente.id) return true;
+  const k = claveCliente(cliente);
+  return k.trim().length > 0 && claveTexto(f.campana).includes(k);
+}
+const filasDelCliente = (filas, cliente) => (cliente ? (filas || []).filter((f) => perteneceAlCliente(f, cliente)) : (filas || []));
 /* CAMPANAS:FIN */
 
 /* ================= Botón "Campañas": qué campañas de Meta cuentan (pantalla completa) ================= */
@@ -1128,7 +1166,7 @@ async function abrirCampanas(){
   cont.id = 'modalCampanas'; cont.className = 'modal-full';
   cont.setAttribute('role', 'dialog'); cont.setAttribute('aria-modal', 'true'); cont.setAttribute('aria-label', 'Campañas de Meta');
   cont.innerHTML = `<div class="modal-full-head">
-      <div><h2>Campañas de Meta</h2><div class="sub">Elegí cuáles cuentan para las métricas. Una campaña nueva aparece "Sin asignar" y no suma hasta que la clasifiques.</div></div>
+      <div><h2>Campañas de Meta</h2><div class="sub">Elegí cuáles cuentan para las métricas, por cliente. Una campaña nueva aparece "Sin asignar" y no suma hasta que la clasifiques.</div></div>
       <div class="modal-full-acciones">
         <label style="display:flex; flex-direction:column; gap:2px; font-size:10.5px; color:var(--text-faint)">Cambios hechos por<input type="text" id="cpPor" value="${esc(por)}" placeholder="Tu nombre" style="width:150px; background:var(--panel-raised); border:1px solid var(--border-strong); color:#fff; font-size:12px; padding:6px 8px; border-radius:var(--r-in)"></label>
         <button type="button" class="btn" id="cpRecalcular" title="Recalcula ya las métricas de Meta con lo que elegiste (si no, se recalcula sola con la actualización diaria)">Recalcular ahora</button>
@@ -1141,14 +1179,17 @@ async function abrirCampanas(){
   document.body.style.overflow = 'hidden';
 
   const el = (id) => document.getElementById(id);
-  let filas = [], dias = 90, estado = 'todos', cliente = '', texto = '', aviso = '', hayCambios = false;
+  let filas = [], dias = 90, estado = 'todos', cliente = state.clienteId || '', texto = '', aviso = '', hayCambios = false;
   const abiertas = new Set();
   const nombrePor = () => { const v = el('cpPor') ? el('cpPor').value.trim() : ''; try { localStorage.setItem(CLAVE_NOMBRE_CAMPANAS, v); } catch (_) { /* sin almacenamiento */ } return v; };
 
   const opcionesDestino = (valorActual, conMixto) => {
-    const grupos = clientes.map((c) => {
+    // Con un cliente elegido solo se ofrecen sus destinos (más el que ya tenga la fila, para no esconderlo).
+    const visibles = clientes.filter((c) => !cliente || cliente === 'sin' || c.id === cliente || valorActual === 'g:' + c.id || comunidades.some((x) => x.cliente_id === c.id && valorActual === 'c:' + x.id));
+    const grupos = visibles.map((c) => {
       const cs = comunidades.filter((x) => x.cliente_id === c.id);
-      return cs.length ? `<optgroup label="Cuenta en · ${esc(c.nombre)}">${cs.map((x) => `<option value="c:${x.id}" ${valorActual === 'c:' + x.id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</optgroup>` : '';
+      return `<optgroup label="Campaña global · ${esc(c.nombre)}"><option value="g:${c.id}" ${valorActual === 'g:' + c.id ? 'selected' : ''}>Global · ${esc(c.nombre)} (sin comunidad)</option></optgroup>` +
+        (cs.length ? `<optgroup label="Solo si apunta a una comunidad · ${esc(c.nombre)}">${cs.map((x) => `<option value="c:${x.id}" ${valorActual === 'c:' + x.id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</optgroup>` : '');
     }).join('');
     return (conMixto ? '<option value="" selected disabled>Mixto: ver conjuntos</option>' : '') +
       `<option value="sin" ${valorActual === 'sin' ? 'selected' : ''}>Sin asignar (no suma)</option>` +
@@ -1158,8 +1199,11 @@ async function abrirCampanas(){
 
   const pintar = () => {
     const cuerpo = el('cuerpoCampanas'); if (!cuerpo) return;
-    const res = resumenCampanas(filas);
-    const grupos = filtrarCampanas(agruparCampanas(filas), { estado, cliente, texto });
+    const clienteElegido = clientes.find((c) => c.id === cliente) || null;
+    const filasAlcance = filasDelCliente(filas, clienteElegido);
+    const ocultas = filas.length - filasAlcance.length;
+    const res = resumenCampanas(filasAlcance);
+    const grupos = filtrarCampanas(agruparCampanas(filasAlcance), { estado, texto });
     const tarjeta = (t, x) => `<div class="kpi"><div class="v" style="font-size:16px">${fmtMoney(x.gasto)}</div><div class="l">${esc(t)}</div><div class="sub" style="margin-top:4px">${fmtInt(x.n)} conjuntos</div></div>`;
     const chips = [['todos', 'Todas'], ['cuenta', 'Cuentan'], ['no_cuenta', 'No cuentan'], ['sin_asignar', 'Sin asignar']].map(([k, t]) => {
       const n = k === 'todos' ? res.total.n : res[k].n;
@@ -1191,13 +1235,17 @@ async function abrirCampanas(){
       ${aviso ? `<div class="sub" style="color:${hayCambios ? 'var(--warn)' : '#5fd39a'}; margin-bottom:10px">${esc(aviso)}</div>` : ''}
       <div class="filters" style="align-items:flex-end; margin-bottom:10px">
         <label>Período<select id="cpDias">${[30, 60, 90, 180, 365].map((d) => `<option value="${d}" ${d === dias ? 'selected' : ''}>Últimos ${d} días</option>`).join('')}</select></label>
-        <label>Cliente<select id="cpCliente"><option value="">Todos</option><option value="sin" ${cliente === 'sin' ? 'selected' : ''}>Sin asignar</option>${clientes.map((c) => `<option value="${c.id}" ${cliente === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('')}</select></label>
+        <label>Cliente<select id="cpCliente"><option value="">Todos los clientes</option>${clientes.map((c) => `<option value="${c.id}" ${cliente === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('')}</select></label>
         <label>Buscar<input type="search" id="cpTexto" value="${esc(texto)}" placeholder="Campaña o conjunto" style="width:240px"></label>
       </div>
+      <div class="sub" style="margin:0 0 10px">${clienteElegido
+        ? `Se muestran las campañas de <b>${esc(clienteElegido.nombre)}</b>: las que nombran al cliente o ya tienen una regla suya.${ocultas ? ` Hay ${fmtInt(ocultas)} conjuntos de otros clientes de Taquion ocultos: elegí "Todos los clientes" para verlos.` : ''}`
+        : 'Se muestran las campañas de todos los clientes de la cuenta de Windsor, incluidas las que no son de ningún cliente del CRM.'}</div>
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px">${chips}</div>
       <div class="tbl-wrap"><table><thead><tr><th></th><th>Campaña / conjunto</th><th>Gasto</th><th>Conversaciones</th><th>Clics</th><th>Estado</th><th>Destino</th></tr></thead>
         <tbody>${filasHtml || '<tr class="empty-row"><td colspan="7">No hay campañas para este filtro.</td></tr>'}</tbody></table></div>
-      <div class="sub" style="margin-top:10px">Lo que no tiene regla (Sin asignar) no suma. "No cuenta" conserva la regla y su gasto se registra en Consultas. Cada cambio queda en el historial con tu nombre.</div>`;
+      <div class="sub" style="margin-top:10px">Lo que no tiene regla (Sin asignar) no suma. "No cuenta" conserva la regla y su gasto se registra en Consultas. Cada cambio queda en el historial con tu nombre.</div>
+      <div class="sub" style="margin-top:6px"><b>Campañas globales</b> (el prospecto elige su comunidad dentro del flow): asignalas a <b>Global · cliente</b>. Su gasto queda a nivel cliente, en la fila "Campañas globales (sin comunidad)" de Control_Comunidades, y cuenta en los totales, pero no se suma a ninguna comunidad. <b>No las asignes a "(general)"</b>: esa es una comunidad real (el grupo y el bot que dispara los triggers). "Solo si apunta a una comunidad" es para anuncios dirigidos a un barrio concreto.</div>`;
 
     cuerpo.querySelectorAll('[data-cp-estado]').forEach((b) => { b.onclick = () => { estado = b.dataset.cpEstado; pintar(); }; });
     cuerpo.querySelectorAll('[data-cp-abrir]').forEach((b) => { b.onclick = () => { const k = b.dataset.cpAbrir; if (abiertas.has(k)) abiertas.delete(k); else abiertas.add(k); pintar(); }; });
@@ -1220,7 +1268,7 @@ async function abrirCampanas(){
     if (!accion) return;
     sel.disabled = true;
     const { error } = await supabase.rpc('guardar_regla_campana', {
-      p_campana: sel.dataset.campana, p_adset: sel.dataset.adset || null, p_accion: accion.accion, p_comunidad: accion.comunidad, p_motivo: null, p_por: nombrePor() || null,
+      p_campana: sel.dataset.campana, p_adset: sel.dataset.adset || null, p_accion: accion.accion, p_comunidad: accion.comunidad, p_motivo: null, p_por: nombrePor() || null, p_cliente: accion.cliente || null,
     });
     if (error) { aviso = 'No se pudo guardar: ' + error.message; hayCambios = false; await cargar(); return; }
     hayCambios = true; aviso = 'Guardado. Tocá "Recalcular ahora" para ver el efecto en las métricas, o se aplica solo con la actualización diaria.';
@@ -2366,27 +2414,37 @@ async function renderAll(){
   try {
     if (state.tab === 'overview') {
       // Overview usa las mismas filas que Control_Comunidades para el período elegido; los totales se calculan con ellas.
-      const todas = await loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos');
+      const [todas, global] = await Promise.all([
+        loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos'),
+        loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
+      ]);
       const visibles = state.filtroComunidad ? todas.filter(c => c.id === state.filtroComunidad) : todas;
-      content.innerHTML = renderOverview(kpisDesdeComunidades(visibles), visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' });
+      // Los KPIs incluyen el gasto de las campañas globales (es del cliente); la tabla de comunidades no tiene esa fila.
+      const paraKpis = global && !state.filtroComunidad ? [...visibles, global] : visibles;
+      content.innerHTML = renderOverview(kpisDesdeComunidades(paraKpis), visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' });
       wireFiltrosPeriodo();
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
-      const [comunidades, desglose] = await Promise.all([
+      const [comunidadesRango, desglose, global] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
+        loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
       ]);
+      // La fila de campañas globales va al final y suma en el total del cliente; con una comunidad elegida no aparece (no es de esa comunidad).
+      const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
       content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose);
       wireControl();
 
     } else if (state.tab === 'objetivos') {
-      const [datos, rango, registros] = await Promise.all([
+      const [datos, rango, registros, global] = await Promise.all([
         loadObjetivos(state.fechaDesde, state.fechaHasta),
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos').catch(() => []),
         loadRegistroHoras(),
+        loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
       ]);
-      content.innerHTML = renderObjetivos(datos, rango, registros, state.fechaDesde || '', state.fechaHasta || '');
+      // El CPME es del cliente: incluye el gasto de las campañas globales (sin comunidad).
+      content.innerHTML = renderObjetivos(datos, global ? [...rango, global] : rango, registros, state.fechaDesde || '', state.fechaHasta || '');
       wireObjetivos();
 
     } else if (state.tab === 'atribucion') {

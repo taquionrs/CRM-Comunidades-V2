@@ -51,6 +51,10 @@ test("resumen de chequeos", () => {
   assert.deepEqual(resumenChequeos(undefined), { total: 0, avisos: 0, ok: 0 });
 });
 
+test("el CPME de Objetivos incluye el gasto de las campañas globales", () => {
+  assert.match(html, /renderObjetivos\(datos, global \? \[\.\.\.rango, global\] : rango,/);
+});
+
 test("la pestaña Objetivos existe, es solo para Marketing y pide los datos a la base", () => {
   assert.match(html, /\{ key:'objetivos', label:'Objetivos' \}/);
   assert.match(html, /const TABS_SOLO_MARKETING = \['objetivos', /);
