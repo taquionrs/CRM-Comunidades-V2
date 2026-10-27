@@ -10,7 +10,7 @@ const ini = html.indexOf("/* ROLES:INICIO */");
 const fin = html.indexOf("/* ROLES:FIN */");
 assert.ok(ini >= 0 && fin > ini, "no se encontró el bloque ROLES en public/index.html");
 const TABS = [
-  { key: "overview" }, { key: "control" }, { key: "atribucion" }, { key: "base_limpia" }, { key: "dedup" }, { key: "crudo" },
+  { key: "overview" }, { key: "control" }, { key: "objetivos" }, { key: "atribucion" }, { key: "base_limpia" }, { key: "dedup" }, { key: "crudo" },
 ];
 const api = (acceso) => new Function("TABS", "state", html.slice(ini, fin) + "\nreturn { tabsVisibles, esMarketing, esAdmin };")(TABS, { acceso });
 const claves = (a) => api(a).tabsVisibles().map((t) => t.key);
@@ -20,7 +20,7 @@ test("General ve Overview, Control_Comunidades y Atribución; nada con datos per
 });
 
 test("Marketing ve todas las pestañas; Usuarios solo si es administrador", () => {
-  assert.deepEqual(claves({ rol: "marketing", admin: false }), ["overview", "control", "atribucion", "base_limpia", "dedup", "crudo"]);
+  assert.deepEqual(claves({ rol: "marketing", admin: false }), ["overview", "control", "objetivos", "atribucion", "base_limpia", "dedup", "crudo"]);
   assert.deepEqual(claves({ rol: "marketing", admin: true }).at(-1), "usuarios");
   assert.deepEqual(claves({ rol: "general", admin: true }), ["overview", "control", "atribucion", "usuarios"]);
 });

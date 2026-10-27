@@ -27,6 +27,7 @@ Organizada según [Diátaxis](https://diataxis.fr/): agrupa por lo que necesitá
 - [Esquema de base de datos](reference/esquema-de-base-de-datos.md)
 - [Contrato JSON de panel-data](reference/contrato-json-panel-data.md)
 - [Variables de entorno](reference/variables-de-entorno.md)
+- [Auditoría de métricas (26/10/2026)](reference/auditoria-de-metricas.md): qué dice cada métrica, de dónde sale y qué límite tiene
 
 ## Explicación
 
