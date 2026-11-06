@@ -416,6 +416,34 @@ async function loadGlobalCliente(desde, hasta){
   if (error) { console.warn('metricas_globales_cliente:', error.message); return null; }   // si falla, las comunidades se ven igual
   return filaGlobalCliente(Array.isArray(data) ? data[0] : data);
 }
+/* ENTRADAS-FLOW:INICIO */
+// Entradas al flow con las personas que le escribieron al número y todavía no eligieron comunidad (db/035). La fila de la base trae
+// clasificadas, sin_clasificar, total, tasa_clasificacion_pct y hay_registro. Sin ningún aviso registrado todavía (hay_registro = false) no
+// hay nada que mostrar: "100 % clasificadas" sería engañoso si ManyChat aún no avisa a los que no eligen. Devuelve null en ese caso.
+function entradasFlowDesdeFila(r){
+  if (!r || !r.hay_registro) return null;
+  const n = (v) => Number(v) || 0;
+  const clasificadas = n(r.clasificadas), sinClasificar = n(r.sin_clasificar), total = n(r.total) || clasificadas + sinClasificar;
+  return {
+    clasificadas, sin_clasificar: sinClasificar, total,
+    tasa_clasificacion_pct: total > 0 ? Math.round(clasificadas / total * 1000) / 10 : null,
+  };
+}
+/* ENTRADAS-FLOW:FIN */
+// Entradas totales al flow del período elegido. Si falla o la función todavía no existe (db/035), Overview se ve igual, sin esas tarjetas.
+async function loadEntradasFlow(desde, hasta, canal){
+  const { data, error } = await supabase.rpc('entradas_flow_cliente', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_canal: canal || 'todos' });
+  if (error) { console.warn('entradas_flow_cliente:', error.message); return null; }
+  return entradasFlowDesdeFila(Array.isArray(data) ? data[0] : data);
+}
+// Los avisos "sin clasificar" no tienen comunidad: con una comunidad elegida no se muestran. Solo Marketing los lee (llevan el teléfono).
+async function loadSinClasificar(f){
+  if ((f && f.comunidad) || !esMarketing()) return [];
+  const q = supabase.from('ingreso_sin_clasificar').select('*').eq('cliente_id', state.clienteId);
+  const { data, error } = await aplicarFiltrosDatos(q, f, 'recibido_en', null).order('recibido_en', { ascending:false }).limit(200);
+  if (error) return [];   // si la tabla todavía no existe (db/035), Data_Cruda sigue igual
+  return data || [];
+}
 // Desglose por campaña de lo que cuenta (db/029). Si falla, devuelve null: la tabla de arriba se muestra igual.
 async function loadDesgloseCampanas(desde, hasta, comunidad){
   const { data, error } = await supabase.rpc('desglose_campanas', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_comunidad: comunidad });
@@ -542,6 +570,9 @@ const AYUDAS_OVERVIEW = {
   conversaciones: 'Conversaciones iniciadas desde los anuncios de Meta: personas que tocaron el anuncio y escribieron por WhatsApp. Es el dato que informa Meta; no es lo mismo que entrar al flow.',
   cpmi: 'CPMI = costo por mensaje iniciado. Inversión ÷ conversaciones iniciadas en Meta: cuánto costó cada vez que alguien empezó una conversación.',
   entradas: 'Personas únicas que entraron al flow, contadas por su primer contacto, sumadas de todas las comunidades. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta.',
+  entradas_totales: 'Toda persona que entró al flow o le escribió al número: las que eligieron su comunidad (entradas únicas) más las que le escribieron y todavía no eligieron. Es el total de ingresantes de ManyChat.',
+  sin_clasificar: 'Personas que le escribieron al número con otro texto (por ejemplo "¡Hola! Quiero más información") y todavía no eligieron comunidad. Si después eligen, pasan a las entradas por comunidad y este número baja.',
+  tasa_clasificacion: 'Tasa de clasificación = entradas únicas ÷ entradas totales: de todas las personas que escribieron, cuántas llegaron a elegir su comunidad. Cuanto más alta, menos gente se pierde antes de entrar a un grupo.',
   miembros_efectivos: 'Personas que hoy están en los grupos: suma de los miembros finales (Mf) de todas las comunidades. Es una carga manual.',
   cpme: 'CPME = costo por miembro efectivo. Inversión ÷ (miembros finales − miembros iniciales): cuánto costó cada persona que sumó el grupo. Necesita Mi y Mf cargados.',
   fuga: 'Tasa de fuga = bajas ÷ (bajas + miembros finales): de todas las personas que estuvieron en el grupo, cuántas se fueron. Se calcula desde la segunda carga de la lista completa de cada comunidad, porque antes no hay con qué comparar.',
@@ -565,6 +596,13 @@ function renderOverview(kpis, comunidades, filtros = null){
     [fmtMoney(k.cpme_global), 'CPME global', true, AYUDAS_OVERVIEW.cpme],
     [fmtPct(k.tasa_fuga_global_pct), k.tasa_fuga_global_pct == null ? 'Tasa de fuga global (se calcula desde la segunda carga de la lista completa)' : 'Tasa de fuga global', false, AYUDAS_OVERVIEW.fuga],
   ].filter(([, , plata]) => esMarketing() || !plata));
+  // Entradas con las que le escribieron al número y no eligieron comunidad (db/035). Solo cuando hay datos y sin comunidad elegida.
+  const ef = k.entradas_flow;
+  const entradasFlowCards = ef ? kpiGrid([
+    [fmtInt(ef.total), 'Entradas totales al flow (con y sin comunidad)', false, AYUDAS_OVERVIEW.entradas_totales],
+    [fmtInt(ef.sin_clasificar), 'Escribieron y no eligieron comunidad', false, AYUDAS_OVERVIEW.sin_clasificar],
+    [fmtPct(ef.tasa_clasificacion_pct), 'Tasa de clasificación', false, AYUDAS_OVERVIEW.tasa_clasificacion],
+  ]) : '';
 
   const totalMf = comunidades.reduce((s,c) => s + (c.miembros_finales||0), 0);
   const rows = comunidades.length
@@ -588,7 +626,7 @@ function renderOverview(kpis, comunidades, filtros = null){
         </tr>`
     : `<tr class="empty-row"><td colspan="6">Sin comunidades cargadas todavía — agregá una abajo.</td></tr>`;
 
-  return (filtros ? renderFiltrosPeriodo(filtros.todas, filtros.comunidad, filtros.desde, filtros.hasta) : '') + kpiCards +
+  return (filtros ? renderFiltrosPeriodo(filtros.todas, filtros.comunidad, filtros.desde, filtros.hasta) : '') + kpiCards + entradasFlowCards +
     `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow se calculan solas (First-Contact Attribution) y las bajas salen de las cargas de la lista completa de cada grupo (desde la segunda carga).</div>
       <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th>${thAyuda('Miembros iniciales (Mi)', AYUDAS_OVERVIEW.mi)}${thAyuda('Entradas al flow (CRM)', AYUDAS_OVERVIEW.entradas_tabla)}${thAyuda('Bajas (B)', AYUDAS_OVERVIEW.bajas)}${thAyuda('Miembros efectivos finales (Mf)', AYUDAS_OVERVIEW.mf)}${thAyuda('% Participación', AYUDAS_OVERVIEW.participacion)}</tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
@@ -1953,25 +1991,42 @@ function filaRechazada(i){
     <td style="font-size:12px; max-width:300px"><div style="color:var(--danger)">${esc(i.motivo)}</div>${p ? `<details style="margin-top:6px"><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details>` : ''}</td>
   </tr>`;
 }
-const FILTROS_CRUDO = [['todos','Todos'], ['aceptados','Aceptados'], ['rechazados','Rechazados'], ['planilla_error','Error en planilla']];
-function renderCrudo(eventos, intentos, comunidadesById, filtro, envios = new Map()){
+// Aviso de "le escribió al número y todavía no eligió comunidad" (db/035). No es un contacto: no tiene comunidad.
+function filaSinClasificar(s){
+  const p = s.payload || null;
+  return `<tr>
+    <td class="mono" style="white-space:nowrap">${fmtFecha(s.recibido_en)}<div class="sub" style="margin:0">${haceCuanto(s.recibido_en)}</div></td>
+    <td><span class="pill badge-warn" title="Le escribió al número pero no disparó ningún flow de comunidad. No cuenta como entrada a una comunidad hasta que elija una.">Sin clasificar</span></td>
+    <td>—</td>
+    <td class="mono">${canalPill(s.telefono_id)} ${esc(idVisible(s.telefono_id, p))}</td>
+    <td>${esc(nombreDePayload(p) || '—')}</td>
+    <td><span class="pill badge-warn">Sin comunidad</span></td>
+    <td class="codeblock">${esc(s.mensaje ?? '—')}</td>
+    <td>${p ? `<details><summary class="pill" style="cursor:pointer">Ver JSON</summary><div class="codeblock" style="margin-top:6px">${esc(JSON.stringify(p, null, 2))}</div></details>` : ''}</td>
+  </tr>`;
+}
+const FILTROS_CRUDO = [['todos','Todos'], ['aceptados','Aceptados'], ['rechazados','Rechazados'], ['sin_clasificar','Sin clasificar'], ['planilla_error','Error en planilla']];
+function renderCrudo(eventos, intentos, comunidadesById, filtro, envios = new Map(), sinClasificar = []){
   const conErrorPlanilla = eventos.filter(e => (envios.get(e.id) || {}).estado === 'error');
   const eventosVisibles = filtro === 'planilla_error' ? conErrorPlanilla : eventos;
   const items = [
-    ...(filtro !== 'rechazados' ? eventosVisibles.map(e => ({ t: new Date(e.recibido_en).getTime(), html: filaAceptada(e, comunidadesById, envios) })) : []),
-    ...(filtro !== 'aceptados' && filtro !== 'planilla_error' ? intentos.map(i => ({ t: new Date(i.creado_en).getTime(), html: filaRechazada(i) })) : []),
+    ...(filtro !== 'rechazados' && filtro !== 'sin_clasificar' ? eventosVisibles.map(e => ({ t: new Date(e.recibido_en).getTime(), html: filaAceptada(e, comunidadesById, envios) })) : []),
+    ...(filtro !== 'aceptados' && filtro !== 'planilla_error' && filtro !== 'sin_clasificar' ? intentos.map(i => ({ t: new Date(i.creado_en).getTime(), html: filaRechazada(i) })) : []),
+    ...(filtro === 'todos' || filtro === 'sin_clasificar' ? sinClasificar.map(s => ({ t: new Date(s.recibido_en).getTime(), html: filaSinClasificar(s) })) : []),
   ].sort((a, b) => b.t - a.t);
   const vacio = filtro === 'rechazados'
     ? 'Sin intentos rechazados — es lo esperado si todo funciona.'
+    : filtro === 'sin_clasificar'
+    ? 'Sin avisos de personas que escribieron y no eligieron comunidad (o la respuesta por defecto de ManyChat todavía no avisa — ver docs/how-to/configurar-webhook-manychat.md).'
     : filtro === 'planilla_error'
     ? 'Sin errores al escribir en la planilla — es lo esperado si todo funciona.'
     : 'Sin eventos todavía — necesita el webhook de ManyChat configurado (ver docs/how-to/configurar-webhook-manychat.md).';
   const rows = items.length ? items.map(x => x.html).join('') : `<tr class="empty-row"><td colspan="8">${vacio}</td></tr>`;
-  const conteo = { todos: eventos.length + intentos.length, aceptados: eventos.length, rechazados: intentos.length, planilla_error: conErrorPlanilla.length };
+  const conteo = { todos: eventos.length + intentos.length + sinClasificar.length, aceptados: eventos.length, rechazados: intentos.length, sin_clasificar: sinClasificar.length, planilla_error: conErrorPlanilla.length };
   const chips = FILTROS_CRUDO.map(([k, label]) =>
     `<button class="btn${filtro === k ? ' btn-on' : ''}" type="button" data-crudo-filtro="${k}">${label} (${conteo[k]})</button>`).join('');
   return `<div class="card"><h3>Registro de eventos recibidos de ManyChat</h3>
-    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido (con el período y la comunidad de los filtros de arriba, si hay alguno). Con una comunidad elegida, los rechazados se filtran por el id de comunidad que mandó el flow. Nunca se edita ni se borra una fila acá. Los rechazos guardan el contenido completo del POST (botón Ver JSON). Los que no identifican a un cliente (encabezados ausentes o cliente inexistente) se guardan aparte y no se ven acá.</div>
+    <div class="sub">Cada POST que un flow envía al CRM aparece acá: <b>Aceptado</b> si se guardó, <b>Rechazado</b> (con el código y el motivo) si el CRM lo rechazó. Incluye duplicados y reintentos — acá se ven los últimos 200 de cada tipo; el botón <b>Exportar CSV</b> descarga toda la historia del cliente elegido (con el período y la comunidad de los filtros de arriba, si hay alguno). Con una comunidad elegida, los rechazados se filtran por el id de comunidad que mandó el flow. Nunca se edita ni se borra una fila acá. Los <b>Sin clasificar</b> son personas que le escribieron al número y no eligieron comunidad: no son entradas a ninguna comunidad (no cambian la atribución) y quedan acá para poder contactarlas. Los rechazos guardan el contenido completo del POST (botón Ver JSON). Los que no identifican a un cliente (encabezados ausentes o cliente inexistente) se guardan aparte y no se ven acá.</div>
     ${notaNombre}
     <div style="display:flex; gap:8px; margin:12px 0 0; flex-wrap:wrap">${chips}</div>
     <div style="display:flex; gap:14px; align-items:center; margin:10px 0 12px; flex-wrap:wrap">
@@ -2269,14 +2324,15 @@ async function renderAll(){
   try {
     if (state.tab === 'overview') {
       // Overview usa las mismas filas que Control_Comunidades para el período elegido; los totales se calculan con ellas.
-      const [todas, global] = await Promise.all([
+      const [todas, global, entradasFlow] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos'),
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
+        state.filtroComunidad ? Promise.resolve(null) : loadEntradasFlow(state.fechaDesde || null, state.fechaHasta || null, 'todos'),
       ]);
       const visibles = state.filtroComunidad ? todas.filter(c => c.id === state.filtroComunidad) : todas;
       // Los KPIs incluyen el gasto de las campañas globales (es del cliente); la tabla de comunidades no tiene esa fila.
       const paraKpis = global && !state.filtroComunidad ? [...visibles, global] : visibles;
-      content.innerHTML = renderOverview(kpisDesdeComunidades(paraKpis), visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' });
+      content.innerHTML = renderOverview({ ...kpisDesdeComunidades(paraKpis), entradas_flow: entradasFlow }, visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' });
       wireFiltrosPeriodo();
       wireComunidadesForm();
 
@@ -2309,9 +2365,9 @@ async function renderAll(){
     } else if (state.tab === 'crudo') {
       state.repetidos = state.repetidos || { tipo: 'todos' };
       const fd = filtroDatos();
-      const [eventos, intentos, comunidades, envios, repetidos] = await Promise.all([loadEventoCrudo(fd), loadIntentosRechazados(fd), loadComunidades(), loadEnviosPlanilla(), loadContactosRepetidos(fd)]);
+      const [eventos, intentos, comunidades, envios, repetidos, sinClasificar] = await Promise.all([loadEventoCrudo(fd), loadIntentosRechazados(fd), loadComunidades(), loadEnviosPlanilla(), loadContactosRepetidos(fd), loadSinClasificar(fd)]);
       const byId = new Map(comunidades.map(c => [c.id, c.nombre]));
-      content.innerHTML = renderFiltrosDatos(fd, comunidades, 'Contactos repetidos, el registro y el CSV usan estos filtros.') + renderRepetidos(repetidos, comunidades, state.repetidos) + renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios);
+      content.innerHTML = renderFiltrosDatos(fd, comunidades, 'Contactos repetidos, el registro y el CSV usan estos filtros.') + renderRepetidos(repetidos, comunidades, state.repetidos) + renderCrudo(eventos, intentos, byId, state.crudoFiltro || 'todos', envios, sinClasificar);
       wireFiltrosDatos();
       wireRepetidos(repetidos);
       wireCrudo();

@@ -20,7 +20,7 @@ test("cada sigla de Overview tiene su explicación", () => {
 });
 
 test("ninguna explicación queda vacía y las claves son las que usa Overview", () => {
-  const claves = ["inversion", "conversaciones", "cpmi", "entradas", "miembros_efectivos", "cpme", "fuga", "mi", "entradas_tabla", "bajas", "mf", "participacion"];
+  const claves = ["inversion", "conversaciones", "cpmi", "entradas", "entradas_totales", "sin_clasificar", "tasa_clasificacion", "miembros_efectivos", "cpme", "fuga", "mi", "entradas_tabla", "bajas", "mf", "participacion"];
   assert.deepEqual(Object.keys(AYUDAS_OVERVIEW).sort(), claves.sort());
   for (const c of claves) assert.ok(AYUDAS_OVERVIEW[c].length > 20, c);
 });
@@ -28,7 +28,7 @@ test("ninguna explicación queda vacía y las claves son las que usa Overview", 
 test("Overview muestra el botón i en las tarjetas y en los encabezados de la tabla", () => {
   assert.match(html, /items\.map\(\(\[v,l,,info\]\)/);
   assert.match(html, /class="info-btn" data-info="\$\{esc\(info\)\}"/);
-  for (const k of ["inversion", "conversaciones", "cpmi", "entradas", "miembros_efectivos", "cpme", "fuga"]) assert.ok(html.includes(`AYUDAS_OVERVIEW.${k}]`), "tarjeta " + k);
+  for (const k of ["inversion", "conversaciones", "cpmi", "entradas", "miembros_efectivos", "cpme", "fuga", "entradas_totales", "sin_clasificar", "tasa_clasificacion"]) assert.ok(html.includes(`AYUDAS_OVERVIEW.${k}]`), "tarjeta " + k);
   for (const k of ["mi", "entradas_tabla", "bajas", "mf", "participacion"]) assert.ok(html.includes(`AYUDAS_OVERVIEW.${k})`), "encabezado " + k);
 });
 
