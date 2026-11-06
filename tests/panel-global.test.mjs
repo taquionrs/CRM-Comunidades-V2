@@ -42,5 +42,6 @@ test("Control_Comunidades suma la fila global al total pero no la ofrece como co
 
 test("Overview incluye el gasto global en los KPIs y no en la tabla de comunidades", () => {
   assert.match(html, /const paraKpis = global && !state\.filtroComunidad \? \[\.\.\.visibles, global\] : visibles;/);
-  assert.match(html, /renderOverview\(kpisDesdeComunidades\(paraKpis\), visibles,/);
+  // Además de los KPIs de siempre, Overview recibe las entradas totales al flow (db/035).
+  assert.match(html, /renderOverview\(\{ \.\.\.kpisDesdeComunidades\(paraKpis\), entradas_flow: entradasFlow \}, visibles,/);
 });

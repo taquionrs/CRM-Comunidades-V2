@@ -96,6 +96,24 @@ El botón "Me sumo" es un botón de enlace. En el editor de ManyChat tiene, a la
 
 Qué hace el webhook: lo guarda en `clic_me_sumo` (db/013), **no** en `evento_crudo`: no es un contacto nuevo y no toca entradas ni atribución. El panel cuenta **personas distintas** que tocaron el botón y calcula "Clic en Me sumo / entradas" y "Costo por clic en Me sumo".
 
-**Regla nueva del webhook:** si el campo `evento` trae cualquier valor que no sea `trigger` o `clic_me_sumo`, el aviso se **rechaza** (aparece en Data_Cruda → Rechazados) en lugar de contarse como una entrada. Así un nombre mal escrito no duplica a las personas.
+**Regla nueva del webhook:** si el campo `evento` trae cualquier valor que no sea `trigger`, `clic_me_sumo` o `sin_clasificar`, el aviso se **rechaza** (aparece en Data_Cruda → Rechazados) en lugar de contarse como una entrada. Así un nombre mal escrito no duplica a las personas.
 
 Se repite en **cada flow y cada canal** (WhatsApp e Instagram de Cortado y de Todo un País). Para simular avisos sin ManyChat: `node scripts/simular-trigger.mjs --evento clic_me_sumo --comunidad Palermo`.
+
+## Aviso de "sin clasificar" (la persona escribió y no eligió comunidad)
+
+Quien le escribe al número con un texto que no dispara ningún flow de comunidad (por ejemplo "¡Hola! Quiero más información", el saludo por defecto de Meta) queda en ManyChat como contacto suscrito, pero hasta ahora no dejaba ningún rastro en el CRM. Con este aviso queda registrada.
+
+**Dónde se arma:** en ManyChat → Automatización → **Respuesta por defecto** de WhatsApp (se activa solo cuando el mensaje no coincide con ningún otro disparador, así no pisa a los flows de comunidad). No se tocan las condiciones de los flows existentes. Pasos de la respuesta por defecto, en este orden:
+
+1. **Etiqueta** `Entró sin frase` (sirve también para contarlos dentro de ManyChat).
+2. **Solicitud externa** con el aviso (mismo método, URL y encabezados `x-cliente` y `x-webhook-secret` que los otros avisos):
+   `{"evento": "sin_clasificar", "contact": <pastilla Full Contact Data>}`
+   **No lleva `community_id`**: la persona todavía no eligió. Si se manda, el webhook lo ignora.
+3. El mensaje que le pide elegir su comunidad (lista o botones) y, al elegir, el pase al flow de comunidad que ya existe.
+
+**Qué hace el webhook:** lo guarda en `ingreso_sin_clasificar` (db/035), **no** en `evento_crudo`: no cambia las entradas por comunidad ni la atribución. Responde `{"ok": true, "evento": "sin_clasificar"}`. Guarda el último mensaje de la persona (`contact.last_input_text`) para saber qué escribió. Si después la persona elige comunidad, su entrada se atribuye a esa comunidad como siempre y deja de figurar como pendiente.
+
+**Dónde se ve:** en **Overview**, las tarjetas *Entradas totales al flow*, *Escribieron y no eligieron comunidad* y *Tasa de clasificación* (aparecen cuando llegó el primer aviso); en **Data_Cruda**, el filtro **Sin clasificar** (con el teléfono y el mensaje, para poder contactarlas; solo Marketing).
+
+**Cómo verificar:** con un número de prueba, escribí algo que no sea la frase de ninguna comunidad (por ejemplo "hola"). Tiene que aparecer en Data_Cruda → Sin clasificar y en Overview. Después elegí una comunidad: la persona pasa a las entradas de esa comunidad y el número de "sin clasificar" baja en uno.

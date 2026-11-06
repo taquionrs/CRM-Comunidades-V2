@@ -52,9 +52,14 @@
 // HTTP no cambia. Nunca se guarda el secreto: viaja en un header, no en el body. Hay topes de tamaño y de
 // cantidad (ver las constantes) para que el ruido de internet no llene la base.
 //
+// Avisos sin contacto (PR #64, db/035): "evento": "sin_clasificar" lo manda la respuesta por defecto de ManyChat cuando alguien le
+// escribe al número y no dispara ningún flow de comunidad. No lleva community_id; queda en ingreso_sin_clasificar.
+//
 // Deploy: `supabase functions deploy manychat-webhook`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Tipos de aviso (contacto, trigger, clic_me_sumo, sin_clasificar) y el texto del mensaje: lógica pura, probada desde Node.
+import { mensajeDeContacto, tipoDeAviso } from "./avisos.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -138,22 +143,6 @@ export function nombreDeContacto(contact: Record<string, unknown> | null): strin
   if (!nombre) return null;
   if (/^[\d\s+()-]+$/.test(nombre)) return null;
   return nombre;
-}
-
-// Tipo de aviso que manda el flow, según el campo "evento" del body:
-//   (sin evento)   contacto normal: el POST de entrada al flow (evento_crudo)
-//   "trigger"      se entregó el primer mensaje del flow (trigger_entregado, db/011)
-//   "clic_me_sumo" la persona tocó el botón "Me sumo" (clic_me_sumo, db/013)
-//   otro valor     "desconocido": se rechaza, para que un aviso nuevo mal escrito NO se cuente como entrada.
-export type TipoAviso = "contacto" | "trigger" | "clic_me_sumo" | "desconocido";
-export function tipoDeAviso(valor: unknown): TipoAviso {
-  if (valor === undefined || valor === null) return "contacto";
-  if (typeof valor !== "string") return "desconocido";
-  const v = valor.trim().toLowerCase();
-  if (v === "") return "contacto";
-  if (v === "trigger" || v === "trigger_entregado") return "trigger";
-  if (v === "clic_me_sumo" || v === "clic-me-sumo") return "clic_me_sumo";
-  return "desconocido";
 }
 
 // Primer campo personalizado "Localidad*" con valor (fallback si el flow no manda community_id).
@@ -286,7 +275,7 @@ Deno.serve(async (req) => {
   if (tipoAviso === "desconocido") {
     return await rechazar(
       400,
-      'El campo "evento" tiene un valor desconocido: usar "trigger", "clic_me_sumo" o no mandarlo',
+      'El campo "evento" tiene un valor desconocido: usar "trigger", "clic_me_sumo", "sin_clasificar" o no mandarlo',
       `Tipo de aviso desconocido: evento = ${JSON.stringify(body.evento)?.slice(0, 60)}`,
     );
   }
@@ -316,6 +305,18 @@ Deno.serve(async (req) => {
       `No llegó teléfono ni ig_id usable. Campos del contacto con valor: ${camposConValor || "ninguno"}`,
       { comunidad: communityId },
     );
+  }
+
+  // Aviso de "le escribió al número y todavía no eligió comunidad" (db/035): "evento": "sin_clasificar". Es el único aviso
+  // que NO lleva comunidad (justamente porque la persona todavía no la eligió): se guarda en ingreso_sin_clasificar y
+  // nunca en evento_crudo, así no toca clics únicos ni la atribución. Si manda community_id, se ignora.
+  if (tipoAviso === "sin_clasificar") {
+    const { error: errSin } = await admin
+      .schema("crm_comunidades_v2")
+      .from("ingreso_sin_clasificar")
+      .insert({ cliente_id: cliente.id, telefono_id: identificador, mensaje: mensajeDeContacto(contact), payload: body });
+    if (errSin) return await rechazar(500, errSin.message, `Error al guardar el aviso (sin_clasificar): ${errSin.message}`, { telefono: identificador });
+    return json({ ok: true, evento: "sin_clasificar", telefono_normalizado: identificador, canal });
   }
 
   if (!communityId) {
