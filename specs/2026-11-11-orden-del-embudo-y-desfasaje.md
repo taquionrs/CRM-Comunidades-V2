@@ -40,6 +40,8 @@ Hallazgos que motivan el diseño (02 al 10/11, Meta + Data_Cruda):
 
 En negrita, lo nuevo. Se retira "Entradas / conversaciones" (cobertura): el desfasaje es su complemento (100 % − cobertura).
 
+**La fuente de cada métrica se conserva** (pedido de Juan, 11/11): aunque el encabezado de grupo ahora es la etapa, cada columna muestra chica, arriba de su nombre, de dónde sale el dato (punto de color + nombre: Meta Ads, ManyChat, CRM, Meta Ads + CRM, WhatsApp & Salud o Financiera). Las columnas que ya existían mantienen la fuente de su grupo anterior; el botón "i" empieza con "Fuente: ..." y el panel "Columnas" muestra "etapa · fuente".
+
 ## Definiciones
 
 | Métrica | Fórmula | Reglas |

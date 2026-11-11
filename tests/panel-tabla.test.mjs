@@ -200,3 +200,32 @@ test("el panel guarda el orden en una clave nueva y le pasa a la tabla las perso
   assert.match(html, /loadEntradasFlow\(state\.fechaDesde \|\| null, state\.fechaHasta \|\| null, state\.canalControl\)/);
   assert.match(html, /state\.canalControl, desglose, entradasFlowControl\)/);
 });
+
+// ---- La fuente de cada métrica no se pierde al agrupar por etapa (PR #65)
+const { FUENTES_TABLA, htmlFuente, textoAyudaColumna } = new Function("esc", html.slice(ini, finCols) + "\nreturn { FUENTES_TABLA, htmlFuente, textoAyudaColumna };")(esc);
+
+test("cada columna declara su fuente y la fuente existe en la lista", () => {
+  for (const c of COLUMNAS_CONTROL) assert.ok(FUENTES_TABLA[c.fuente], `${c.id} sin fuente válida (${c.fuente})`);
+  for (const [nombre, f] of Object.entries(FUENTES_TABLA)) { assert.match(f.color, /^#[0-9A-Fa-f]{6}$/, nombre); assert.ok(f.detalle.length > 10, nombre); }
+});
+
+test("las columnas que ya existían conservan la fuente de su grupo anterior", () => {
+  const esperado = { inversion: "Meta Ads", conversaciones: "Meta Ads", cpl: "Meta Ads", leads: "Meta Ads", costo_lead: "Meta Ads", ctr: "Meta Ads",
+    trigger: "ManyChat", clics_me_sumo: "ManyChat", ctr_boton: "ManyChat", entradas: "CRM", tasa_me_sumo: "CRM",
+    mi: "WhatsApp & Salud", mf: "WhatsApp & Salud", crecimiento: "WhatsApp & Salud", bajas: "WhatsApp & Salud",
+    costo_entrada: "Financiera", costo_clic: "Financiera", cpmn: "Financiera", fuga: "Financiera" };
+  for (const [id, fuente] of Object.entries(esperado)) assert.equal(col(id).fuente, fuente, id);
+  assert.equal(col("desfasaje").fuente, "Meta Ads + CRM");
+  assert.equal(col("clics_enlace").fuente, "Meta Ads");
+});
+
+test("el encabezado muestra la fuente chica (punto de color + nombre) y la ayuda empieza diciendo de dónde sale", () => {
+  const h = htmlFuente(col("clics_me_sumo"));
+  assert.match(h, /class="th-fuente"/);
+  assert.match(h, /ManyChat/);
+  assert.match(h, /background:#FFB35C/);
+  assert.equal(htmlFuente({ fuente: "no existe" }), "");
+  assert.match(textoAyudaColumna(col("inversion")), /^Fuente: Meta Ads, vía Windsor/);
+  assert.match(textoAyudaColumna(col("inversion")), /Gasto de Meta Ads asignado/);
+  assert.match(html, /\$\{htmlFuente\(col\)\}<span class="th-txt">/);
+});

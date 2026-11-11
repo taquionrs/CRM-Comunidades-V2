@@ -72,7 +72,7 @@ test("el panel carga el desglose sin romper la tabla si falla, y lo dibuja debaj
 });
 
 test("CPL se renombró a CPMI (costo por mensaje iniciado) en la tabla, en Overview y en el desglose, sin cambiar el id de la columna", () => {
-  assert.match(html, /\{ id:'cpl', grupo:'Intención', etiqueta:'CPMI'/);
+  assert.match(html, /\{ id:'cpl', grupo:'Intención', fuente:'Meta Ads', etiqueta:'CPMI'/);
   assert.match(html, /'CPMI global'/);
   assert.doesNotMatch(html, /'CPL global'|etiqueta:'CPL'/);
   assert.match(html, />CPMI<\/th>/);

@@ -79,6 +79,8 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .tabla-metricas .th-gr-in{display:flex; align-items:center; gap:7px; padding:9px 12px; color:var(--gc); font-size:11.5px; font-weight:800; border-top:2px solid var(--gc); border-radius:6px 6px 0 0}
 .tabla-metricas .th-col{vertical-align:bottom; white-space:normal; min-width:104px; max-width:150px; padding:8px 10px 9px; font-size:11.5px; line-height:1.3; font-weight:700; color:var(--text-strong); background:color-mix(in srgb, var(--gc) 8%, var(--panel)); border-bottom:1px solid var(--border-strong); text-align:right}
 .tabla-metricas .th-txt{margin-right:4px}
+.tabla-metricas .th-fuente{display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-bottom:3px; font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-faint); white-space:nowrap}
+.tabla-metricas .th-fuente i{display:inline-block; width:6px; height:6px; border-radius:50%; flex:none}
 .tabla-metricas td.num{text-align:right; white-space:nowrap; background:color-mix(in srgb, var(--gc) 4%, transparent); font-variant-numeric:tabular-nums}
 .tabla-metricas .g-ini{border-left:1px solid color-mix(in srgb, var(--gc) 55%, transparent)}
 .tabla-metricas .th-com, .tabla-metricas .td-com{position:sticky; left:0; z-index:2; background:var(--panel); text-align:left; font-size:12px; font-weight:700; color:var(--text-strong); padding:10px 14px; border-bottom:1px solid var(--border); white-space:nowrap}
@@ -757,6 +759,15 @@ function tramosDeGrupos(columnas){
 const iniciosDeTramo = (columnas) => columnas.map((col, i) => i === 0 || columnas[i - 1].grupo !== col.grupo);
 /* TABLA-METRICAS:FIN */
 
+// De dónde sale cada métrica (el detalle que antes daba el encabezado de grupo). Se muestra chico arriba del nombre de cada columna.
+const FUENTES_TABLA = {
+  'Meta Ads':         { color: '#6E9BFF', detalle: 'Meta Ads, vía Windsor (un día de retraso)' },
+  'ManyChat':         { color: '#FFB35C', detalle: 'ManyChat, por los avisos del flow al CRM' },
+  'CRM':              { color: '#4FD39A', detalle: 'CRM: contactos que entran al flow (primer contacto)' },
+  'Meta Ads + CRM':   { color: '#8FD3C4', detalle: 'Cruce de Meta Ads con las entradas del CRM' },
+  'WhatsApp & Salud': { color: '#B79CFF', detalle: 'Listas de miembros del grupo de WhatsApp (carga manual)' },
+  'Financiera':       { color: '#F58FB8', detalle: 'Calculada: inversión de Meta ÷ resultado, o bajas ÷ miembros' },
+};
 const NA_TRIGGER = 'Todavía no llegó ningún aviso de inicio de flow en este período. Puede ser que nadie haya entrado al flow o que falte el paso "Solicitud externa" al empezar el flow en ManyChat (ver SOP-001). Para saberlo, entrá vos al flow y mirá si el contador sube.';
 const NA_CLIC = 'Todavía no llegó ningún aviso de clic en este período. Puede ser que nadie haya tocado "Me sumo" o que falte la acción de salida del botón en el flow de ManyChat. Para saberlo, tocá el botón vos y mirá si el contador sube.';
 const NO_MIEMBROS = 'Faltan los miembros iniciales y finales (MI y MF). Se cargan en la sección Overview, tabla "Comunidades".';
@@ -768,102 +779,112 @@ const NA_SIN_CLASIFICAR = 'Todavía no llegó ningún aviso de "sin clasificar" 
 // Una etapa de "Valor" (K-Factor, prescriptores) queda para más adelante.
 const COLUMNAS_CONTROL = [
   // ---- 1. Alcanzar: la pauta llega y se hace clic
-  { id:'inversion', grupo:'Alcanzar', etiqueta:'Inversión', plata:true,
+  { id:'inversion', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'Inversión', plata:true,
     info:'Gasto de Meta Ads asignado a la comunidad en el período. Viene de Windsor y se actualiza una vez al día, con un día de retraso. Se asigna por el nombre de la campaña y del conjunto de anuncios.',
     celda:(c)=>vMoneda(c.inversion), total:(t)=>vMoneda(t.inv) },
-  { id:'clics_enlace', grupo:'Alcanzar', etiqueta:'Clics en el enlace',
+  { id:'clics_enlace', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'Clics en el enlace',
     info:'Clics en el enlace del anuncio, como los informa Ads Manager: el toque que lleva a WhatsApp o al destino del anuncio (no suma reacciones ni otros toques). Viene de Windsor (campo actions_link_click) con un día de retraso. Los días anteriores a agregar el campo figuran "Sin fuente" hasta que se vuelvan a traer.',
     celda:(c)=>c.clics_enlace == null ? vacio('sin_fuente', NA_ENLACE) : vEntero(c.clics_enlace),
     total:(t)=>t.clicsEnlace == null ? vacio('sin_fuente', NA_ENLACE) : vEntero(t.clicsEnlace) },
-  { id:'ctr_enlace', grupo:'Alcanzar', etiqueta:'CTR del enlace',
+  { id:'ctr_enlace', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'CTR del enlace',
     info:'Clics en el enlace ÷ Impresiones: de cada 100 veces que se mostró el anuncio, cuántas se hizo clic en el enlace. Es el "CTR (porcentaje de clics en el enlace)" de Ads Manager. Se calcula solo con los días que ya traen los clics en el enlace.',
     celda:(c)=>c.clics_enlace == null ? vacio('sin_fuente', NA_ENLACE) : vPct(c.ctr_enlace_pct),
     total:(t)=>t.clicsEnlace == null ? vacio('sin_fuente', NA_ENLACE) : vPct(t.razon(t.clicsEnlace, t.impEnlace, 100)) },
-  { id:'cpc_enlace', grupo:'Alcanzar', etiqueta:'Costo por clic en el enlace', plata:true,
+  { id:'cpc_enlace', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'Costo por clic en el enlace', plata:true,
     info:'Inversión ÷ Clics en el enlace (Ads Manager lo llama "CPC (costo por clic en el enlace)"). Se calcula solo con los días que ya traen los clics en el enlace.',
     celda:(c)=>c.clics_enlace == null ? vacio('sin_fuente', NA_ENLACE) : vMoneda(c.cpc_enlace),
     total:(t)=>t.clicsEnlace == null ? vacio('sin_fuente', NA_ENLACE) : vMoneda(t.razon(t.invEnlace, t.clicsEnlace)) },
-  { id:'ctr', grupo:'Alcanzar', etiqueta:'CTR (todos los clics)',
+  { id:'ctr', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'CTR (todos los clics)',
     info:'Clics totales ÷ Impresiones. Cuenta todos los clics del anuncio, no solo los que van al enlace, por eso suele ser mayor que el CTR del enlace.',
     celda:(c)=>vPct(c.ctr_anuncio_pct), total:(t)=>vPct(t.razon(t.clics, t.impresiones, 100)) },
 
   // ---- 2. Intención: la persona abre el chat
-  { id:'conversaciones', grupo:'Intención', etiqueta:'Conversaciones',
+  { id:'conversaciones', grupo:'Intención', fuente:'Meta Ads', etiqueta:'Conversaciones',
     info:'Conversaciones de mensajería iniciadas desde los anuncios, con la ventana de atribución de 7 días de Meta. No es lo mismo que las entradas al flow.',
     celda:(c)=>vEntero(c.conversaciones_meta), total:(t)=>vEntero(t.conv) },
-  { id:'cpl', grupo:'Intención', etiqueta:'CPMI', plata:true,
+  { id:'cpl', grupo:'Intención', fuente:'Meta Ads', etiqueta:'CPMI', plata:true,
     info:'Costo por mensaje iniciado (antes "CPL"): Inversión ÷ Conversaciones iniciadas en Meta. Sin dato si no hubo conversaciones en el período.',
     celda:(c)=>vMoneda(c.cpl), total:(t)=>vMoneda(t.razon(t.inv, t.conv)) },
-  { id:'clic_conv', grupo:'Intención', etiqueta:'Clic → conversación',
+  { id:'clic_conv', grupo:'Intención', fuente:'Meta Ads', etiqueta:'Clic → conversación',
     info:'Conversaciones iniciadas ÷ Clics en el enlace: de cada 100 clics, cuántos terminan abriendo un chat. Un número bajo indica clics sin intención real (por ejemplo, ubicaciones o públicos que hacen clic sin querer). Solo se calcula cuando todos los días del período traen los clics en el enlace.',
     celda:(c)=>c.clics_enlace == null ? vacio('sin_fuente', NA_ENLACE) : (c.dias_sin_clics_enlace > 0 ? vacio('sin_dato', NA_ENLACE_PARCIAL) : vPct(c.clics_enlace > 0 ? c.conversaciones_meta / c.clics_enlace * 100 : null)),
     total:(t)=>t.clicsEnlace == null ? vacio('sin_fuente', NA_ENLACE) : (t.diasSinEnlace > 0 ? vacio('sin_dato', NA_ENLACE_PARCIAL) : vPct(t.razon(t.conv, t.clicsEnlace, 100))) },
-  { id:'leads', grupo:'Intención', etiqueta:'Clientes potenciales (Meta)',
+  { id:'leads', grupo:'Intención', fuente:'Meta Ads', etiqueta:'Clientes potenciales (Meta)',
     info:'Clientes potenciales que Meta informa para la campaña. Es otra métrica distinta de las conversaciones y no todas las campañas la informan.',
     celda:(c)=>vEntero(c.leads_meta), total:(t)=>vEntero(t.leads) },
-  { id:'costo_lead', grupo:'Intención', etiqueta:'Costo por cliente potencial', plata:true,
+  { id:'costo_lead', grupo:'Intención', fuente:'Meta Ads', etiqueta:'Costo por cliente potencial', plata:true,
     info:'Inversión ÷ Clientes potenciales de Meta. Sin dato si no hubo clientes potenciales.',
     celda:(c)=>vMoneda(c.costo_por_lead), total:(t)=>vMoneda(t.razon(t.inv, t.leads)) },
 
   // ---- 3. Control del tracking: cuánto de lo que Meta cuenta llega a verse en el CRM
-  { id:'entradas', porCanal:true, grupo:'Control del tracking', etiqueta:'Entradas al flow',
+  { id:'entradas', porCanal:true, grupo:'Control del tracking', fuente:'CRM', etiqueta:'Entradas al flow',
     info:'Personas nuevas que entraron al flow en el período, contadas por su primer contacto. Es el KPI principal de entrada. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta: no distingue el origen.',
     celda:(c)=>vEntero(c.clics_unicos), total:(t)=>vEntero(t.ent) },
-  { id:'desfasaje', grupo:'Control del tracking', etiqueta:'Desfasaje conversaciones → flow',
+  { id:'desfasaje', grupo:'Control del tracking', fuente:'Meta Ads + CRM', etiqueta:'Desfasaje conversaciones → flow',
     info:'(Conversaciones − Entradas al flow) ÷ Conversaciones: de cada 100 conversaciones que Meta cuenta, cuántas NO figuran como entrada al flow. 0 % = el CRM ve todo lo que Meta cuenta; cuanto más alto, más personas escriben y el CRM no las ve. Puede dar negativo cuando hay más entradas que conversaciones (entran personas que no vinieron de la pauta, o Meta atribuye con ventana de 7 días). Mide la cobertura del tracking: no es la tasa de triaje. El total no incluye las campañas globales.',
     celda:(c)=>c.es_global ? vacio('sin_dato', NA_GLOBAL) : vPct(c.conversaciones_meta > 0 ? (c.conversaciones_meta - c.clics_unicos) / c.conversaciones_meta * 100 : null),
     total:(t)=>vPct(t.razon(t.convCom - t.ent, t.convCom, 100)) },
-  { id:'chats_sin_registrar', grupo:'Control del tracking', etiqueta:'Chats sin registrar',
+  { id:'chats_sin_registrar', grupo:'Control del tracking', fuente:'Meta Ads + CRM', etiqueta:'Chats sin registrar',
     info:'Conversaciones de Meta − Entradas al flow, en cantidad de personas. Es el mismo desfasaje pero en números absolutos, para no leer mal un porcentaje con pocos casos. Negativo = hay más entradas que conversaciones. El total no incluye las campañas globales.',
     celda:(c)=>c.es_global ? vacio('sin_dato', NA_GLOBAL) : vEntero(c.conversaciones_meta - c.clics_unicos),
     total:(t)=>vEntero(t.convCom - t.ent) },
-  { id:'sin_clasificar', porCanal:true, grupo:'Control del tracking', etiqueta:'Sin clasificar',
+  { id:'sin_clasificar', porCanal:true, grupo:'Control del tracking', fuente:'ManyChat', etiqueta:'Sin clasificar',
     info:'Personas que le escribieron al número con otro texto (por ejemplo "¡Hola! Quiero más información") y todavía no eligieron comunidad. No pertenecen a ninguna comunidad: se cuentan en el total del cliente. Si después eligen, pasan a las entradas de su comunidad y este número baja.',
     celda:(c)=>vacio('sin_comunidad'), total:(t)=>t.sinClas == null ? vacio('sin_fuente', NA_SIN_CLASIFICAR) : vEntero(t.sinClas) },
-  { id:'costo_entrada', grupo:'Control del tracking', etiqueta:'Costo por entrada al flow', plata:true,
+  { id:'costo_entrada', grupo:'Control del tracking', fuente:'Financiera', etiqueta:'Costo por entrada al flow', plata:true,
     info:'Inversión ÷ Entradas al flow. La inversión es la de Meta; las entradas incluyen a quienes llegan sin pasar por la pauta.',
     celda:(c)=>vMoneda(c.cpcu), total:(t)=>vMoneda(t.razon(t.inv, t.ent)) },
 
   // ---- 4. Activación: la persona recibe el flow y toca "Me sumo"
-  { id:'trigger', porCanal:true, grupo:'Activación', etiqueta:'Trigger entregados',
+  { id:'trigger', porCanal:true, grupo:'Activación', fuente:'ManyChat', etiqueta:'Trigger entregados',
     info:'Personas distintas que recibieron el primer mensaje del flow. Lo informa ManyChat con un aviso al empezar el flow.',
     celda:(c)=>c.triggers_entregados > 0 ? vEntero(c.triggers_entregados) : vacio('sin_fuente', NA_TRIGGER), total:(t)=>t.trig > 0 ? vEntero(t.trig) : vacio('sin_fuente', NA_TRIGGER) },
-  { id:'clics_me_sumo', porCanal:true, grupo:'Activación', etiqueta:'Clics en "Me sumo"',
+  { id:'clics_me_sumo', porCanal:true, grupo:'Activación', fuente:'ManyChat', etiqueta:'Clics en "Me sumo"',
     info:'Personas distintas que tocaron el botón "Me sumo". Se registra desde la salida propia del botón en ManyChat, desde el 09/10.',
     celda:(c)=>c.clics_me_sumo > 0 ? vEntero(c.clics_me_sumo) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vEntero(t.clicsms) : vacio('sin_fuente', NA_CLIC) },
-  { id:'ctr_boton', porCanal:true, grupo:'Activación', etiqueta:'CTR del botón "Me sumo"',
+  { id:'ctr_boton', porCanal:true, grupo:'Activación', fuente:'ManyChat', etiqueta:'CTR del botón "Me sumo"',
     info:'Clics en "Me sumo" ÷ Trigger entregados: de cada 100 personas que recibieron el primer mensaje del flow, cuántas tocaron el botón. Los clics se registran desde el 09/10: si el período empieza antes, el valor sale más bajo que el real.',
     celda:(c)=>!(c.triggers_entregados > 0) ? vacio('sin_fuente', NA_TRIGGER) : !(c.clics_me_sumo > 0) ? vacio('sin_fuente', NA_CLIC) : vPct(c.clics_me_sumo / c.triggers_entregados * 100),
     total:(t)=>!(t.trig > 0) ? vacio('sin_fuente', NA_TRIGGER) : !(t.clicsms > 0) ? vacio('sin_fuente', NA_CLIC) : vPct(t.razon(t.clicsms, t.trig, 100)) },
-  { id:'tasa_me_sumo', porCanal:true, grupo:'Activación', etiqueta:'Clic en "Me sumo" / entradas',
+  { id:'tasa_me_sumo', porCanal:true, grupo:'Activación', fuente:'CRM', etiqueta:'Clic en "Me sumo" / entradas',
     info:'Clics en "Me sumo" ÷ Entradas al flow: de cada 100 personas que entran, cuántas tocan el botón.',
     celda:(c)=>c.clics_me_sumo > 0 ? vPct(c.clics_unicos > 0 ? c.clics_me_sumo / c.clics_unicos * 100 : null) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vPct(t.razon(t.clicsms, t.ent, 100)) : vacio('sin_fuente', NA_CLIC) },
-  { id:'costo_clic', grupo:'Activación', etiqueta:'Costo por clic en "Me sumo"', plata:true,
+  { id:'costo_clic', grupo:'Activación', fuente:'Financiera', etiqueta:'Costo por clic en "Me sumo"', plata:true,
     info:'Inversión ÷ Clics en "Me sumo".',
     celda:(c)=>c.clics_me_sumo > 0 ? vMoneda(c.costo_por_clic_me_sumo) : vacio('sin_fuente', NA_CLIC), total:(t)=>t.clicsms > 0 ? vMoneda(t.razon(t.inv, t.clicsms)) : vacio('sin_fuente', NA_CLIC) },
 
   // ---- 5. Ingreso: la persona entra al grupo
-  { id:'mi', grupo:'Ingreso', etiqueta:'Miembros iniciales (MI)',
+  { id:'mi', grupo:'Ingreso', fuente:'WhatsApp & Salud', etiqueta:'Miembros iniciales (MI)',
     info:'Miembros del grupo al empezar. Hoy es una carga manual en la sección Overview.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.miembros_iniciales), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mi) },
-  { id:'mf', grupo:'Ingreso', etiqueta:'Miembros finales (MF)',
+  { id:'mf', grupo:'Ingreso', fuente:'WhatsApp & Salud', etiqueta:'Miembros finales (MF)',
     info:'Miembros del grupo hoy. Carga manual en la sección Overview: sin MI y MF no se pueden calcular las métricas de crecimiento, bajas y fuga.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.miembros_finales), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mf) },
-  { id:'crecimiento', grupo:'Ingreso', etiqueta:'Crecimiento neto',
+  { id:'crecimiento', grupo:'Ingreso', fuente:'WhatsApp & Salud', etiqueta:'Crecimiento neto',
     info:'MF − MI: cuánto creció el grupo. Requiere MI y MF cargados.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.crecimiento_neto), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mf - t.mi) },
-  { id:'cpmn', grupo:'Ingreso', etiqueta:'Costo por miembro neto', plata:true,
+  { id:'cpmn', grupo:'Ingreso', fuente:'Financiera', etiqueta:'Costo por miembro neto', plata:true,
     info:'Inversión ÷ (MF − MI): cuánto costó cada miembro que sumó el grupo. Requiere MI y MF cargados.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(c.cpmn), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null) },
 
   // ---- 6. Permanencia: la persona se queda en el grupo
-  { id:'bajas', grupo:'Permanencia', etiqueta:'Bajas (salidas cargadas)',
+  { id:'bajas', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Bajas (salidas cargadas)',
     info:'Personas que quedaron como salidas al cargar la lista completa del grupo, con fecha de salida dentro del período. Se puede calcular desde la segunda carga de lista completa de la comunidad; antes no hay con qué comparar.',
     celda:(c)=>c.bajas_estimadas == null ? vacio('no_calc') : vEntero(c.bajas_estimadas), total:(t)=>t.bajasMed > 0 ? vEntero(t.bajas) : vacio('no_calc') },
-  { id:'fuga', grupo:'Permanencia', etiqueta:'Tasa de fuga',
+  { id:'fuga', grupo:'Permanencia', fuente:'Financiera', etiqueta:'Tasa de fuga',
     info:'Bajas ÷ (bajas + miembros finales): de todas las personas que estuvieron en el grupo, cuántas se fueron. Se puede calcular desde la segunda carga de lista completa de la comunidad.',
     celda:(c)=>c.tasa_fuga_pct == null ? vacio('no_calc') : vPct(c.tasa_fuga_pct), total:(t)=>t.bajasMed > 0 ? vPct(t.razon(t.bajas, t.bajas + t.mfMed, 100)) : vacio('no_calc') },
 ];
+// Fuente de una columna, chica y discreta: punto de color + nombre. Sin fuente conocida no se pinta nada.
+function htmlFuente(col){
+  const f = FUENTES_TABLA[col.fuente];
+  return f ? `<span class="th-fuente" title="${esc(f.detalle)}"><i style="background:${f.color}"></i>${esc(col.fuente)}</span>` : '';
+}
+// Texto del botón "i": primero de dónde sale el dato, después qué significa.
+function textoAyudaColumna(col){
+  const f = FUENTES_TABLA[col.fuente];
+  return (f ? `Fuente: ${f.detalle}. ` : '') + (col.info || '');
+}
 const COLOR_GRUPO = Object.fromEntries(Object.entries(GRUPOS_TABLA).map(([nombre, g]) => [nombre, g.color]));
 // _v2: el orden por etapas (PR #65) reemplaza al orden por fuente; el orden y las columnas ocultas que cada persona tenía guardado se reinician.
 const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas_v2';
@@ -1021,7 +1042,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
   const encabezadoGrupos = tramos.map(tr => { const g = GRUPOS_TABLA[tr.grupo] || { k:'otro', color:'#8B90A0', icono:'' };
     return `<th colspan="${tr.n}" scope="colgroup" class="th-gr g-${g.k} g-ini" style="--gc:${g.color}"><span class="th-gr-in">${g.icono}${esc(tr.grupo)}</span></th>`; }).join('');
   const encabezados = visibles.map((col, k) => { const g = GRUPOS_TABLA[col.grupo] || { color:'#8B90A0' };
-    return `<th scope="col" class="th-col ${claseGrupo(col, k)}" style="--gc:${g.color}"><span class="th-txt">${esc(col.etiqueta)}</span><button type="button" class="info-btn" data-info="${esc(col.info || '')}" aria-label="Qué significa: ${esc(col.etiqueta)}">i</button></th>`; }).join('');
+    return `<th scope="col" class="th-col ${claseGrupo(col, k)}" style="--gc:${g.color}">${htmlFuente(col)}<span class="th-txt">${esc(col.etiqueta)}</span><button type="button" class="info-btn" data-info="${esc(textoAyudaColumna(col))}" aria-label="Qué significa: ${esc(col.etiqueta)}">i</button></th>`; }).join('');
   const canalActivo = canal === 'instagram' || canal === 'whatsapp';
   const celdas = (fn) => visibles.map((col, k) => { const g = GRUPOS_TABLA[col.grupo] || { color:'#8B90A0' };
     return `<td class="num ${claseGrupo(col, k)}" style="--gc:${g.color}">${canalActivo && !col.porCanal ? vacio('no_canal') : fn(col)}</td>`; }).join('');
@@ -1041,7 +1062,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
         return `<li draggable="true" data-col-id="${id}">
           <span class="grip" title="Arrastrar">⋮⋮</span>
           <label><input type="checkbox" data-col-vis="${id}" ${cfg.ocultas.includes(id) ? '' : 'checked'}> ${esc(col.etiqueta)}</label>
-          <small style="color:${COLOR_GRUPO[col.grupo] || 'var(--text-faint)'}">${esc(col.grupo)}</small>
+          <small style="color:${COLOR_GRUPO[col.grupo] || 'var(--text-faint)'}">${esc(col.grupo)}</small><small style="color:var(--text-faint)">· ${esc(col.fuente || '')}</small>
           <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
           <button class="btn btn-mini" type="button" data-col-mover="${id}" data-dir="1" ${i === lista.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
         </li>`;
