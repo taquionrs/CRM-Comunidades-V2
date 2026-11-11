@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { MAX_DIAS, CAMPOS_WINDSOR, validarRango, dividirVentanas, prepararFilas } from "../supabase/functions/meta-en-vivo/ventanas.mjs";
+import { MAX_DIAS, CAMPOS_WINDSOR, CAMPOS_WINDSOR_SIN_ENLACE, validarRango, dividirVentanas, prepararFilas } from "../supabase/functions/meta-en-vivo/ventanas.mjs";
 
 const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8").split(String.fromCharCode(13)).join("");
 const ini = html.indexOf("/* META-VIVO:INICIO */");
@@ -49,7 +49,8 @@ test("filas de Windsor: se preparan con los nombres que espera la base y se desc
     { date: "2026-10-11T00:00:00", campaign: "C2" },
   ]);
   assert.equal(filas.length, 2);
-  assert.deepEqual(filas[0], { d: "2026-10-10", account_id: "1669338306456901", campaign: "C1", adset_name: "A1", spend: "123.45", impressions: "100", clicks: "7", conv: "3", leads: "0" });
+  // lc "" = la fila no trae clics en el enlace: la base lo guarda como NULL (sin cargar), no como 0.
+  assert.deepEqual(filas[0], { d: "2026-10-10", account_id: "1669338306456901", campaign: "C1", adset_name: "A1", spend: "123.45", impressions: "100", clicks: "7", lc: "", conv: "3", leads: "0" });
   assert.equal(filas[1].d, "2026-10-11");
   assert.equal(filas[1].spend, "0");
   assert.deepEqual(prepararFilas(undefined), []);
@@ -57,7 +58,15 @@ test("filas de Windsor: se preparan con los nombres que espera la base y se desc
 
 test("se piden a Windsor los campos que usa el resto del CRM", () => {
   for (const c of ["date", "account_id", "campaign", "adset_name", "spend", "impressions", "clicks",
-    "actions_onsite_conversion_messaging_conversation_started_7d", "actions_onsite_conversion_lead_grouped"]) assert.ok(CAMPOS_WINDSOR.includes(c), c);
+    "actions_onsite_conversion_messaging_conversation_started_7d", "actions_onsite_conversion_lead_grouped", "actions_link_click"]) assert.ok(CAMPOS_WINDSOR.includes(c), c);
+});
+
+test("clics en el enlace (db/036): se piden a Windsor, llegan como lc y, si Windsor rechaza el campo, hay una lista sin él", () => {
+  const [fila] = prepararFilas([{ date: "2026-11-02", campaign: "C1", adset_name: "A1", actions_link_click: 1377 }, { date: "2026-11-03", campaign: "C1", actions_link_click: 0 }]);
+  assert.equal(fila.lc, "1377");
+  assert.equal(prepararFilas([{ date: "2026-11-03", campaign: "C1", actions_link_click: 0 }])[0].lc, "0", "0 es un dato real");
+  assert.ok(!CAMPOS_WINDSOR_SIN_ENLACE.includes("actions_link_click"));
+  assert.equal(CAMPOS_WINDSOR_SIN_ENLACE.length, CAMPOS_WINDSOR.length - 1);
 });
 
 test("panel: decide igual que la función del servidor para los mismos rangos", () => {

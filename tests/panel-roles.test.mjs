@@ -33,7 +33,7 @@ test("sin acceso cargado no se ofrece nada de Marketing ni de administración", 
 
 test("las columnas de plata de Control_Comunidades están marcadas y solo se muestran a Marketing", () => {
   const marcadas = [...html.matchAll(/\{ id:'([a-z_]+)', grupo:'[^']*', etiqueta:'[^']*', plata:true,/g)].map((m) => m[1]);
-  assert.deepEqual(marcadas.sort(), ["costo_clic", "costo_entrada", "costo_lead", "cpl", "cpmn", "inversion"]);
+  assert.deepEqual(marcadas.sort(), ["costo_clic", "costo_entrada", "costo_lead", "cpc_enlace", "cpl", "cpmn", "inversion"]);
   assert.match(html, /COLUMNAS_CONTROL\.filter\(c => esMarketing\(\) \|\| !c\.plata\)/);
 });
 

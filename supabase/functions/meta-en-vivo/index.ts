@@ -17,7 +17,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { exigirMarketing } from "../_shared/acceso.mjs";
-import { CAMPOS_WINDSOR, dividirVentanas, prepararFilas, validarRango } from "./ventanas.mjs";
+import { CAMPOS_WINDSOR, CAMPOS_WINDSOR_SIN_ENLACE, dividirVentanas, prepararFilas, validarRango } from "./ventanas.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -35,8 +35,8 @@ const json = (cuerpo: unknown, status = 200) =>
 const hoyAR = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date());
 
 // Una ventana de Windsor, con tiempo límite y un reintento ante 429 o error del servidor. Los mensajes de error no incluyen la URL (lleva la clave).
-async function consultarVentana(clave: string, desde: string, hasta: string) {
-  const url = `https://connectors.windsor.ai/facebook?api_key=${encodeURIComponent(clave)}&fields=${CAMPOS_WINDSOR.join(",")}&date_from=${desde}&date_to=${hasta}`;
+async function consultarVentana(clave: string, desde: string, hasta: string, campos: string[]) {
+  const url = `https://connectors.windsor.ai/facebook?api_key=${encodeURIComponent(clave)}&fields=${campos.join(",")}&date_from=${desde}&date_to=${hasta}`;
   let ultimo: Error | null = null;
   for (let intento = 0; intento < 2; intento++) {
     try {
@@ -71,9 +71,18 @@ Deno.serve(async (req) => {
   if (!v.ok) return json({ error: v.error }, 400);
 
   let datos: unknown[];
+  let sinEnlace = false;   // true si Windsor rechazó el campo de clics en el enlace y se pidió sin él
+  const ventanas = dividirVentanas(v.desde, v.hasta);
+  const pedir = (campos: string[]) => Promise.all(ventanas.map((w) => consultarVentana(WINDSOR_API_KEY, w.desde, w.hasta, campos))).then((x) => x.flat());
   try {
-    const ventanas = dividirVentanas(v.desde, v.hasta);
-    datos = (await Promise.all(ventanas.map((w) => consultarVentana(WINDSOR_API_KEY, w.desde, w.hasta)))).flat();
+    try {
+      datos = await pedir(CAMPOS_WINDSOR);
+    } catch (e) {
+      // Un 400/422 suele ser un campo que Windsor no reconoce (por ejemplo, si el nombre de los clics en el enlace cambió): se reintenta sin él.
+      if (!/HTTP (400|422)/.test(String((e as Error).message ?? e))) throw e;
+      datos = await pedir(CAMPOS_WINDSOR_SIN_ENLACE);
+      sinEnlace = true;
+    }
   } catch (e) {
     return json({ error: String((e as Error).message ?? e).replaceAll(WINDSOR_API_KEY, "***") }, 502);
   }
@@ -93,5 +102,7 @@ Deno.serve(async (req) => {
     filas_asignadas: r.filas_asignadas ?? 0, registros_escritos: r.registros_escritos ?? 0,
     filas_sin_comunidad: r.filas_sin_comunidad ?? 0, gasto_sin_comunidad: r.gasto_sin_comunidad ?? 0,
     filas_excluidas: log?.filas_excluidas ?? 0, gasto_excluido: log?.gasto_excluido ?? 0, registros_borrados: log?.registros_borrados ?? 0,
+    // true = Windsor no devolvió los clics en el enlace en esta consulta (el resto se guardó igual).
+    clics_enlace_omitidos: sinEnlace,
   });
 });

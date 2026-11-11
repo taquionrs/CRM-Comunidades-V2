@@ -45,3 +45,15 @@ test("Overview incluye el gasto global en los KPIs y no en la tabla de comunidad
   // Además de los KPIs de siempre, Overview recibe las entradas totales al flow (db/035).
   assert.match(html, /renderOverview\(\{ \.\.\.kpisDesdeComunidades\(paraKpis\), entradas_flow: entradasFlow \}, visibles,/);
 });
+
+test("la fila global lleva también los clics en el enlace: sin dato quedan null y con dato se calculan CTR y costo con los días que lo traen", () => {
+  const sin = filaGlobalCliente({ inversion: 1800, conversaciones_meta: 8, impresiones: 180, clics: 18, leads_meta: 2 });
+  assert.equal(sin.clics_enlace, null);
+  assert.equal(sin.ctr_enlace_pct, null);
+  assert.equal(sin.cpc_enlace, null);
+  const con = filaGlobalCliente({ inversion: 1800, conversaciones_meta: 8, impresiones: 180, clics: 18, leads_meta: 2, clics_enlace: 10, impresiones_enlace: 100, inversion_enlace: 1000 });
+  assert.equal(con.clics_enlace, 10);
+  assert.equal(con.ctr_enlace_pct, 10);    // 10 ÷ 100
+  assert.equal(con.cpc_enlace, 100);       // 1000 ÷ 10
+  assert.equal(con.dias_sin_clics_enlace, 0);
+});
