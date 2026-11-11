@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  parsearCsv, normalizarFilasWindsor, mapearFilas, resumirPorComunidad, construirSqlUpsert, construirSqlRegistroImportacion, CAMPO_CONVERSACIONES, CAMPO_LEADS,
+  parsearCsv, normalizarFilasWindsor, mapearFilas, resumirPorComunidad, construirSqlUpsert, construirSqlRegistroImportacion, CAMPO_CONVERSACIONES, CAMPO_LEADS, CAMPO_CLICS_ENLACE,
 } from "./lib/windsor-mapeo.mjs";
 
 const AYUDA = `Uso:
@@ -75,7 +75,7 @@ function leerMapeo(cli, slug) {
 async function consultarWindsor(desde, hasta) {
   const clave = process.env.WINDSOR_API_KEY;
   if (!clave) throw new Error("Falta la variable de entorno WINDSOR_API_KEY (modo --windsor). Alternativa: exportar el CSV desde Windsor y usar --csv.");
-  const campos = ["date", "account_id", "account_name", "campaign", "adset_name", "spend", "impressions", "clicks", CAMPO_CONVERSACIONES, CAMPO_LEADS].join(",");
+  const campos = ["date", "account_id", "account_name", "campaign", "adset_name", "spend", "impressions", "clicks", CAMPO_CONVERSACIONES, CAMPO_LEADS, CAMPO_CLICS_ENLACE].join(",");
   const filas = [];
   // Ventanas de 14 días: Windsor tarda más en ventanas largas y nuevas (Pulso midió > 20 s).
   for (let ini = new Date(desde + "T00:00:00Z"); ini <= new Date(hasta + "T00:00:00Z"); ini = new Date(ini.getTime() + 14 * 86400000)) {
@@ -127,6 +127,7 @@ async function main() {
   if (crudas.length && !(CAMPO_CONVERSACIONES in crudas[0]) && !("messaging_conversation_started_7d" in crudas[0])) console.log(`AVISO: no hay columna de conversaciones (${CAMPO_CONVERSACIONES}): quedan en 0.`);
 
   if (crudas.length && !(CAMPO_LEADS in crudas[0])) console.log(`AVISO: no hay columna de clientes potenciales (${CAMPO_LEADS}): quedan en 0.`);
+  if (crudas.length && !(CAMPO_CLICS_ENLACE in crudas[0])) console.log(`AVISO: no hay columna de clics en el enlace (${CAMPO_CLICS_ENLACE}): quedan sin cargar (el panel dice "Sin fuente").`);
 
   const cli = rutaCli(a);
   const mapeo = leerMapeo(cli, a.cliente);

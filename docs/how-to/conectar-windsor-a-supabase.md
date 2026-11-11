@@ -40,7 +40,8 @@ Por eso se usa el **destino PostgreSQL** con el usuario aislado. Con el destino 
 - **Fuente:** Facebook Ads.
 - **Cuenta:** **solo `TQN - Growing 2 - LC`** (ID `1669338306456901`). Si Windsor trae las otras cuentas, aterrizan en tu base datos de otros clientes.
 - **Campos:**
-  `date`, `account_id`, `account_name`, `campaign`, `adset_name`, `spend`, `impressions`, `clicks`, `actions_onsite_conversion_messaging_conversation_started_7d`, `actions_onsite_conversion_lead_grouped`
+  `date`, `account_id`, `account_name`, `campaign`, `adset_name`, `spend`, `impressions`, `clicks`, `actions_onsite_conversion_messaging_conversation_started_7d`, `actions_onsite_conversion_lead_grouped`, `actions_link_click`
+  (`actions_link_click` = clics en el enlace, desde la PR #65 / `db/036`. Si la tarea ya existía, cómo agregarlo: [agregar-clics-en-el-enlace-a-windsor.md](agregar-clics-en-el-enlace-a-windsor.md).)
 - **Rango de fechas:** **últimos 30 días**. Windsor no permite más de 30 días por corrida en una tarea programada (con 90 muestra el error "Max date range is 30 days"); el historial más viejo se trae con **Backfill: 3 meses**. Cada día se vuelven a traer los últimos 30, así se corrigen las cifras que Meta ajusta después.
 - **Frecuencia:** diaria, a las **09:00 UTC** (06:00 de Argentina). **Columns to Match: `date`**, para que cada corrida reemplace las filas de esos días en lugar de agregarlas.
 - **Destino:** el de PostgreSQL de arriba, tabla `facebook_ads` (queda en el esquema `windsor_raw`). Si Windsor da a elegir el modo de escritura, elegí **actualizar/reemplazar por fecha** y no "agregar siempre", para no duplicar filas.

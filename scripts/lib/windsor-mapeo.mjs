@@ -11,6 +11,8 @@
 const CAMPO_CONVERSACIONES = "actions_onsite_conversion_messaging_conversation_started_7d";
 // "Cliente potencial de Meta" de Ads Manager (verificado 2026-10-08: 158 en Todo un País, 0 en Cortado WhatsApp, 6–7/10).
 const CAMPO_LEADS = "actions_onsite_conversion_lead_grouped";
+// "Clics en el enlace" del anuncio (db/036). Si el CSV no trae la columna, el dato queda sin cargar (null), nunca en 0.
+const CAMPO_CLICS_ENLACE = "actions_link_click";
 
 /** Igual a crm_comunidades_v2.normalizar_nombre() de db/010: recorta, quita tildes, colapsa espacios, minúsculas. */
 export function normalizarNombre(texto) {
@@ -66,6 +68,7 @@ export function normalizarFilasWindsor(filas) {
       inversion: numero(f.spend),
       impresiones: Math.round(numero(f.impressions)),
       clics: Math.round(numero(f.clicks)),
+      clicsEnlace: f[CAMPO_CLICS_ENLACE] == null || String(f[CAMPO_CLICS_ENLACE]).trim() === "" ? null : Math.round(numero(f[CAMPO_CLICS_ENLACE])),
       conversaciones: Math.round(numero(f[CAMPO_CONVERSACIONES] ?? f.messaging_conversation_started_7d)),
       leads: Math.round(numero(f[CAMPO_LEADS])),
     });
@@ -124,9 +127,11 @@ export function mapearFilas(filas, mapeo, opciones = {}) {
     const clave = `${m.comunidad_id}|${f.fecha}`;
     const a = acumulado.get(clave) ?? {
       cliente_id: m.cliente_id, cliente_slug: m.cliente_slug, comunidad_id: m.comunidad_id, comunidad_nombre: m.comunidad_nombre,
-      fecha: f.fecha, inversion: 0, impresiones: 0, clics: 0, conversaciones: 0, leads: 0,
+      fecha: f.fecha, inversion: 0, impresiones: 0, clics: 0, clics_enlace: null, conversaciones: 0, leads: 0,
     };
     a.inversion += f.inversion; a.impresiones += f.impresiones; a.clics += f.clics; a.conversaciones += f.conversaciones; a.leads += f.leads;
+    // Los clics en el enlace son null mientras ninguna fila del día traiga el dato; si alguna lo trae, se suma.
+    if (f.clicsEnlace != null) a.clics_enlace = (a.clics_enlace ?? 0) + f.clicsEnlace;
     acumulado.set(clave, a);
   }
 
@@ -149,8 +154,9 @@ export function resumirPorComunidad(registros) {
   const m = new Map();
   for (const r of registros) {
     const k = `${r.cliente_slug} | ${r.comunidad_nombre}`;
-    const x = m.get(k) ?? { comunidad: k, dias: 0, desde: r.fecha, hasta: r.fecha, inversion: 0, impresiones: 0, clics: 0, conversaciones: 0, leads: 0 };
+    const x = m.get(k) ?? { comunidad: k, dias: 0, desde: r.fecha, hasta: r.fecha, inversion: 0, impresiones: 0, clics: 0, clics_enlace: null, conversaciones: 0, leads: 0 };
     x.dias++; x.inversion += r.inversion; x.impresiones += r.impresiones; x.clics += r.clics; x.conversaciones += r.conversaciones; x.leads += r.leads;
+    if (r.clics_enlace != null) x.clics_enlace = (x.clics_enlace ?? 0) + r.clics_enlace;
     if (r.fecha < x.desde) x.desde = r.fecha; if (r.fecha > x.hasta) x.hasta = r.fecha;
     m.set(k, x);
   }
@@ -169,12 +175,14 @@ export function construirSqlUpsert(registros, tamanoLote = 400) {
       for (const k of ["inversion", "impresiones", "clics", "conversaciones", "leads"]) {
         if (!Number.isFinite(r[k]) || r[k] < 0) throw new Error(`Valor inválido en ${k}: ${r[k]}`);
       }
-      return `('${r.cliente_id}','${r.comunidad_id}','${r.fecha}',${r.inversion.toFixed(2)},${r.conversaciones},${r.impresiones},${r.clics},${r.leads})`;
+      // Clics en el enlace: null/ausente = el dato no llegó (se guarda NULL, no 0).
+      const enlace = r.clics_enlace == null ? "null" : (Number.isFinite(r.clics_enlace) && r.clics_enlace >= 0 ? String(Math.round(r.clics_enlace)) : (() => { throw new Error(`Valor inválido en clics_enlace: ${r.clics_enlace}`); })());
+      return `('${r.cliente_id}','${r.comunidad_id}','${r.fecha}',${r.inversion.toFixed(2)},${r.conversaciones},${r.impresiones},${r.clics},${r.leads},${enlace})`;
     });
     sentencias.push(
-      "insert into crm_comunidades_v2.meta_ads_metrica (cliente_id, comunidad_id, fecha, inversion, conversaciones_meta, impresiones, clics, leads_meta) values\n" +
+      "insert into crm_comunidades_v2.meta_ads_metrica (cliente_id, comunidad_id, fecha, inversion, conversaciones_meta, impresiones, clics, leads_meta, clics_enlace) values\n" +
       valores.join(",\n") +
-      "\non conflict (comunidad_id, fecha) do update set inversion = excluded.inversion, conversaciones_meta = excluded.conversaciones_meta, impresiones = excluded.impresiones, clics = excluded.clics, leads_meta = excluded.leads_meta;",
+      "\non conflict (comunidad_id, fecha) do update set inversion = excluded.inversion, conversaciones_meta = excluded.conversaciones_meta, impresiones = excluded.impresiones, clics = excluded.clics, leads_meta = excluded.leads_meta, clics_enlace = excluded.clics_enlace;",
     );
   }
   return sentencias;
@@ -193,4 +201,4 @@ export function construirSqlRegistroImportacion({ etiqueta, filasOrigen, registr
     `'CSV: ${limpia}', ${Math.round(filasOrigen)}, ${Math.round(registrosEscritos)}, ${Math.round(filasSinComunidad)}, ${Number(gastoSinComunidad).toFixed(2)});`;
 }
 
-export { CAMPO_CONVERSACIONES, CAMPO_LEADS };
+export { CAMPO_CONVERSACIONES, CAMPO_LEADS, CAMPO_CLICS_ENLACE };

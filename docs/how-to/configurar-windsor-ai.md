@@ -24,7 +24,7 @@ El CTR de anuncio sale de `clicks / impressions`: ya no figura "sin fuente".
 
 Mientras `windsor-sync` no tenga la clave cargada en Supabase, la inversión de Meta Ads se importa con un script local. No deja ninguna clave en la nube.
 
-1. En Windsor (conector Facebook) exportá un CSV con las columnas `date, account_id, account_name, campaign, adset_name, spend, impressions, clicks, actions_onsite_conversion_messaging_conversation_started_7d`, por día, del período que quieras.
+1. En Windsor (conector Facebook) exportá un CSV con las columnas `date, account_id, account_name, campaign, adset_name, spend, impressions, clicks, actions_onsite_conversion_messaging_conversation_started_7d, actions_link_click` (esta última son los clics en el enlace, db/036; si falta, quedan "Sin fuente", no en 0), por día, del período que quieras.
 2. **Ensayo** (no guarda nada, solo muestra qué haría):
    ```bash
    node scripts/windsor-importar.mjs --csv "C:/ruta/data.csv" --cuenta "TQN - Growing 2 - LC"

@@ -186,7 +186,8 @@ test("construirSqlUpsert: upsert por (comunidad, fecha), valores validados y nad
   const { registros } = mapearFilas(filas, MAPEO);
   const [sql] = construirSqlUpsert(registros);
   assert.match(sql, /on conflict \(comunidad_id, fecha\) do update/);
-  assert.ok(sql.includes(`('${TUP}','${C_TOMA}','2026-10-07',15658.64,63,50000,303,0)`));
+  // El último valor es clics_enlace (db/036): esta fila no lo trae, así que va null (sin cargar), no 0.
+  assert.ok(sql.includes(`('${TUP}','${C_TOMA}','2026-10-07',15658.64,63,50000,303,0,null)`));
   assert.ok(sql.includes("leads_meta = excluded.leads_meta"));
   assert.ok(!sql.includes("La Toma"), "no se interpolan nombres");
 });
@@ -219,6 +220,30 @@ test("formato real: un fragmento del CSV de Windsor del 2026-10-08 se importa co
   assert.equal(Object.values(ignoradas).reduce((a, b) => a + b, 0), 2);
   assert.equal(registros.find((r) => r.comunidad_nombre === "La Toma").conversaciones, 21);
   assert.equal(registros.find((r) => r.comunidad_nombre === "Boedo").inversion, 414.38);
+});
+
+test("clics en el enlace (db/036): la columna actions_link_click se importa; sin columna o vacía queda en null, no en 0", () => {
+  const csv = [
+    "date,account_name,campaign,adset_name,spend,clicks,impressions,actions_onsite_conversion_messaging_conversation_started_7d,actions_link_click",
+    "2026-11-02,TQN - Growing 2 - LC,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS_LA_TOMA,100,50,1000,5,40",
+    "2026-11-02,TQN - Growing 2 - LC,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS_LA_TOMA,50,20,500,2,10",
+    "2026-11-03,TQN - Growing 2 - LC,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS,TQN_META_CON_LEADS_MANUAL_COMUNIDADES_TODO_UN_PAÍS_LA_TOMA,70,25,700,1,",
+    "",
+  ].join("\n");
+  const { filas } = normalizarFilasWindsor(parsearCsv(csv));
+  assert.deepEqual(filas.map((f) => f.clicsEnlace), [40, 10, null]);
+  const { registros } = mapearFilas(filas, MAPEO);
+  const toma = registros.filter((r) => r.comunidad_id === C_TOMA);
+  assert.deepEqual(toma.map((r) => r.clics_enlace), [50, null], "se suma por día; el día sin el dato queda null");
+  assert.equal(resumirPorComunidad(toma)[0].clics_enlace, 50);
+  const [sql] = construirSqlUpsert(toma);
+  assert.ok(sql.includes("clics_enlace = excluded.clics_enlace"));
+  assert.match(sql, /,50\)/);
+  assert.match(sql, /,null\)/);
+  // Un CSV viejo, sin la columna, no inventa ceros.
+  const viejo = normalizarFilasWindsor(parsearCsv("date,campaign,adset_name,spend,clicks\n2026-11-02,C,A,1,1\n")).filas;
+  assert.equal(viejo[0].clicsEnlace, null);
+  assert.throws(() => construirSqlUpsert([{ ...toma[0], clics_enlace: -3 }]), /clics_enlace/);
 });
 
 test("leads de Meta: la columna actions_onsite_conversion_lead_grouped se importa (fila real de La Toma del 6/10: 8 leads) y vacío es 0", () => {

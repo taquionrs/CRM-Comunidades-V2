@@ -10,10 +10,13 @@ const aTexto = (ms) => new Date(ms).toISOString().slice(0, 10);
 const esFechaReal = (f) => FECHA.test(String(f)) && aTexto(aMs(f)) === f;
 
 /** Campos que se piden a Windsor (conector facebook). */
+export const CAMPO_CLICS_ENLACE = "actions_link_click";
 export const CAMPOS_WINDSOR = [
   "date", "account_id", "account_name", "campaign", "adset_name", "spend", "impressions", "clicks",
-  "actions_onsite_conversion_messaging_conversation_started_7d", "actions_onsite_conversion_lead_grouped",
+  "actions_onsite_conversion_messaging_conversation_started_7d", "actions_onsite_conversion_lead_grouped", CAMPO_CLICS_ENLACE,
 ];
+/** Los mismos campos sin los clics en el enlace: se usan solo si Windsor rechaza ese campo (db/036), para que "Traer de Meta ahora" siga funcionando. */
+export const CAMPOS_WINDSOR_SIN_ENLACE = CAMPOS_WINDSOR.filter((c) => c !== CAMPO_CLICS_ENLACE);
 
 /** Valida el rango pedido. `hoy` es la fecha de hoy en Argentina (AAAA-MM-DD). */
 export function validarRango(desde, hasta, hoy) {
@@ -49,6 +52,8 @@ export function prepararFilas(datos) {
       spend: f.spend == null ? "0" : String(f.spend),
       impressions: f.impressions == null ? "0" : String(f.impressions),
       clicks: f.clicks == null ? "0" : String(f.clicks),
+      // Sin el campo, "" = el dato no llegó (la base lo guarda como NULL, no como 0).
+      lc: f[CAMPO_CLICS_ENLACE] == null || f[CAMPO_CLICS_ENLACE] === "" ? "" : String(f[CAMPO_CLICS_ENLACE]),
       conv: f.actions_onsite_conversion_messaging_conversation_started_7d == null ? "0" : String(f.actions_onsite_conversion_messaging_conversation_started_7d),
       leads: f.actions_onsite_conversion_lead_grouped == null ? "0" : String(f.actions_onsite_conversion_lead_grouped),
     });

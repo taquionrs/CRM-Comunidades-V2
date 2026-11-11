@@ -87,9 +87,9 @@ test("total de bajas y de fuga: suman solo las comunidades donde se pueden calcu
 
 // ---- Filtro de canal (db/022): solo lo que viene del flow de ManyChat se divide por canal
 test("canal: solo trigger, clics en Me sumo, CTR del botón, entradas y clic/entradas se dividen por canal", () => {
-  assert.deepEqual(COLUMNAS_CONTROL.filter((c) => c.porCanal).map((c) => c.id).sort(), ["clics_me_sumo", "ctr_boton", "entradas", "tasa_me_sumo", "trigger"]);
-  // lo que usa Meta, los miembros o la inversión no se divide (incluye entradas / conversaciones, que usa las conversaciones de Meta)
-  for (const id of ["inversion", "conversaciones", "cpl", "leads", "costo_lead", "ctr", "entradas_conv", "mi", "mf", "crecimiento", "bajas", "costo_entrada", "costo_clic", "cpmn", "fuga"]) {
+  assert.deepEqual(COLUMNAS_CONTROL.filter((c) => c.porCanal).map((c) => c.id).sort(), ["clics_me_sumo", "ctr_boton", "entradas", "sin_clasificar", "tasa_me_sumo", "trigger"]);
+  // lo que usa Meta, los miembros o la inversión no se divide (incluye el desfasaje y los chats sin registrar, que usan las conversaciones de Meta)
+  for (const id of ["inversion", "clics_enlace", "ctr_enlace", "cpc_enlace", "conversaciones", "cpl", "clic_conv", "leads", "costo_lead", "ctr", "desfasaje", "chats_sin_registrar", "mi", "mf", "crecimiento", "bajas", "costo_entrada", "costo_clic", "cpmn", "fuga"]) {
     assert.ok(!col(id).porCanal, id);
   }
 });
@@ -106,7 +106,7 @@ const razon = (n, d, f = 1) => (d > 0 ? (n / d) * f : null);
 test("CTR del botón: clics ÷ triggers, por comunidad y en el total", () => {
   assert.match(col("ctr_boton").celda({ triggers_entregados: 40, clics_me_sumo: 10 }), /25,0%/);
   assert.match(col("ctr_boton").total({ trig: 80, clicsms: 20, razon }), /25,0%/);
-  assert.equal(col("ctr_boton").grupo, "ManyChat");
+  assert.equal(col("ctr_boton").grupo, "Activación");
   assert.ok(col("ctr_boton").porCanal);
 });
 
@@ -120,4 +120,112 @@ test("CTR del botón: sin triggers o sin clics registrados dice 'Sin fuente', no
 test("CTR del botón: explica que los clics se registran desde el 09/10", () => {
   assert.match(col("ctr_boton").info, /desde el 09\/10/);
   assert.match(col("ctr_boton").info, /Trigger entregados/);
+});
+
+// ---- Orden por etapas del recorrido y métricas del embudo (PR #65, db/036)
+test("las columnas van por etapas, cada etapa en un solo tramo y en este orden; la etapa Valor queda para después", () => {
+  const etapas = ["Alcanzar", "Intención", "Control del tracking", "Activación", "Ingreso", "Permanencia"];
+  assert.deepEqual(api.tramosDeGrupos(COLUMNAS_CONTROL).map((x) => x.grupo), etapas);
+  assert.deepEqual(Object.keys(api.GRUPOS_TABLA), etapas);
+  assert.ok(!COLUMNAS_CONTROL.some((c) => /valor|k-?factor/i.test(c.grupo + c.id)));
+});
+
+test("orden clave del embudo: clics en el enlace → conversaciones → entradas → desfasaje → chats sin registrar → ... → miembros → bajas", () => {
+  const ids = COLUMNAS_CONTROL.map((c) => c.id);
+  const pos = (id) => ids.indexOf(id);
+  for (const [a, b] of [["clics_enlace", "conversaciones"], ["conversaciones", "entradas"], ["entradas", "desfasaje"], ["desfasaje", "chats_sin_registrar"],
+    ["chats_sin_registrar", "trigger"], ["trigger", "mi"], ["mi", "bajas"]]) assert.ok(pos(a) >= 0 && pos(a) < pos(b), `${a} antes de ${b}`);
+  assert.equal(pos("desfasaje"), pos("entradas") + 1, "el desfasaje va pegado a las entradas");
+  assert.equal(new Set(ids).size, ids.length, "ids únicos");
+  assert.equal(ids.includes("entradas_conv"), false, "'Entradas / conversaciones' se reemplazó por el desfasaje (100 % − cobertura)");
+});
+
+test("clics en el enlace: sin dato dice 'Sin fuente' (no 0) y el costo por clic es columna de plata", () => {
+  assert.match(col("clics_enlace").celda({ clics_enlace: null }), /Sin fuente/);
+  assert.match(col("clics_enlace").celda({ clics_enlace: 0 }), /^<span class="entero">0<\/span>$/);
+  assert.match(col("clics_enlace").celda({ clics_enlace: 1377 }), /1\.377/);
+  assert.match(col("clics_enlace").total({ clicsEnlace: null }), /Sin fuente/);
+  assert.match(col("clics_enlace").total({ clicsEnlace: 11615 }), /11\.615/);
+  assert.match(col("ctr_enlace").celda({ clics_enlace: 100, ctr_enlace_pct: 3.33 }), /3,3%/);
+  assert.match(col("ctr_enlace").total({ clicsEnlace: 11615, impEnlace: 635238, razon }), /1,8%/);
+  assert.match(col("cpc_enlace").celda({ clics_enlace: 100, cpc_enlace: 79.29 }), /\$79,29/);
+  assert.match(col("cpc_enlace").total({ clicsEnlace: 11615, invEnlace: 920911.65, razon }), /\$79,29/);
+  assert.match(col("cpc_enlace").celda({ clics_enlace: null }), /Sin fuente/);
+  assert.equal(col("cpc_enlace").plata, true);
+  assert.ok(!col("clics_enlace").plata && !col("ctr_enlace").plata);
+});
+
+test("clic → conversación: solo se calcula si TODOS los días del período traen los clics en el enlace", () => {
+  assert.match(col("clic_conv").celda({ clics_enlace: 100, conversaciones_meta: 5, dias_sin_clics_enlace: 0 }), /5,0%/);
+  assert.match(col("clic_conv").celda({ clics_enlace: 100, conversaciones_meta: 5, dias_sin_clics_enlace: 2 }), /Sin dato/);
+  assert.match(col("clic_conv").celda({ clics_enlace: null, conversaciones_meta: 5 }), /Sin fuente/);
+  assert.match(col("clic_conv").total({ clicsEnlace: 11615, conv: 201, diasSinEnlace: 0, razon }), /1,7%/);
+  assert.match(col("clic_conv").total({ clicsEnlace: 11615, conv: 201, diasSinEnlace: 3, razon }), /Sin dato/);
+  assert.match(col("clic_conv").total({ clicsEnlace: null, conv: 201, diasSinEnlace: 0, razon }), /Sin fuente/);
+});
+
+test("desfasaje: (conversaciones − entradas) ÷ conversaciones; con los números del 02 al 10/11 (Boedo 93 → 15) da 83,9 %", () => {
+  assert.match(col("desfasaje").celda({ conversaciones_meta: 93, clics_unicos: 15 }), /83,9%/);
+  assert.match(col("desfasaje").celda({ conversaciones_meta: 72, clics_unicos: 42 }), /41,7%/);
+  assert.match(col("desfasaje").total({ convCom: 201, ent: 62, razon }), /69,2%/);
+  assert.match(col("desfasaje").celda({ conversaciones_meta: 50, clics_unicos: 50 }), /0,0%/);
+});
+
+test("desfasaje: puede ser negativo (más entradas que conversaciones) y sin conversaciones o en la fila global dice 'Sin dato'", () => {
+  assert.match(col("desfasaje").celda({ conversaciones_meta: 21, clics_unicos: 110 }), /-423,8%/);
+  assert.match(col("desfasaje").celda({ conversaciones_meta: 0, clics_unicos: 4 }), /Sin dato/);
+  assert.match(col("desfasaje").celda({ conversaciones_meta: 8, clics_unicos: 0, es_global: true }), /Sin dato/);
+  assert.match(col("desfasaje").total({ convCom: 0, ent: 0, razon }), /Sin dato/);
+  assert.match(col("desfasaje").info, /negativo/);
+  assert.match(col("desfasaje").info, /no es la tasa de triaje/);
+});
+
+test("chats sin registrar: conversaciones − entradas en personas (negativo si hay más entradas); la fila global no se compara", () => {
+  assert.match(col("chats_sin_registrar").celda({ conversaciones_meta: 93, clics_unicos: 15 }), />78</);
+  assert.match(col("chats_sin_registrar").celda({ conversaciones_meta: 21, clics_unicos: 110 }), />-89</);
+  assert.match(col("chats_sin_registrar").celda({ conversaciones_meta: 0, clics_unicos: 0 }), />0</);
+  assert.match(col("chats_sin_registrar").celda({ conversaciones_meta: 8, clics_unicos: 0, es_global: true }), /Sin dato/);
+  assert.match(col("chats_sin_registrar").total({ convCom: 201, ent: 62 }), />139</);
+});
+
+test("sin clasificar: no es de ninguna comunidad (cada fila dice 'Sin comunidad') y el total sale de Overview; sin avisos dice 'Sin fuente'", () => {
+  assert.match(col("sin_clasificar").celda({}), /Sin comunidad/);
+  assert.match(col("sin_clasificar").total({ sinClas: 7 }), />7</);
+  assert.match(col("sin_clasificar").total({ sinClas: 0 }), />0</);
+  assert.match(col("sin_clasificar").total({ sinClas: null }), /Sin fuente/);
+});
+
+test("el panel guarda el orden en una clave nueva y le pasa a la tabla las personas sin clasificar del cliente", () => {
+  assert.match(html, /const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas_v2'/);
+  assert.match(html, /loadEntradasFlow\(state\.fechaDesde \|\| null, state\.fechaHasta \|\| null, state\.canalControl\)/);
+  assert.match(html, /state\.canalControl, desglose, entradasFlowControl\)/);
+});
+
+// ---- La fuente de cada métrica no se pierde al agrupar por etapa (PR #65)
+const { FUENTES_TABLA, htmlFuente, textoAyudaColumna } = new Function("esc", html.slice(ini, finCols) + "\nreturn { FUENTES_TABLA, htmlFuente, textoAyudaColumna };")(esc);
+
+test("cada columna declara su fuente y la fuente existe en la lista", () => {
+  for (const c of COLUMNAS_CONTROL) assert.ok(FUENTES_TABLA[c.fuente], `${c.id} sin fuente válida (${c.fuente})`);
+  for (const [nombre, f] of Object.entries(FUENTES_TABLA)) { assert.match(f.color, /^#[0-9A-Fa-f]{6}$/, nombre); assert.ok(f.detalle.length > 10, nombre); }
+});
+
+test("las columnas que ya existían conservan la fuente de su grupo anterior", () => {
+  const esperado = { inversion: "Meta Ads", conversaciones: "Meta Ads", cpl: "Meta Ads", leads: "Meta Ads", costo_lead: "Meta Ads", ctr: "Meta Ads",
+    trigger: "ManyChat", clics_me_sumo: "ManyChat", ctr_boton: "ManyChat", entradas: "CRM", tasa_me_sumo: "CRM",
+    mi: "WhatsApp & Salud", mf: "WhatsApp & Salud", crecimiento: "WhatsApp & Salud", bajas: "WhatsApp & Salud",
+    costo_entrada: "Financiera", costo_clic: "Financiera", cpmn: "Financiera", fuga: "Financiera" };
+  for (const [id, fuente] of Object.entries(esperado)) assert.equal(col(id).fuente, fuente, id);
+  assert.equal(col("desfasaje").fuente, "Meta Ads + CRM");
+  assert.equal(col("clics_enlace").fuente, "Meta Ads");
+});
+
+test("el encabezado muestra la fuente chica (punto de color + nombre) y la ayuda empieza diciendo de dónde sale", () => {
+  const h = htmlFuente(col("clics_me_sumo"));
+  assert.match(h, /class="th-fuente"/);
+  assert.match(h, /ManyChat/);
+  assert.match(h, /background:#FFB35C/);
+  assert.equal(htmlFuente({ fuente: "no existe" }), "");
+  assert.match(textoAyudaColumna(col("inversion")), /^Fuente: Meta Ads, vía Windsor/);
+  assert.match(textoAyudaColumna(col("inversion")), /Gasto de Meta Ads asignado/);
+  assert.match(html, /\$\{htmlFuente\(col\)\}<span class="th-txt">/);
 });

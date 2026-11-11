@@ -12,7 +12,10 @@ Revisión de cada métrica que muestra el CRM: qué dice la fórmula, de dónde 
 | Conversaciones | Suma de `actions_onsite_conversion_messaging_conversation_started_7d` | Correcta | Ventana de atribución de 7 días: Meta puede mover cifras de días pasados |
 | CPMI | Inversión ÷ conversaciones | Correcta (Overview 26/10: $761.836,83 ÷ 212 = $3.593,57) | Sin dato si no hubo conversaciones |
 | Clientes potenciales y su costo | `actions_onsite_conversion_lead_grouped`; inversión ÷ clientes potenciales | Correcta | No todas las campañas informan clientes potenciales |
-| CTR (todos los clics) | Clics ÷ impresiones | Correcta | Cuenta todos los clics, no solo los del enlace: no es el CTR de enlace de Ads Manager |
+| CTR (todos los clics) | Clics ÷ impresiones | Correcta | Cuenta todos los clics, no solo los del enlace: no es el CTR de enlace de Ads Manager (para eso está "CTR del enlace") |
+| Clics en el enlace (PR #65, `db/036`) | Suma de `actions_link_click` | Nueva. Para el 02 al 10/11 Ads Manager informa 11.615 en la campaña de WhatsApp de Cortado: es la cifra de control | Hasta que el campo esté en la tarea de Windsor y se vuelvan a traer los días, figura "Sin fuente" (NULL, nunca 0). Con el dato solo en parte de los días, el panel avisa cuántos faltan |
+| CTR del enlace y costo por clic en el enlace | Clics en el enlace ÷ impresiones; inversión ÷ clics en el enlace | Nueva | Se calculan solo con los días que ya traen el dato, para no dividir clics parciales por un gasto completo |
+| Clic → conversación | Conversaciones ÷ clics en el enlace | Nueva (02–10/11: 201 ÷ 11.615 = 1,7 %) | Solo se calcula si TODOS los días del período traen los clics en el enlace. Mezcla la ventana de atribución de 7 días de las conversaciones con clics del día |
 
 ## ManyChat y CRM (fuente: webhook)
 
@@ -22,7 +25,9 @@ Revisión de cada métrica que muestra el CRM: qué dice la fórmula, de dónde 
 | Trigger entregados | Personas distintas que recibieron el primer mensaje | Correcta | |
 | Clics en "Me sumo" | Personas distintas que tocaron el botón | Correcta | Se registra desde el 09/10: un período anterior queda subcontado |
 | CTR del botón | Clics en "Me sumo" ÷ trigger entregados | Correcta | Mismo límite de fecha de los clics |
-| Entradas ÷ conversaciones | Entradas al flow ÷ conversaciones de Meta | Correcta como cuenta, **mal nombrada** antes | Es un dato de contexto, no un KPI: muestra cuánto del tráfico del flow se explica por las conversaciones de Meta. Puede pasar de 100 % (Palermo: 110 entradas contra 21 conversaciones). Ya **no se llama tasa de triaje** |
+| Desfasaje conversaciones → flow (PR #65) | (Conversaciones − entradas al flow) ÷ conversaciones | Reemplaza a "Entradas ÷ conversaciones" (es 100 % − esa cobertura). Para el 02 al 10/11: (201 − 62) ÷ 201 = 69,2 % | Es una medida de cobertura del tracking, no un KPI ni la tasa de triaje. Puede dar negativo (Palermo el 04/11: 110 entradas contra 21 conversaciones). El total no incluye las campañas globales, que no tienen entradas propias |
+| Chats sin registrar (PR #65) | Conversaciones − entradas al flow, en personas | Nueva (02–10/11: Boedo 78, Devoto 30, Palermo 31, total 139) | El mismo desfasaje en números absolutos, para no leer mal un porcentaje con pocos casos |
+| Sin clasificar (PR #64/#65) | Personas que escribieron al número y no eligieron comunidad | En la tabla solo aparece en el total del cliente (no pertenecen a ninguna comunidad) | Sigue en cero hasta que ManyChat avise de quienes no eligen (flow de "sin clasificar") |
 | Clic en "Me sumo" ÷ entradas | Clics ÷ entradas | Correcta | |
 | Contactos repetidos | Personas con más de un evento aceptado | Correcta | No sabe el motivo (prueba, reingreso, doble toque) |
 
