@@ -107,3 +107,9 @@ Pedido de Juan (2026-11-12): el CTR se arma con los **clics en el enlace**, no c
 | Se mantiene | La base sigue guardando `clics` y `ctr_anuncio_pct`; la sección Campañas (lista de campañas de Windsor) sigue mostrando los clics totales que trae el campo `clicks` |
 
 **Windsor:** el CTR ya no necesita el campo `clicks`, pero la lista de Campañas sí lo lee. Si se saca `clicks` de la tarea, esa lista muestra 0 clics para los días nuevos. Conviene dejarlo.
+
+## Ajuste del 12/11 (PR #68): un día sin el dato no borra los clics en el enlace guardados
+
+Los clics en el enlace entran por dos caminos: "Traer de Meta ahora" (consulta directa a Windsor) y la tarea diaria (tabla `windsor_raw.facebook_ads`). Si la tarea no entrega `actions_link_click`, la conversión de las 06:30 reescribía los días con NULL y las columnas volvían a "Sin fuente".
+
+`db/038` ajusta `_windsor_aplicar`: si el dato nuevo viene vacío se conserva el que ya estaba (en `meta_ads_metrica`, `meta_ads_metrica_global` y `ads_campana_dia`). Un día que nunca lo tuvo sigue en NULL, y un 0 real sí pisa el valor anterior. Orden: aplicar `db/038`; no requiere cambios en el panel.
