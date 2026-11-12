@@ -28,6 +28,7 @@ Organizada según [Diátaxis](https://diataxis.fr/): agrupa por lo que necesitá
 - [Contrato JSON de panel-data](reference/contrato-json-panel-data.md)
 - [Variables de entorno](reference/variables-de-entorno.md)
 - [Auditoría de métricas (26/10/2026)](reference/auditoria-de-metricas.md): qué dice cada métrica, de dónde sale y qué límite tiene
+- [Informe: contactos sin registro en el CRM (4 al 11/11/2026)](reference/informe-contactos-sin-registro-2026-11.md): qué se reportó, qué se verificó, causas, qué se descartó y qué quedó abierto
 
 ## Explicación
 

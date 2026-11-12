@@ -43,7 +43,7 @@ El flow no tiene disparador ni mensajes: cuando el POST esté probado, se copia 
 
 - **Cliente:** `cortado-en-jarrito`, cuenta de ManyChat `fb5616665`. Comunidades: `Boedo`, `Palermo`, `Villa Devoto`. El secreto del webhook está en un archivo local ignorado por Git (`SECRETO-cortado-en-jarrito.txt`); en la base solo se guarda su hash.
 - **Flow:** "Test Comunidades Cortado en Jarrito", con la acción "Solicitud externa" en el nodo final ("Acciones #8"), junto a Google Sheets y el evento a la API de conversiones de Meta (canal WhatsApp).
-- **Número de WhatsApp del cliente:** +54 9 11 2753-5622 (Configuración → WhatsApp de la cuenta).
+- **Número de WhatsApp del cliente:** **+54 9 11 3226-1920** (`5491132261920`), número nuevo informado el 2026-11-11 (Configuración → WhatsApp de la cuenta). El anterior era +54 9 11 2753-5622: si todavía aparece en la biografía de Instagram, en el botón de contacto de la página de Facebook, en algún anuncio o en una plantilla, hay que cambiarlo.
 - **Probado de punta a punta** el 2026-10-01: mensaje por WhatsApp → evento en Data_Cruda, asignado a Boedo.
 
 ### Cuidado con las condiciones por texto
@@ -104,16 +104,79 @@ Se repite en **cada flow y cada canal** (WhatsApp e Instagram de Cortado y de To
 
 Quien le escribe al número con un texto que no dispara ningún flow de comunidad (por ejemplo "¡Hola! Quiero más información", el saludo por defecto de Meta) queda en ManyChat como contacto suscrito, pero hasta ahora no dejaba ningún rastro en el CRM. Con este aviso queda registrada.
 
-**Dónde se arma:** en ManyChat → Automatización → **Respuesta por defecto** de WhatsApp (se activa solo cuando el mensaje no coincide con ningún otro disparador, así no pisa a los flows de comunidad). No se tocan las condiciones de los flows existentes. Pasos de la respuesta por defecto, en este orden:
+**Dónde se arma:** un flow propio, **"Consultas generales - wsp"** (cómo quedó armado, abajo), que se usa como **respuesta por defecto** de WhatsApp (Configuración → canal WhatsApp → Respuesta predeterminada: se activa solo cuando el mensaje no coincide con ningún otro flow, así no pisa a los de comunidad). No se tocan los flows ni las condiciones existentes. El flow, en este orden:
 
-1. **Etiqueta** `Entró sin frase` (sirve también para contarlos dentro de ManyChat).
-2. **Solicitud externa** con el aviso (mismo método, URL y encabezados `x-cliente` y `x-webhook-secret` que los otros avisos):
+1. **Condición:** si el contacto ya tiene una etiqueta de comunidad (Palermo, Boedo o Villa Devoto), recibe un mensaje corto y termina.
+2. Si no: **etiqueta** `Entró sin frase` (sirve también para contarlos dentro de ManyChat).
+3. **Solicitud externa** con el aviso (mismo método, URL y encabezados `x-cliente` y `x-webhook-secret` que los otros avisos):
    `{"evento": "sin_clasificar", "contact": <pastilla Full Contact Data>}`
    **No lleva `community_id`**: la persona todavía no eligió. Si se manda, el webhook lo ignora.
-3. El mensaje que le pide elegir su comunidad (lista o botones) y, al elegir, el pase al flow de comunidad que ya existe.
+4. El mensaje que le pide elegir su barrio (tres botones) y, al elegir, un botón de enlace que abre el chat con la frase de esa comunidad ya escrita: al enviarla, entra al flow de comunidades como si viniera de un anuncio.
 
 **Qué hace el webhook:** lo guarda en `ingreso_sin_clasificar` (db/035), **no** en `evento_crudo`: no cambia las entradas por comunidad ni la atribución. Responde `{"ok": true, "evento": "sin_clasificar"}`. Guarda el último mensaje de la persona (`contact.last_input_text`) para saber qué escribió. Si después la persona elige comunidad, su entrada se atribuye a esa comunidad como siempre y deja de figurar como pendiente.
 
 **Dónde se ve:** en **Overview**, las tarjetas *Entradas totales al flow*, *Escribieron y no eligieron comunidad* y *Tasa de clasificación* (aparecen cuando llegó el primer aviso); en **Data_Cruda**, el filtro **Sin clasificar** (con el teléfono y el mensaje, para poder contactarlas; solo Marketing).
 
 **Cómo verificar:** con un número de prueba, escribí algo que no sea la frase de ninguna comunidad (por ejemplo "hola"). Tiene que aparecer en Data_Cruda → Sin clasificar y en Overview. Después elegí una comunidad: la persona pasa a las entradas de esa comunidad y el número de "sin clasificar" baja en uno.
+
+### El flow "Consultas generales - wsp", como quedó armado (2026-11-11)
+
+**Disparadores** (el flow tiene tres; el segundo y el tercero comparten la misma exclusión):
+
+| # | Tipo | Reglas |
+|---|---|---|
+| 1 | **Respuesta predeterminada** | Habilitada, "una vez cada 24 horas" (con "cada vez" una persona recibiría la pregunta repetida) |
+| 2 | El usuario envía un mensaje | *contiene palabra completa:* `pruebaconsultas`, `información`, `informacion`, `info`, `consulta`, `duda`, `dudas`, `pregunta`, `ayuda`, `grupo` **y** *no contiene:* `unirme`, `comunidad` |
+| 3 | El usuario envía un mensaje | *contiene palabra completa:* `holaa`, `hola`, `buenas`, `buenos`, `buen` **y** *no contiene:* `unirme`, `comunidad` |
+
+Reglas del editor de ManyChat que condicionan este diseño: cada regla admite **hasta 10 palabras**; la "y" entre reglas es un **Y lógico** (se exigen las dos); no existe "es exactamente" (solo *contiene*, *contiene palabra completa*, *empieza con* y *no contiene*). La exclusión `unirme` / `comunidad` es obligatoria: la frase de las comunidades contiene `hola`, `quiero`, `unirme` y `comunidad`, y sin ella dispararía los dos flows a la vez. Las palabras de los disparadores 2 y 3 son un refuerzo; la red de seguridad es el disparador 1, que atrapa cualquier mensaje que ningún otro flow reconozca (un emoji, una foto, un audio).
+
+**Nodos:**
+
+1. *Condición:* ¿tiene la etiqueta Palermo, Boedo o Villa Devoto? **Sí** → mensaje "¡Gracias por escribirnos! 😊 Este canal es automático. Si necesitás algo, dejanos tu consulta y te respondemos a la brevedad." y termina. **No** → sigue.
+2. *Acciones:* añadir la etiqueta `Entró sin frase`.
+3. *Acciones #1:* **Solicitud externa** POST con `{"evento": "sin_clasificar", "contact": <Full Contact Data>}`. Va **antes** de preguntar, así el CRM registra a la persona aunque no toque ningún botón.
+4. *Enviar mensaje #1:* "¡Hola! 👋 Gracias por escribirle a Cortado en Jarrito. Para sumarte a tu comunidad de vecinos, elegí tu barrio:" con tres botones de respuesta: **Palermo**, **Villa Devoto**, **Boedo**.
+5. *Enviar mensajes #2, #3 y #4* (uno por botón): "Perfecto 🙌 Tocá el botón: se abre el chat con un mensaje ya escrito, solo tenés que enviarlo para unirte a la comunidad de …" con un botón de enlace ("Unirme a Palermo", "Unirme a Devoto", "Unirme a Boedo"). El texto del botón no puede pasar de **20 caracteres** (por eso "Devoto"). Las salidas de los botones de enlace quedan sin conectar.
+
+**Los tres links** abren el chat con el número de Cortado y la frase de la comunidad ya escrita. Formato: `https://wa.me/<número>?text=<frase codificada>`:
+
+| Barrio | Link |
+|---|---|
+| Palermo | `https://wa.me/5491132261920?text=Hola%2C%20quiero%20unirme%20a%20la%20comunidad%20de%20Cortado%20en%20Jarrito%20Palermo%20%E2%98%95` |
+| Villa Devoto | `https://wa.me/5491132261920?text=Hola%2C%20quiero%20unirme%20a%20la%20comunidad%20de%20Cortado%20en%20Jarrito%20Villa%20Devoto%20%E2%98%95` |
+| Boedo | `https://wa.me/5491132261920?text=Hola%2C%20quiero%20unirme%20a%20la%20comunidad%20de%20Cortado%20en%20Jarrito%20Boedo%20%E2%98%95` |
+
+- **La frase tiene que ser idéntica, carácter por carácter, a la que llega por WhatsApp.** El emoji final es **☕ (U+2615)**; el editor de plantillas de Meta lo muestra distinto (morado y chico), así que **no se copia de ahí**: se saca de los mensajes reales (Data_Cruda → Ver JSON → `contact.last_input_text`).
+- Si el **número** cambia, cambia en los tres links. Un número equivocado se nota porque el mensaje sale con **una sola tilde** y nunca llega al flow.
+- **Por qué links al chat y no un link de grupo:** un link de grupo no pasa por el flow de comunidades, así que la persona queda "sin clasificar" para siempre y no hay entrada, etiqueta, fila en la planilla, evento a Meta ni clic en "Me sumo". Con el link al chat, ese flow hace todo como con un anuncio.
+
+**Lo que se verificó el 2026-11-11** (contacto con las etiquetas quitadas, tocando Boedo): 21:37:25 aviso *sin clasificar* → 21:37:49 *trigger entregado* de Boedo → 21:37:53 evento **Aceptado** en Boedo (frase completa con ☕) → 21:37:56 *clic en Me sumo* de Boedo. Sin rechazos del webhook. Además: **tocar un botón de respuesta del flow nuevo no dispara el flow de comunidades** (aunque el texto contenga el nombre del barrio).
+
+**Pruebas de aceptación** (con un contacto de prueba; para el camino sin etiquetas, quitarle las de comunidad y devolvérselas al terminar):
+
+1. Contacto **con** etiquetas escribe "hola": recibe solo "Gracias por escribirnos".
+2. Contacto **sin** etiquetas escribe "hola" o "información" (o manda un emoji): recibe la pregunta de los barrios y aparece en Data_Cruda → Sin clasificar y en Overview.
+3. Manda la **frase completa de una comunidad**: responde **solo** el flow de comunidades.
+4. Toca un barrio y envía el mensaje: evento **Aceptado** en ese barrio. **Probar con Palermo o Boedo, no con Villa Devoto**: es la última rama y recibe todo lo que no coincide exacto, así que un emoji equivocado se vería correcto por casualidad.
+
+**Cómo volver atrás:** apagar o reemplazar la respuesta predeterminada (Configuración → canal WhatsApp → Respuesta predeterminada) y, si hace falta, quitar los disparadores 2 y 3 del flow. No se pierde ningún dato: los avisos ya guardados quedan en `ingreso_sin_clasificar`.
+
+### Estado anterior de la respuesta predeterminada (registro)
+
+Hasta el 2026-11-11 la respuesta predeterminada tenía cargada una **plantilla genérica de ManyChat en inglés** ("Service Menu": *Talk with Human*, *Report an Issue*, *Make a Suggestion*, *Stop messaging me*, con un mensaje "Greetings") y su disparador sin configurar ("When…"), por lo que nunca se activaba: quien escribía sin la frase no recibía respuesta ni dejaba rastro. Si se hubiera activado, habría mandado un menú en inglés ajeno al negocio, y *Stop messaging me* marca el **opt-out de WhatsApp** (la persona deja de poder recibir mensajes). Se reemplazó por "Consultas generales - wsp"; la plantilla no se usa ni se borró.
+
+### Planilla de ManyChat: mapeo de la acción "Insert Row" (Acciones #8)
+
+La acción final de los flows de comunidades escribe en la planilla "Cortado _en_Jarrito_ Comunidades" (pestaña "Hoja 1"). Mapeo vigente desde el 2026-11-08:
+
+| Columna | Campo de ManyChat | Nota |
+|---|---|---|
+| Fecha | **Última interacción del grupo WhatsApp** | Antes estaba el de Instagram: dejó de escribirse el 16/10 a las 15:22, cuando terminaron los ingresos por Instagram |
+| Nombre | Nombre | |
+| Teléfono | **WhatsApp ID** | El campo de sistema "Teléfono" llega vacío en WhatsApp. Dejar la columna como *Texto sin formato* para que no pase a notación científica |
+| Localidad | `Localidad_CABA` | |
+| Etiqueta Palermo / Boedo / Villa Devoto | las tres etiquetas | |
+| Estado | **Suscrito** | Es la fecha de suscripción del contacto (no un estado) |
+
+Al elegir el campo en el desplegable hay **dos "Última interacción", uno por canal (Instagram y WhatsApp), con el mismo nombre**: elegir el del grupo del canal que corresponda. Los contactos de Instagram no tienen teléfono. Ver el informe del diagnóstico: [`reference/informe-contactos-sin-registro-2026-11.md`](../reference/informe-contactos-sin-registro-2026-11.md).
