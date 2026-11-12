@@ -79,6 +79,16 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .tabla-metricas .th-gr-in{display:flex; align-items:center; gap:7px; padding:9px 12px; color:var(--gc); font-size:11.5px; font-weight:800; border-top:2px solid var(--gc); border-radius:6px 6px 0 0}
 .tabla-metricas .th-col{vertical-align:bottom; white-space:normal; min-width:104px; max-width:150px; padding:8px 10px 9px; font-size:11.5px; line-height:1.3; font-weight:700; color:var(--text-strong); background:color-mix(in srgb, var(--gc) 8%, var(--panel)); border-bottom:1px solid var(--border-strong); text-align:right}
 .tabla-metricas .th-txt{margin-right:4px}
+.semaforo{padding:10px 14px}
+.semaforo .sem-lista{display:flex; flex-wrap:wrap; gap:6px 18px; font-size:12px; margin:2px 0 6px}
+.semaforo .sem-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.semaforo .sem-item span{color:var(--text-muted)}
+.semaforo .sem-total{padding-left:14px; border-left:1px solid var(--border)}
+.semaforo .sem-leyenda{display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; margin:0 0 2px}
+.semaforo .sem-leyenda span{display:inline-flex; align-items:center; gap:5px}
+.semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
+.sem-verde{background:#4FD39A} .sem-amarillo{background:#FFB35C} .sem-rojo{background:#F5707A}
+.sem-revisar{background:#6E9BFF} .sem-pocos{background:transparent; border:1.5px solid var(--text-faint)}
 .tabla-metricas .th-fuente{display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-bottom:3px; font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-faint); white-space:nowrap}
 .tabla-metricas .th-fuente i{display:inline-block; width:6px; height:6px; border-radius:50%; flex:none}
 .tabla-metricas td.num{text-align:right; white-space:nowrap; background:color-mix(in srgb, var(--gc) 4%, transparent); font-variant-numeric:tabular-nums}
@@ -980,6 +990,41 @@ function cubreDesglose(totalDetalle, inversionTabla){
 }
 /* DESGLOSE:FIN */
 
+/* SEMAFORO:INICIO */
+// Semáforo de cobertura del tracking (PR #69): de cada 100 chats que Meta cuenta, cuántos figuran como entrada al flow.
+// Umbrales "realista de arranque" (propuesta para la PO, se suben cuando Boedo y Palermo mejoren). Es un indicador, no una igualdad:
+// Meta atribuye con ventana de 7 días y el CRM cuenta el primer contacto.
+const UMBRALES_COBERTURA = { verdeMas: 60, amarilloDesde: 35, minChats: 20 };
+function semaforoCobertura(conversaciones, entradas){
+  const conv = Number(conversaciones) || 0, ent = Number(entradas) || 0;
+  if (conv < UMBRALES_COBERTURA.minChats) return { estado: 'pocos', cobertura: null };
+  const cobertura = ent / conv * 100;
+  if (cobertura > 100) return { estado: 'revisar', cobertura };
+  if (cobertura > UMBRALES_COBERTURA.verdeMas) return { estado: 'verde', cobertura };
+  if (cobertura >= UMBRALES_COBERTURA.amarilloDesde) return { estado: 'amarillo', cobertura };
+  return { estado: 'rojo', cobertura };
+}
+const ETIQUETA_SEMAFORO = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', revisar: 'Revisar', pocos: 'Pocos datos' };
+/* SEMAFORO:FIN */
+
+// Sección chica al final de Control_Comunidades: una fila por comunidad (sin las campañas globales, que no tienen entradas propias) y el total.
+function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
+  const u = UMBRALES_COBERTURA;
+  const titulo = `<h3 style="font-size:13px; margin:0 0 4px">Semáforo de cobertura del tracking</h3>`;
+  if (canalActivo) return `<div class="card semaforo">${titulo}<div class="sub">Compara las conversaciones de Meta con las entradas de todos los canales: elegí Canal "Todos" para verlo.</div></div>`;
+  const item = (nombre, conv, ent, fuerte) => {
+    const s = semaforoCobertura(conv, ent);
+    const txt = s.cobertura == null ? `${fmtInt(conv)} chats` : `${fmtPct(s.cobertura)} · ${fmtInt(ent)} de ${fmtInt(conv)}`;
+    return `<span class="sem-item${fuerte ? ' sem-total' : ''}" title="${esc(ETIQUETA_SEMAFORO[s.estado])}"><i class="sem-dot sem-${s.estado}" aria-hidden="true"></i><b>${esc(nombre)}</b> <span>${esc(txt)}</span><span class="sr-only"> (${esc(ETIQUETA_SEMAFORO[s.estado])})</span></span>`;
+  };
+  const filas = comunidades.filter(c => !c.es_global).map(c => item(c.nombre, c.conversaciones_meta, c.clics_unicos, false)).join('');
+  return `<div class="card semaforo">${titulo}
+    <div class="sem-lista">${filas}${item('Total del cliente', totalConv, totalEnt, true)}</div>
+    <div class="sub sem-leyenda"><span><i class="sem-dot sem-verde"></i>más de ${u.verdeMas} %</span> <span><i class="sem-dot sem-amarillo"></i>${u.amarilloDesde} a ${u.verdeMas} %</span> <span><i class="sem-dot sem-rojo"></i>menos de ${u.amarilloDesde} %</span> <span><i class="sem-dot sem-revisar"></i>más de 100 %: revisar</span> <span><i class="sem-dot sem-pocos"></i>menos de ${u.minChats} chats: pocos datos</span></div>
+    <div class="sub">Cobertura = entradas al flow ÷ conversaciones de Meta del período. Umbrales de arranque, en revisión con la PO. Meta atribuye con ventana de 7 días y el CRM cuenta el primer contacto: es un indicador, no una igualdad.</div>
+  </div>`;
+}
+
 function renderDesglose(filas, inversionTabla, filtroNombre){
   if (filas == null) return `<div class="card"><h3>Desglose de campañas contempladas</h3><div class="sub">No se pudo cargar el desglose. La tabla de arriba no cambia.</div></div>`;
   const g = agruparDesglose(filas);
@@ -1089,7 +1134,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       ${t.diasSinEnlace > 0 ? `<div class="sub" style="color:var(--warn)">Clics en el enlace: faltan ${fmtInt(t.diasSinEnlace)} ${t.diasSinEnlace === 1 ? 'día' : 'días'} (comunidad × día) de este período. Se completan al volver a traer esos días de Meta ("Traer de Meta ahora"). El CTR y el costo por clic del enlace usan solo los días que ya lo traen.</div>` : ''}
       <div class="tbl-wrap"><table class="tabla-metricas"><caption class="sr-only">Métricas por comunidad, ordenadas por etapa del recorrido: ${tramosDeGrupos(visibles).map(x => x.grupo).join(', ')}</caption><thead><tr class="fila-grupos"><th rowspan="2" scope="col" class="th-com">Comunidad</th>${encabezadoGrupos}</tr><tr>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>
-    ${!esMarketing() ? '' : renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}`;
+    ${!esMarketing() ? '' : renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}
+    ${renderSemaforoCobertura(comunidades, t.convCom, t.ent, canalActivo)}`;
 }
 
 // Panel "Columnas": mostrar/ocultar, reordenar con ↑ ↓ o arrastrando, restablecer.

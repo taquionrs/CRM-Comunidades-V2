@@ -113,3 +113,17 @@ Pedido de Juan (2026-11-12): el CTR se arma con los **clics en el enlace**, no c
 Los clics en el enlace entran por dos caminos: "Traer de Meta ahora" (consulta directa a Windsor) y la tarea diaria (tabla `windsor_raw.facebook_ads`). Si la tarea no entrega `actions_link_click`, la conversión de las 06:30 reescribía los días con NULL y las columnas volvían a "Sin fuente".
 
 `db/038` ajusta `_windsor_aplicar`: si el dato nuevo viene vacío se conserva el que ya estaba (en `meta_ads_metrica`, `meta_ads_metrica_global` y `ads_campana_dia`). Un día que nunca lo tuvo sigue en NULL, y un 0 real sí pisa el valor anterior. Orden: aplicar `db/038`; no requiere cambios en el panel.
+
+## Ajuste del 12/11 (PR #69): semáforo de cobertura, escenario "realista de arranque"
+
+Sección chica al final de Control_Comunidades (debajo del desglose, visible para Marketing y General): una fila por comunidad y el total del cliente, con un punto de color y la cobertura (entradas al flow ÷ conversaciones de Meta).
+
+| Color | Regla |
+|---|---|
+| Verde | más de 60 % |
+| Amarillo | de 35 a 60 % |
+| Rojo | menos de 35 % |
+| Azul "revisar" | más de 100 % (ventana de 7 días de Meta y primer contacto del CRM: no se pinta verde) |
+| Hueco "pocos datos" | menos de 20 chats en el período |
+
+Con los datos del 02 al 10/11: Devoto 58 % amarillo; Boedo 16 %, Palermo 14 % y el total 31 % rojos. Los umbrales son una **propuesta de arranque, pendiente de aprobación de la PO**; se suben cuando Boedo y Palermo mejoren (constante `UMBRALES_COBERTURA` en `public/index.html`). Con filtro de canal la sección pide volver a "Todos". Sin cambios en la base.
