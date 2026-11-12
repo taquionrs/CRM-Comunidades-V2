@@ -95,16 +95,21 @@ test("el desglose trae las impresiones de los días con clics en el enlace (base
   assert.deepEqual(filas.map((f) => [f.campana, Number(f.impresiones), Number(f.impresiones_enlace)]), [["CAMP_GLOBAL", 1200, 500], ["CAMP_WSP", 6000, 3000]]);
 });
 
-test("tarea diaria de Windsor: mientras la tabla no tenga actions_link_click el dato queda NULL; al agregar el campo se carga", async () => {
+test("tarea diaria de Windsor (db/038): sin actions_link_click no borra el dato que ya estaba; un día que nunca lo tuvo sigue en NULL; al agregar el campo se carga", async () => {
   await db.exec(`
     create table windsor_raw.facebook_ads (
       "date" date, account_id text, campaign text, adset_name text, spend numeric, impressions numeric, clicks numeric,
       actions_onsite_conversion_messaging_conversation_started_7d numeric, actions_onsite_conversion_lead_grouped numeric);
     insert into windsor_raw.facebook_ads values (current_date - 3, null, 'CAMP_WSP', 'ADSET_BOEDO', 100, 1000, 40, 5, 0);
+    insert into windsor_raw.facebook_ads values (current_date - 1, null, 'CAMP_WSP', 'ADSET_BOEDO', 300, 3000, 90, 3, 0);
   `);
   await db.query(`select * from ${S}.sincronizar_meta_desde_windsor('windsor_raw.facebook_ads')`);
   let { rows } = await db.query(`select clics_enlace from ${S}.meta_ads_metrica where comunidad_id = $1 and fecha = current_date - 3`, [COM_A]);
-  assert.equal(rows[0].clics_enlace, null, "sin la columna, el dato queda sin cargar");
+  assert.equal(rows[0].clics_enlace, 30, "la tabla de Windsor no trae el campo: se conserva el valor que ya había (el de 'Traer de Meta ahora')");
+  const { rows: det0 } = await db.query(`select clics_enlace from ${S}.ads_campana_dia where comunidad_id = $1 and fecha = current_date - 3`, [COM_A]);
+  assert.equal(det0[0].clics_enlace, 30, "el detalle por campaña también se conserva");
+  const { rows: nunca } = await db.query(`select clics_enlace from ${S}.meta_ads_metrica where comunidad_id = $1 and fecha = current_date - 1`, [COM_A]);
+  assert.equal(nunca[0].clics_enlace, null, "un día que nunca tuvo el dato sigue en NULL (no se inventa un 0)");
 
   await db.exec(`alter table windsor_raw.facebook_ads add column actions_link_click numeric; update windsor_raw.facebook_ads set actions_link_click = 33;`);
   await db.query(`select * from ${S}.sincronizar_meta_desde_windsor('windsor_raw.facebook_ads')`);
@@ -112,4 +117,9 @@ test("tarea diaria de Windsor: mientras la tabla no tenga actions_link_click el 
   assert.equal(rows[0].clics_enlace, 33);
   const { rows: det } = await db.query(`select clics_enlace from ${S}.ads_campana_dia where comunidad_id = $1 and fecha = current_date - 3`, [COM_A]);
   assert.equal(det[0].clics_enlace, 33, "el detalle por campaña también");
+  // Un 0 real es un dato: pisa el valor anterior (solo NULL conserva).
+  await db.exec(`update windsor_raw.facebook_ads set actions_link_click = 0 where "date" = current_date - 3`);
+  await db.query(`select * from ${S}.sincronizar_meta_desde_windsor('windsor_raw.facebook_ads')`);
+  ({ rows } = await db.query(`select clics_enlace from ${S}.meta_ads_metrica where comunidad_id = $1 and fecha = current_date - 3`, [COM_A]));
+  assert.equal(rows[0].clics_enlace, 0);
 });
