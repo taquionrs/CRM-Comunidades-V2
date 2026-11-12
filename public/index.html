@@ -794,9 +794,6 @@ const COLUMNAS_CONTROL = [
     info:'Inversión ÷ Clics en el enlace (Ads Manager lo llama "CPC (costo por clic en el enlace)"). Se calcula solo con los días que ya traen los clics en el enlace.',
     celda:(c)=>c.clics_enlace == null ? vacio('sin_fuente', NA_ENLACE) : vMoneda(c.cpc_enlace),
     total:(t)=>t.clicsEnlace == null ? vacio('sin_fuente', NA_ENLACE) : vMoneda(t.razon(t.invEnlace, t.clicsEnlace)) },
-  { id:'ctr', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'CTR (todos los clics)',
-    info:'Clics totales ÷ Impresiones. Cuenta todos los clics del anuncio, no solo los que van al enlace, por eso suele ser mayor que el CTR del enlace.',
-    celda:(c)=>vPct(c.ctr_anuncio_pct), total:(t)=>vPct(t.razon(t.clics, t.impresiones, 100)) },
 
   // ---- 2. Intención: la persona abre el chat
   { id:'conversaciones', grupo:'Intención', fuente:'Meta Ads', etiqueta:'Conversaciones',
@@ -955,10 +952,12 @@ function validarRangoMetaVivo(desde, hasta, hoy){
 // Filas de la base: una por medio · campaña · conjunto · comunidad. Se agrupa por medio → campaña, con los conjuntos adentro.
 function agruparDesglose(filas){
   const n = (v) => Number(v) || 0;
-  // clicsEnlace: suma de los clics en el enlace; conEnlace = false si ningún día del grupo trae el dato (se muestra "—", no 0).
+  // clicsEnlace: suma de los clics en el enlace; impEnlace: impresiones de los días que traen ese dato (base del CTR del enlace);
+  // conEnlace = false si ningún día del grupo trae el dato (se muestra "—", no 0).
   const suma = (a, f) => ({ inversion: a.inversion + n(f.inversion), conversaciones: a.conversaciones + n(f.conversaciones), clics: a.clics + n(f.clics), impresiones: a.impresiones + n(f.impresiones),
+    impEnlace: a.impEnlace + n(f.impresiones_enlace ?? f.impEnlace),
     clicsEnlace: a.clicsEnlace + n(f.clics_enlace ?? f.clicsEnlace), conEnlace: a.conEnlace || f.clics_enlace != null || f.conEnlace === true });
-  const cero = () => ({ inversion: 0, conversaciones: 0, clics: 0, impresiones: 0, clicsEnlace: 0, conEnlace: false });
+  const cero = () => ({ inversion: 0, conversaciones: 0, clics: 0, impresiones: 0, impEnlace: 0, clicsEnlace: 0, conEnlace: false });
   const medios = new Map();
   for (const f of filas || []) {
     const medio = f.medio || 'Sin medio';
@@ -985,10 +984,10 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
   if (filas == null) return `<div class="card"><h3>Desglose de campañas contempladas</h3><div class="sub">No se pudo cargar el desglose. La tabla de arriba no cambia.</div></div>`;
   const g = agruparDesglose(filas);
   const cub = cubreDesglose(g.total.inversion, inversionTabla);
-  const ctr = (x) => x.impresiones > 0 ? fmtPct(x.clics / x.impresiones * 100) : '—';
+  const ctr = (x) => x.conEnlace && x.impEnlace > 0 ? fmtPct(x.clicsEnlace / x.impEnlace * 100) : '—';
   const cpc = (x) => x.conversaciones > 0 ? fmtMoney(x.inversion / x.conversaciones) : '—';
-  const nums = (x) => `<td class="num">${fmtMoney(x.inversion)}</td><td class="num">${fmtInt(x.conversaciones)}</td><td class="num">${cpc(x)}</td><td class="num">${x.conEnlace ? fmtInt(x.clicsEnlace) : '—'}</td><td class="num">${fmtInt(x.clics)}</td><td class="num">${ctr(x)}</td>`;
-  const cabecera = (primera) => `<thead><tr><th scope="col">${primera}</th><th scope="col" class="num">Inversión</th><th scope="col" class="num">Conversaciones</th><th scope="col" class="num" title="Costo por mensaje iniciado: inversión ÷ conversaciones">CPMI</th><th scope="col" class="num" title="Clics en el enlace del anuncio (— si ese período todavía no trae el dato)">Clics enlace</th><th scope="col" class="num" title="Todos los clics del anuncio, no solo los del enlace">Clics (todos)</th><th scope="col" class="num">CTR</th></tr></thead>`;
+  const nums = (x) => `<td class="num">${fmtMoney(x.inversion)}</td><td class="num">${fmtInt(x.conversaciones)}</td><td class="num">${cpc(x)}</td><td class="num">${x.conEnlace ? fmtInt(x.clicsEnlace) : '—'}</td><td class="num">${ctr(x)}</td>`;
+  const cabecera = (primera) => `<thead><tr><th scope="col">${primera}</th><th scope="col" class="num">Inversión</th><th scope="col" class="num">Conversaciones</th><th scope="col" class="num" title="Costo por mensaje iniciado: inversión ÷ conversaciones">CPMI</th><th scope="col" class="num" title="Clics en el enlace del anuncio (— si ese período todavía no trae el dato)">Clics enlace</th><th scope="col" class="num" title="Clics en el enlace ÷ impresiones, solo con los días que ya traen los clics en el enlace">CTR del enlace</th></tr></thead>`;
   const aviso = cub.completo ? '' : `<div class="sub" style="color:var(--warn)">${g.total.inversion > 0
     ? `El detalle suma ${fmtMoney(g.total.inversion)} y la tabla de arriba ${fmtMoney(inversionTabla)}: faltan ${fmtMoney(cub.falta)} de días que todavía no tienen detalle por campaña.`
     : `Hay inversión en la tabla de arriba (${fmtMoney(inversionTabla)}) pero todavía no hay detalle por campaña en este período.`} Se completa con el próximo traído de Windsor o con "Traer de Meta ahora" sobre esas fechas.</div>`;
@@ -1004,7 +1003,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
   return `<div class="card"><h3>Desglose de campañas contempladas</h3>
       <div class="sub">Solo las campañas que suman en la tabla de arriba, agrupadas por medio${filtroNombre ? ` · comunidad: ${esc(filtroNombre)}` : ''}. Hoy: Meta Ads; si se suman otros medios (por ejemplo Google Ads) aparecen acá. Respeta el período elegido.</div>
       ${aviso}${cuerpo}
-      ${g.medios.length ? `<div class="sub" style="margin-top:8px"><b>Total del desglose</b>: ${fmtMoney(g.total.inversion)} · ${fmtInt(g.total.conversaciones)} conversaciones · ${fmtInt(g.total.clics)} clics</div>` : ''}
+      ${g.medios.length ? `<div class="sub" style="margin-top:8px"><b>Total del desglose</b>: ${fmtMoney(g.total.inversion)} · ${fmtInt(g.total.conversaciones)} conversaciones · ${g.total.conEnlace ? fmtInt(g.total.clicsEnlace) : '—'} clics en el enlace</div>` : ''}
     </div>`;
 }
 
