@@ -94,3 +94,16 @@ En negrita, lo nuevo. Se retira "Entradas / conversaciones" (cobertura): el desf
 | **Semáforo de cobertura** | Esperar la aprobación de los umbrales |
 | **Flow de "sin clasificar" en ManyChat** | Pendiente del lado de ManyChat; mientras tanto la columna dice 0 |
 | **Arreglar el hueco de Boedo y la pauta de Palermo** | Son decisiones de operación (probar el anuncio desde un celular, plantilla y flow en ManyChat, objetivo de la campaña); el panel ahora lo hace visible |
+
+## Ajuste del 12/11 (PR #67): el CTR sale de los clics en el enlace
+
+Pedido de Juan (2026-11-12): el CTR se arma con los **clics en el enlace**, no con todos los clics.
+
+| Qué | Cambio |
+|---|---|
+| Control_Comunidades | Se retira la columna "CTR (todos los clics)". El único CTR es **"CTR del enlace"** (clics en el enlace ÷ impresiones, solo días con dato) |
+| Desglose por campaña | Se retira "Clics (todos)". La columna CTR pasa a ser "CTR del enlace" y el total dice "clics en el enlace" |
+| `db/037` | `desglose_campanas` devuelve también `impresiones_enlace` (impresiones de los días con clics en el enlace) para que el CTR del desglose no salga bajo cuando hay días sin el dato. Mismos permisos: solo Marketing |
+| Se mantiene | La base sigue guardando `clics` y `ctr_anuncio_pct`; la sección Campañas (lista de campañas de Windsor) sigue mostrando los clics totales que trae el campo `clicks` |
+
+**Windsor:** el CTR ya no necesita el campo `clicks`, pero la lista de Campañas sí lo lee. Si se saca `clicks` de la tarea, esa lista muestra 0 clics para los días nuevos. Conviene dejarlo.

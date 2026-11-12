@@ -64,6 +64,21 @@ test("cubreDesglose: completo si coincide con la tabla (hasta $1 por redondeo); 
   assert.equal(cubreDesglose(0, 0).completo, true);
 });
 
+test("el CTR del desglose es de los clics en el enlace y usa solo las impresiones de los días con dato", () => {
+  const f = (clics_enlace, impresiones_enlace) => ({ medio: "Meta Ads", campana: "C", adset: "A", comunidad_nombre: "Boedo", inversion: 10, conversaciones: 1, clics: 999, impresiones: 6000, clics_enlace, impresiones_enlace });
+  const g = agruparDesglose([f(100, 3000), f(50, 1000)]);
+  assert.equal(g.total.clicsEnlace, 150);
+  assert.equal(g.total.impEnlace, 4000);   // CTR = 150 ÷ 4.000 = 3,75 % (no 150 ÷ 12.000)
+  assert.equal(g.total.conEnlace, true);
+  const sin = agruparDesglose([f(null, 0)]);
+  assert.equal(sin.total.conEnlace, false);
+  assert.equal(sin.total.impEnlace, 0);
+  // la tabla del desglose ya no muestra "Clics (todos)" y su CTR es el del enlace
+  assert.doesNotMatch(html, /Clics \(todos\)<\/th>/);
+  assert.match(html, />CTR del enlace<\/th>/);
+  assert.match(html, /const ctr = \(x\) => x\.conEnlace && x\.impEnlace > 0 \? fmtPct\(x\.clicsEnlace \/ x\.impEnlace \* 100\)/);
+});
+
 test("el panel carga el desglose sin romper la tabla si falla, y lo dibuja debajo de la tabla", () => {
   assert.match(html, /rpc\('desglose_campanas'/);
   assert.match(html, /if \(error\) \{ console\.warn\('desglose_campanas:'[^}]*return null;/);

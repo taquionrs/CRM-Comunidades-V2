@@ -89,6 +89,12 @@ test("el desglose por campaña trae los clics en el enlace (solo Marketing)", as
   await assert.rejects(como(db, sesion("general"), (tx) => tx.query(`select * from ${S}.desglose_campanas($1::uuid, null, null, null)`, [CLI])));
 });
 
+test("el desglose trae las impresiones de los días con clics en el enlace (base del CTR del enlace, db/037)", async () => {
+  const filas = (await como(db, sesion("mkt"), (tx) => tx.query(`select campana, impresiones, impresiones_enlace from ${S}.desglose_campanas($1::uuid, null, null, null) order by campana`, [CLI]))).rows;
+  // CAMP_WSP: 6.000 impresiones en 3 días, pero solo 3.000 (D1 y D2) traen clics en el enlace; CAMP_GLOBAL: 1.200 en total y 500 con el dato.
+  assert.deepEqual(filas.map((f) => [f.campana, Number(f.impresiones), Number(f.impresiones_enlace)]), [["CAMP_GLOBAL", 1200, 500], ["CAMP_WSP", 6000, 3000]]);
+});
+
 test("tarea diaria de Windsor: mientras la tabla no tenga actions_link_click el dato queda NULL; al agregar el campo se carga", async () => {
   await db.exec(`
     create table windsor_raw.facebook_ads (
