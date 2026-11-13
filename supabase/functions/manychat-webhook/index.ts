@@ -55,11 +55,16 @@
 // Avisos sin contacto (PR #64, db/035): "evento": "sin_clasificar" lo manda la respuesta por defecto de ManyChat cuando alguien le
 // escribe al número y no dispara ningún flow de comunidad. No lleva community_id; queda en ingreso_sin_clasificar.
 //
+// Código por anuncio (PR #70, db/039): si el mensaje de la persona (contact.last_input_text) trae el código corto de un anuncio
+// del catálogo anuncio_codigo ("P1"), se guarda en la columna anuncio_codigo de la entrada o del aviso sin clasificar. Si no
+// hay código, o el catálogo no se puede leer, el contacto entra igual y queda sin anuncio: nunca se rechaza por esto. La columna
+// solo se escribe cuando hay código, así la función puede desplegarse antes de aplicar db/039 sin romper nada.
+//
 // Deploy: `supabase functions deploy manychat-webhook`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Tipos de aviso (contacto, trigger, clic_me_sumo, sin_clasificar) y el texto del mensaje: lógica pura, probada desde Node.
-import { mensajeDeContacto, tipoDeAviso } from "./avisos.mjs";
+import { codigoDeAnuncio, mensajeDeContacto, tipoDeAviso } from "./avisos.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -307,6 +312,21 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Código de anuncio del mensaje (db/039). Cualquier problema con el catálogo deja el código en null.
+  let anuncioCodigo: string | null = null;
+  try {
+    const mensaje = mensajeDeContacto(contact);
+    if (mensaje && (tipoAviso === "contacto" || tipoAviso === "sin_clasificar")) {
+      const { data: codigos, error: errCodigos } = await admin
+        .schema("crm_comunidades_v2")
+        .from("anuncio_codigo")
+        .select("codigo")
+        .eq("cliente_id", cliente.id)
+        .eq("activo", true);
+      if (!errCodigos) anuncioCodigo = codigoDeAnuncio(mensaje, (codigos ?? []).map((c: { codigo: string }) => c.codigo));
+    }
+  } catch (_) { /* el código es secundario */ }
+
   // Aviso de "le escribió al número y todavía no eligió comunidad" (db/035): "evento": "sin_clasificar". Es el único aviso
   // que NO lleva comunidad (justamente porque la persona todavía no la eligió): se guarda en ingreso_sin_clasificar y
   // nunca en evento_crudo, así no toca clics únicos ni la atribución. Si manda community_id, se ignora.
@@ -314,7 +334,7 @@ Deno.serve(async (req) => {
     const { error: errSin } = await admin
       .schema("crm_comunidades_v2")
       .from("ingreso_sin_clasificar")
-      .insert({ cliente_id: cliente.id, telefono_id: identificador, mensaje: mensajeDeContacto(contact), payload: body });
+      .insert({ cliente_id: cliente.id, telefono_id: identificador, mensaje: mensajeDeContacto(contact), payload: body, ...(anuncioCodigo ? { anuncio_codigo: anuncioCodigo } : {}) });
     if (errSin) return await rechazar(500, errSin.message, `Error al guardar el aviso (sin_clasificar): ${errSin.message}`, { telefono: identificador });
     return json({ ok: true, evento: "sin_clasificar", telefono_normalizado: identificador, canal });
   }
@@ -369,6 +389,7 @@ Deno.serve(async (req) => {
       telefono_id: identificador,
       tipo: "webhook_manychat",
       payload: body,
+      ...(anuncioCodigo ? { anuncio_codigo: anuncioCodigo } : {}),
     })
     .select()
     .maybeSingle();
@@ -400,5 +421,5 @@ Deno.serve(async (req) => {
     if (error) avisos.push(`No se pudo guardar el email: ${error.message}`);
   }
 
-  return json({ data: evento, telefono_normalizado: identificador, canal, aviso: avisos.length ? avisos.join(" · ") : undefined });
+  return json({ data: evento, telefono_normalizado: identificador, canal, anuncio_codigo: anuncioCodigo ?? undefined, aviso: avisos.length ? avisos.join(" · ") : undefined });
 });

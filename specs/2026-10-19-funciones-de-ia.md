@@ -1,6 +1,6 @@
 # Funciones de IA en el CRM (entrada de roadmap)
 
-**Estado:** idea anotada el 19/10/2026. No hay nada construido ni decidido todavía.
+**Estado:** idea anotada el 19/10/2026. El 13/11/2026 se retomó como etapa 5 de `specs/2026-11-13-centro-de-rendimiento-por-anuncio.md` (prueba con OpenRouter, 5 USD por mes, solo datos agregados).
 
 ## Objetivo
 Sumar al CRM funciones de IA que **bajen el costo de operar cada comunidad**, con línea de base declarada antes y medición después (regla de la carta oferta del rol: "sin línea de base no hay claim de productividad").

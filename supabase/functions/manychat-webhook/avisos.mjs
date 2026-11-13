@@ -26,3 +26,22 @@ export function mensajeDeContacto(contact, maximo = 500) {
   const t = v.trim();
   return t.length ? t.slice(0, maximo) : null;
 }
+
+// Códigos de anuncio que pueden venir dentro del mensaje (PR #70, db/039): 1 a 3 letras + 1 a 3 números ("P1", "pa12"),
+// como palabra suelta. Devuelve los candidatos en mayúsculas, sin repetir y en el orden en que aparecen. El webhook los
+// compara contra el catálogo anuncio_codigo: un candidato que no está ahí se ignora (así "A1" dentro de una dirección no cuenta).
+export function codigosCandidatos(texto) {
+  if (typeof texto !== "string") return [];
+  const vistos = [];
+  for (const m of texto.matchAll(/(?<![\p{L}\p{N}])([A-Za-z]{1,3}\d{1,3})(?![\p{L}\p{N}])/gu)) {
+    const c = m[1].toUpperCase();
+    if (!vistos.includes(c)) vistos.push(c);
+  }
+  return vistos;
+}
+
+// De los candidatos del mensaje, el primero que existe y está activo en el catálogo del cliente (lista de códigos activos).
+export function codigoDeAnuncio(texto, codigosActivos) {
+  const activos = new Set((codigosActivos ?? []).map((c) => String(c).toUpperCase()));
+  return codigosCandidatos(texto).find((c) => activos.has(c)) ?? null;
+}
