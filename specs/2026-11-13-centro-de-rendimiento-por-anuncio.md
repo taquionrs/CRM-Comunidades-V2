@@ -1,13 +1,13 @@
 # Spec — Centro de rendimiento por anuncio (código por anuncio, datos de Windsor, panel e IA)
 
-Estado: **etapa 1 armada en la PR #70 (2026-11-13); etapas 2 a 5 por construir.**
+Estado: **etapa 1 fusionada y aplicada (PR #70, 2026-11-13); etapa 2 en la PR #71; etapas 3 a 5 por construir.**
 Pedido de Juan Marroncle (2026-11-13), a partir del análisis de tracking para el 1:1 con la PO del mismo día.
 
 ## Para qué
 
 Hoy el CRM sabe **la zona que eligió la persona**, pero no **el anuncio que vio**. Meta cuenta 201 conversaciones iniciadas y el CRM registra 62 entradas al flow (02 al 10/11, 31 %). Sin saber de qué anuncio viene cada persona no se puede decir qué anuncio trae gente que entra a la comunidad, ni dónde está el hueco de Boedo (16 %) o de Palermo (14 %).
 
-Objetivo: una sección aparte del panel, **debajo de Control_Comunidades**, que muestre el rendimiento **por anuncio** (gasto de Meta + entradas del CRM) y ayude a decidir optimizaciones, con una capa de IA que ayude a leerlo.
+Objetivo: un bloque **dentro de Control_Comunidades, al final de la página** (hay que bajar para verlo; decisión de Juan del 13/11, antes pensado como sección aparte), que muestre el rendimiento **por anuncio** (gasto de Meta + entradas del CRM) y ayude a decidir optimizaciones, con una capa de IA que ayude a leerlo.
 
 Principio: **no perder ningún dato**. Todo lo que llega queda guardado tal cual; lo nuevo es un dato extra, nunca un filtro.
 
@@ -16,8 +16,8 @@ Principio: **no perder ningún dato**. Todo lo que llega queda guardado tal cual
 | # | Etapa | PR | Depende de |
 |---|---|---|---|
 | 1 | Código por anuncio (piloto en Palermo) | #70 | — |
-| 2 | Datos por anuncio desde Windsor | por definir | — (puede ir en paralelo a la 1) |
-| 3 | Sección "Rendimiento" (tabla por anuncio y filtros) | por definir | 1 y 2 |
+| 2 | Datos por anuncio desde Windsor | #71 | — (puede ir en paralelo a la 1) |
+| 3 | Bloque "Rendimiento" dentro de Control_Comunidades (tabla por anuncio y filtros) | por definir | 1 y 2 |
 | 4 | Alertas y comparaciones | por definir | 3 |
 | 5 | IA con OpenRouter (prueba de 5 USD por mes) | por definir | 3 (mejor con la 4) |
 
@@ -34,21 +34,28 @@ Cada anuncio de Meta tiene su plantilla de mensaje, que termina con un código c
 
 **Criterio de éxito del piloto** (una semana con las 4 plantillas activas): qué porcentaje de las entradas de Palermo trae código reconocido, y cuántas entradas y "sin clasificar" aparecen por anuncio. **Umbral para seguir con Devoto y Boedo: a definir con la PO.** Si el porcentaje es bajo se evalúa otra forma (por ejemplo, el código al principio del mensaje).
 
-## Etapa 2 — Datos por anuncio desde Windsor
+## Etapa 2 — Datos por anuncio desde Windsor (PR #71)
 
-Hoy Windsor trae los datos por **conjunto de anuncios** (`adset_name`). Se piden además `ad_id` y `ad_name` y se guardan **en una tabla nueva**, un registro por día y anuncio. La sincronización actual por conjunto no se toca.
+Hoy Windsor llega por **conjunto de anuncios** y `meta_ads_metrica` guarda un registro por comunidad y día. Se agrega el mismo dato **por anuncio**, en una tabla nueva, sin tocar lo que ya funciona.
 
-- Campos por anuncio: fecha, `campaign_name`, `adset_name`, `ad_id`, `ad_name`, gasto, impresiones, clics, clics en el enlace (`actions_link_click`), conversaciones iniciadas (`messaging_conversation_started_7d`) y, si Windsor los entrega, alcance y frecuencia.
-- El anuncio se vincula al código por **nombre normalizado** (mismo criterio que `comunidad_meta_origen`, db/010): `anuncio_codigo.anuncio_nombre` ↔ `ad_name`. Para que sea estable se guarda también el `ad_id` en el catálogo la primera vez que se cruza.
-- La zona se toma del conjunto de anuncios (ya mapeado en `comunidad_meta_origen`).
-- Idempotente: reimportar un día no duplica ni borra otros días (misma regla que PR #68).
-- Los datos llegan **al día siguiente** (Windsor). Para "hoy" sigue sirviendo el panel en vivo.
+**Cómo llega (cambio respecto del plan original).** En lugar de agregar campos a la tarea diaria de Windsor, una Edge Function nueva (`meta-anuncios`) consulta la API de Windsor con la clave que ya está cargada (`WINDSOR_API_KEY`, la misma de `meta-en-vivo`). Así no hay que tocar la cuenta de Windsor y la tarea actual por conjunto queda intacta. Se pide por rango (hasta 31 días, en ventanas de 14), a pedido, igual que "Traer de Meta ahora".
 
-Riesgo a verificar al empezar: que Windsor entregue el campo de conversaciones a nivel anuncio con el mismo valor que a nivel conjunto (se comprueba sumando los anuncios de un conjunto contra el conjunto, como se hizo con los clics: 11.616 vs 11.615).
+- `db/040`: tabla `meta_ads_anuncio_metrica` (un registro por día y `ad_id`: gasto, impresiones, clics, clics en el enlace, conversaciones), función `meta_anuncios_aplicar()` (solo el servidor) y `meta_anuncios_cuadre()` (solo Marketing).
+- Campos pedidos: fecha, cuenta, campaña, conjunto, `ad_id`, `ad_name`, gasto, impresiones, clics, clics en el enlace (`actions_link_click`) y conversaciones iniciadas (`..._conversation_started_7d`).
+- **Mismas reglas de siempre** para asignar la comunidad: `comunidad_meta_origen` (campaña + conjunto), cuenta publicitaria del cliente, campañas que no cuentan. Una fila sin `ad_id` no se guarda y se informa; un conjunto sin comunidad no se asigna y se informa con su gasto.
+- **Idempotente y seguro:** volver a traer el mismo rango reemplaza esos días solo para los clientes que llegaron; una respuesta vacía de Windsor no borra nada; hay una pausa de 45 segundos entre consultas.
+- **Cuadre:** `meta_anuncios_cuadre()` compara por comunidad la suma de los anuncios contra `meta_ads_metrica` (gasto, conversaciones, clics en el enlace). Es la prueba de que no se perdió ni duplicó nada, como el control 11.616 vs 11.615 de los clics.
+- El gasto es plata: lo lee solo Marketing; nadie escribe desde el panel.
+- El anuncio se vincula al código por **nombre normalizado** (`anuncio_codigo.anuncio_nombre` ↔ `ad_name`). Guardar el `ad_id` en el catálogo queda para la etapa 3.
+- Los datos llegan cuando se consulta. La carga automática diaria **no está en esta PR**: la dispara el botón del bloque Rendimiento (etapa 3) y se decide después si se programa.
 
-## Etapa 3 — Sección "Rendimiento"
+**No incluye todavía:** alcance y frecuencia. No se suman entre días (el alcance de una semana no es la suma de los días), así que necesitan una consulta por período. Se resuelve en la etapa 3 o 4.
 
-Nueva sección del menú, **debajo de Control_Comunidades**. Una fila por anuncio, con filtros de cliente, zona, campaña y fechas (hora de Argentina, mismos selectores del resto del panel).
+Riesgos a verificar con datos reales al desplegar: que los nombres de campo `ad_id` y `ad_name` los acepte el conector de Windsor, y que las conversaciones por anuncio sumen lo mismo que por conjunto (el cuadre lo muestra).
+
+## Etapa 3 — Bloque "Rendimiento" dentro de Control_Comunidades
+
+**No es una sección nueva del menú:** es un bloque al final de Control_Comunidades, debajo de la matriz y del desglose de campañas; no importa que haya que bajar para verlo. Comparte el período y la comunidad ya elegidos arriba. Una fila por anuncio, con filtros de cliente, zona, campaña y fechas (hora de Argentina, mismos selectores del resto del panel).
 
 Columnas (en el orden del recorrido de la persona, como en PR #65):
 
@@ -70,7 +77,7 @@ Reglas:
 
 ## Etapa 4 — Alertas y comparaciones
 
-Reglas simples, calculadas por el CRM (no por IA), visibles en la misma sección:
+Reglas simples, calculadas por el CRM (no por IA), visibles en el mismo bloque:
 - Anuncio con gasto alto y cero entradas en el período.
 - Anuncio con muchos chats y cobertura baja (posible problema de plantilla o de destino).
 - Anuncio con frecuencia alta o CTR en caída frente a la semana anterior.
