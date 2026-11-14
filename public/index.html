@@ -87,6 +87,13 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .semaforo .sem-leyenda{display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; margin:0 0 2px}
 .semaforo .sem-leyenda span{display:inline-flex; align-items:center; gap:5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
+.rendimiento .rend-cab{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px}
+.rendimiento .rend-tabla td:nth-child(2){text-align:left; white-space:nowrap}
+.rendimiento .rend-zona th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
+.rendimiento .rend-sin th, .rendimiento .rend-sin td{color:var(--text-muted); font-style:italic}
+.rendimiento .vacio-tenue{color:var(--text-faint); font-size:11.5px}
+.rendimiento .sem-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.rendimiento .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
 .sem-verde{background:#4FD39A} .sem-amarillo{background:#FFB35C} .sem-rojo{background:#F5707A}
 .sem-revisar{background:#6E9BFF} .sem-pocos{background:transparent; border:1.5px solid var(--text-faint)}
 .tabla-metricas .th-fuente{display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-bottom:3px; font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-faint); white-space:nowrap}
@@ -465,6 +472,12 @@ async function loadSinClasificar(f){
 async function loadDesgloseCampanas(desde, hasta, comunidad){
   const { data, error } = await supabase.rpc('desglose_campanas', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_comunidad: comunidad });
   if (error) { console.warn('desglose_campanas:', error.message); return null; }
+  return data || [];
+}
+// Rendimiento por anuncio (db/041): Meta por anuncio + entradas del CRM por código. Es plata: solo Marketing. Si falla, el resto de la página sigue igual.
+async function loadRendimientoAnuncios(desde, hasta, comunidad){
+  const { data, error } = await supabase.rpc('rendimiento_por_anuncio', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_comunidad: comunidad });
+  if (error) { console.warn('rendimiento_por_anuncio:', error.message); return null; }
   return data || [];
 }
 async function loadComunidades(){
@@ -1007,6 +1020,53 @@ function semaforoCobertura(conversaciones, entradas){
 const ETIQUETA_SEMAFORO = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', revisar: 'Revisar', pocos: 'Pocos datos' };
 /* SEMAFORO:FIN */
 
+/* RENDIMIENTO:INICIO */
+// Bloque "Rendimiento por anuncio" (PR #72) al final de Control_Comunidades. Funciones puras (se prueban en tests/panel-rendimiento.test.mjs).
+// Filas de la base (db/041): una por anuncio de Meta, más una por comunidad "sin código" con las entradas que no traían código.
+// Un anuncio SIN código todavía no se puede atribuir: sus entradas valen null y se muestran "—" (no 0).
+// "Etiqueta" corta del anuncio: los dos últimos tramos del nombre de Meta ("..._WHATSAPP_PALERMO_01" → "PALERMO_01"); el nombre completo va en el título.
+function etiquetaAnuncio(nombre){
+  const partes = String(nombre == null ? '' : nombre).split('_').filter(Boolean);
+  return partes.length > 2 ? partes.slice(-2).join('_') : String(nombre == null ? '' : nombre);
+}
+function agruparRendimiento(filas){
+  const n = (v) => Number(v) || 0;
+  const cero = () => ({ inversion: 0, impresiones: 0, clicsEnlace: 0, impEnlace: 0, conEnlace: false, conversaciones: 0, entradas: 0, sinClasificar: 0 });
+  const suma = (a, x) => ({ inversion: a.inversion + x.inversion, impresiones: a.impresiones + x.impresiones, clicsEnlace: a.clicsEnlace + x.clicsEnlace, impEnlace: a.impEnlace + x.impEnlace,
+    conEnlace: a.conEnlace || x.conEnlace, conversaciones: a.conversaciones + x.conversaciones, entradas: a.entradas + x.entradas, sinClasificar: a.sinClasificar + x.sinClasificar });
+  const zonas = new Map();
+  let ultimoDia = null;
+  for (const f of filas || []) {
+    const id = f.comunidad_id || f.comunidad;
+    if (!zonas.has(id)) zonas.set(id, { id, comunidad: f.comunidad || '', anuncios: [], sinCodigo: 0, tiene: false });
+    const z = zonas.get(id);
+    if (f.ad_nombre == null && f.codigo == null) { z.sinCodigo += n(f.entradas); continue; }   // fila "entradas sin código" de la comunidad
+    const instrumentado = !!f.instrumentado;
+    z.tiene = z.tiene || instrumentado;
+    if (f.ultimo_dia && (!ultimoDia || String(f.ultimo_dia).slice(0, 10) > ultimoDia)) ultimoDia = String(f.ultimo_dia).slice(0, 10);
+    z.anuncios.push({
+      codigo: f.codigo || null, nombre: f.ad_nombre || '', etiqueta: etiquetaAnuncio(f.ad_nombre), campana: f.campana_nombre || '', instrumentado,
+      dias: n(f.dias), inversion: n(f.inversion), impresiones: n(f.impresiones),
+      clicsEnlace: f.clics_enlace == null ? 0 : n(f.clics_enlace), conEnlace: f.clics_enlace != null, impEnlace: n(f.impresiones_enlace),
+      conversaciones: n(f.conversaciones),
+      entradas: instrumentado ? n(f.entradas) : null, sinClasificar: instrumentado ? n(f.sin_clasificar) : null,
+    });
+  }
+  const lista = [...zonas.values()].map(z => {
+    const anuncios = z.anuncios.sort((a, b) => b.inversion - a.inversion);
+    const tot = anuncios.reduce((a, x) => suma(a, { ...x, entradas: x.entradas || 0, sinClasificar: x.sinClasificar || 0 }), cero());
+    tot.entradas += z.sinCodigo;   // la suma de la zona coincide con "Entradas únicas" de la tabla de arriba
+    return { id: z.id, comunidad: z.comunidad, anuncios, sinCodigo: z.sinCodigo, tiene: z.tiene, total: tot };
+  }).sort((a, b) => a.comunidad.localeCompare(b.comunidad, 'es'));
+  const total = lista.reduce((a, z) => suma(a, z.total), cero());
+  // Cuántas de las entradas de las zonas con códigos traen código (criterio de éxito del piloto).
+  const piloto = lista.filter(z => z.tiene);
+  const conCodigo = piloto.reduce((s, z) => s + z.anuncios.reduce((m, a) => m + (a.entradas || 0), 0), 0);
+  const sinCodigo = piloto.reduce((s, z) => s + z.sinCodigo, 0);
+  return { zonas: lista, total, ultimoDia, codigo: { zonas: piloto.map(z => z.comunidad), conCodigo, sinCodigo, pct: conCodigo + sinCodigo > 0 ? conCodigo / (conCodigo + sinCodigo) * 100 : null } };
+}
+/* RENDIMIENTO:FIN */
+
 // Sección chica al final de Control_Comunidades: una fila por comunidad (sin las campañas globales, que no tienen entradas propias) y el total.
 function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
   const u = UMBRALES_COBERTURA;
@@ -1022,6 +1082,56 @@ function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
     <div class="sem-lista">${filas}${item('Total del cliente', totalConv, totalEnt, true)}</div>
     <div class="sub sem-leyenda"><span><i class="sem-dot sem-verde"></i>más de ${u.verdeMas} %</span> <span><i class="sem-dot sem-amarillo"></i>${u.amarilloDesde} a ${u.verdeMas} %</span> <span><i class="sem-dot sem-rojo"></i>menos de ${u.amarilloDesde} %</span> <span><i class="sem-dot sem-revisar"></i>más de 100 %: revisar</span> <span><i class="sem-dot sem-pocos"></i>menos de ${u.minChats} chats: pocos datos</span></div>
     <div class="sub">Cobertura = entradas al flow ÷ conversaciones de Meta del período. Umbrales de arranque, en revisión con la PO. Meta atribuye con ventana de 7 días y el CRM cuenta el primer contacto: es un indicador, no una igualdad.</div>
+  </div>`;
+}
+
+// Bloque "Rendimiento por anuncio" (PR #72, db/041): al final de Control_Comunidades, solo Marketing (lleva gasto). Una fila por anuncio de Meta;
+// las entradas del CRM solo se pueden atribuir a un anuncio cuya plantilla lleve el código (piloto: Palermo, P1 a P4).
+function renderRendimiento(filas, inversionTabla, filtroNombre, canalActivo){
+  const boton = `<button class="btn" id="btnAnuncios" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, el gasto, los clics y las conversaciones de cada anuncio">Traer anuncios de Meta</button>`;
+  const am = state.anunciosMeta;
+  const estado = `<div class="sub" id="anunciosEstado" role="status" style="margin:6px 0 0; ${am && am.tipo === 'error' ? 'color:var(--danger)' : am && am.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((am && am.texto) || '')}</div>`;
+  const cabecera = `<div class="rend-cab"><h3 style="margin:0">Rendimiento por anuncio</h3>${boton}</div>${estado}`;
+  if (filas == null) return `<div class="card rendimiento">${cabecera}<div class="sub">No se pudo cargar el rendimiento por anuncio (¿está aplicada la migración db/041?). La tabla de arriba no cambia.</div></div>`;
+  const g = agruparRendimiento(filas);
+  const cub = cubreDesglose(g.total.inversion, inversionTabla);
+  const conAnuncios = g.zonas.some(z => z.anuncios.length);
+  const ctr = (x) => x.conEnlace && x.impEnlace > 0 ? fmtPct(x.clicsEnlace / x.impEnlace * 100) : '—';
+  const cpc = (inv, conv) => conv > 0 ? fmtMoney(inv / conv) : '—';
+  const sem = (conv, ent) => {
+    const s = semaforoCobertura(conv, ent);
+    const txt = s.cobertura == null ? 'pocos datos' : fmtPct(s.cobertura);
+    return `<span class="sem-item" title="${esc(ETIQUETA_SEMAFORO[s.estado])}"><i class="sem-dot sem-${s.estado}" aria-hidden="true"></i><span>${esc(txt)}</span><span class="sr-only"> (${esc(ETIQUETA_SEMAFORO[s.estado])})</span></span>`;
+  };
+  const sinCod = `<span class="vacio-tenue" title="Esta plantilla todavía no lleva código: no se puede atribuir ninguna entrada a este anuncio">sin código</span>`;
+  const guion = `<span class="vacio-tenue" title="Sin código en la plantilla: todavía no se puede atribuir">—</span>`;
+  const fila = (a) => `<tr><th scope="row" class="td-com" title="${esc(a.nombre)}">${esc(a.etiqueta || a.nombre)}</th>
+      <td>${a.instrumentado ? `<b>${esc(a.codigo)}</b>` : sinCod}</td>
+      <td class="num">${fmtMoney(a.inversion)}</td><td class="num">${a.conEnlace ? fmtInt(a.clicsEnlace) : '—'}</td><td class="num">${ctr(a)}</td>
+      <td class="num">${fmtInt(a.conversaciones)}</td><td class="num">${cpc(a.inversion, a.conversaciones)}</td>
+      <td class="num">${a.instrumentado ? fmtInt(a.entradas) : guion}</td><td class="num">${a.instrumentado ? fmtInt(a.sinClasificar) : guion}</td>
+      <td class="num">${a.instrumentado && a.entradas > 0 ? fmtMoney(a.inversion / a.entradas) : (a.instrumentado ? '—' : guion)}</td>
+      <td class="num">${a.instrumentado ? sem(a.conversaciones, a.entradas) : guion}</td></tr>`;
+  const totales = (nombre, x) => `<tr class="totales"><th scope="row" class="td-com">${esc(nombre)}</th><td></td>
+      <td class="num">${fmtMoney(x.inversion)}</td><td class="num">${x.conEnlace ? fmtInt(x.clicsEnlace) : '—'}</td><td class="num">${ctr(x)}</td>
+      <td class="num">${fmtInt(x.conversaciones)}</td><td class="num">${cpc(x.inversion, x.conversaciones)}</td>
+      <td class="num">${fmtInt(x.entradas)}</td><td class="num">—</td><td class="num">${x.entradas > 0 ? fmtMoney(x.inversion / x.entradas) : '—'}</td>
+      <td class="num">${sem(x.conversaciones, x.entradas)}</td></tr>`;
+  const cuerpo = g.zonas.map(z => `<tr class="rend-zona"><th colspan="11" scope="colgroup">${esc(z.comunidad)}</th></tr>
+      ${z.anuncios.map(fila).join('')}
+      ${z.sinCodigo > 0 || z.tiene ? `<tr class="rend-sin"><th scope="row" class="td-com">Entradas sin código</th><td></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">${fmtInt(z.sinCodigo)}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>` : ''}
+      ${totales('Total ' + z.comunidad, z.total)}`).join('');
+  const avisoCubre = !conAnuncios ? '' : cub.completo ? '' : `<div class="sub" style="color:var(--warn)">${g.total.inversion > 0
+    ? `Los anuncios suman ${fmtMoney(g.total.inversion)} y la tabla de arriba ${fmtMoney(inversionTabla)}: faltan ${fmtMoney(cub.falta)} de días sin detalle por anuncio.`
+    : `Hay inversión en la tabla de arriba (${fmtMoney(inversionTabla)}) pero todavía no hay detalle por anuncio en este período.`} Se completa con "Traer anuncios de Meta" sobre esas fechas.</div>`;
+  const piloto = g.codigo.zonas.length
+    ? `<div class="sub"><b>Piloto del código por anuncio</b> (${esc(g.codigo.zonas.join(', '))}): ${g.codigo.pct == null ? 'todavía no hay entradas en este período.' : `${fmtInt(g.codigo.conCodigo)} de ${fmtInt(g.codigo.conCodigo + g.codigo.sinCodigo)} entradas traen código (${fmtPct(g.codigo.pct)}). Las demás no se pueden atribuir a un anuncio.`}</div>`
+    : `<div class="sub">Ninguna plantilla lleva código todavía: las columnas del CRM por anuncio quedan en "—" hasta que se agregue el código al mensaje de cada anuncio (ver docs/how-to/codigo-por-anuncio-palermo.md).</div>`;
+  return `<div class="card rendimiento">${cabecera}
+    <div class="sub">Cada fila es un anuncio de Meta${filtroNombre ? ` · comunidad: ${esc(filtroNombre)}` : ''}. Inversión, clics, CTR y chats vienen de Meta por anuncio; las entradas y los "sin clasificar" son del CRM y solo se asignan a un anuncio si su plantilla lleva el código. Respeta el período y la comunidad elegidos.${canalActivo ? ' Las entradas cuentan todos los canales (este bloque no se divide por canal).' : ''}${g.ultimoDia ? ` Datos de anuncios hasta el ${esc(fmtDia(g.ultimoDia))}.` : ''}</div>
+    ${piloto}${avisoCubre}
+    ${conAnuncios ? `<div class="tbl-wrap"><table class="tabla-metricas rend-tabla"><caption class="sr-only">Rendimiento por anuncio, agrupado por comunidad</caption><thead><tr><th scope="col" class="th-com">Anuncio</th><th scope="col">Código</th><th scope="col" class="num">Inversión</th><th scope="col" class="num" title="Clics en el enlace del anuncio (— si ese período todavía no trae el dato)">Clics enlace</th><th scope="col" class="num" title="Clics en el enlace ÷ impresiones, solo con los días que ya traen los clics en el enlace">CTR del enlace</th><th scope="col" class="num" title="Conversaciones iniciadas que cuenta Meta (ventana de 7 días)">Chats Meta</th><th scope="col" class="num" title="Inversión ÷ chats de Meta">Costo por chat</th><th scope="col" class="num" title="Personas cuyo primer contacto trajo el código de este anuncio">Entradas CRM</th><th scope="col" class="num" title="Escribieron con el código y todavía no eligieron comunidad">Sin clasificar</th><th scope="col" class="num" title="Inversión ÷ entradas del CRM con este código">Costo por entrada</th><th scope="col" class="num" title="Entradas con código ÷ chats de Meta de este anuncio. Indicador, no igualdad: Meta atribuye con ventana de 7 días">Cobertura</th></tr></thead><tbody>${cuerpo}</tbody></table></div>`
+      : `<div class="sub">Todavía no hay datos por anuncio en este período. Usá "Traer anuncios de Meta" (trae el rango de fechas elegido, o los últimos 7 días si no elegiste).</div>`}
   </div>`;
 }
 
@@ -1052,7 +1162,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
     </div>`;
 }
 
-function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null){
+function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.filter(c => !c.es_global).map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
@@ -1135,7 +1245,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       <div class="tbl-wrap"><table class="tabla-metricas"><caption class="sr-only">Métricas por comunidad, ordenadas por etapa del recorrido: ${tramosDeGrupos(visibles).map(x => x.grupo).join(', ')}</caption><thead><tr class="fila-grupos"><th rowspan="2" scope="col" class="th-com">Comunidad</th>${encabezadoGrupos}</tr><tr>${encabezados}</tr></thead><tbody>${filas}${filaTotal}</tbody></table></div>
     </div>
     ${!esMarketing() ? '' : renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}
-    ${renderSemaforoCobertura(comunidades, t.convCom, t.ent, canalActivo)}`;
+    ${renderSemaforoCobertura(comunidades, t.convCom, t.ent, canalActivo)}
+    ${!esMarketing() ? '' : renderRendimiento(rendimiento, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : sumaDe(comunidades.filter(c => !c.es_global), 'inversion'), filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '', canalActivo)}`;
 }
 
 // Panel "Columnas": mostrar/ocultar, reordenar con ↑ ↓ o arrastrando, restablecer.
@@ -1204,6 +1315,8 @@ function wireControl(){
   if (campanasBtn) campanasBtn.onclick = abrirCampanas;
   const metaVivo = document.getElementById('btnMetaVivo');
   if (metaVivo) metaVivo.onclick = traerMetaEnVivo;
+  const anuncios = document.getElementById('btnAnuncios');
+  if (anuncios) anuncios.onclick = traerAnunciosMeta;
 }
 
 /* ================= "Traer de Meta ahora": consulta a Windsor en vivo para el rango elegido (db/027) ================= */
@@ -1229,6 +1342,32 @@ async function traerMetaEnVivo(){
       (r.filas_sin_comunidad ? ` · atención: ${fmtInt(r.filas_sin_comunidad)} filas de una campaña mapeada no tienen comunidad (${fmtMoney(r.gasto_sin_comunidad)})` : '') + '.' };
   } catch (err) {
     state.metaVivo = { tipo: 'error', texto: 'No se pudo traer de Meta: ' + err.message };
+  }
+  renderAll();
+}
+
+/* ================= "Traer anuncios de Meta": consulta a Windsor por anuncio para el rango elegido (db/040, función meta-anuncios) ================= */
+async function traerAnunciosMeta(){
+  const estado = document.getElementById('anunciosEstado');
+  const boton = document.getElementById('btnAnuncios');
+  const v = validarRangoMetaVivo(state.fechaDesde, state.fechaHasta, hoyAR());
+  if (!v.ok) { state.anunciosMeta = { tipo: 'error', texto: v.error }; if (estado) { estado.textContent = v.error; estado.style.color = 'var(--danger)'; } return; }
+  if (boton) boton.disabled = true;
+  if (estado) { estado.style.color = ''; estado.textContent = `Consultando Windsor por anuncio, del ${fmtDia(v.desde)} al ${fmtDia(v.hasta)}${v.porDefecto ? ' (últimos 7 días, porque no elegiste fechas)' : ''}… puede tardar hasta 1 minuto.`; }
+  try {
+    const { data, error } = await supabase.functions.invoke('meta-anuncios', { body: { desde: v.desde, hasta: v.hasta } });
+    if (error) {
+      let mensaje = error.message || 'No se pudo consultar a Windsor';
+      try { const j = await error.context.json(); if (j && j.error) mensaje = j.error; } catch (_) { /* sin detalle */ }
+      throw new Error(mensaje);
+    }
+    const r = data || {};
+    state.anunciosMeta = { tipo: 'ok', texto: `Listo: del ${fmtDia(r.desde)} al ${fmtDia(r.hasta)} se guardaron ${fmtInt(r.registros_escritos)} registros por anuncio` +
+      (r.clics_enlace_omitidos ? ' · atención: Windsor no devolvió los clics en el enlace; el resto se guardó igual' : '') +
+      (r.filas_sin_anuncio ? ` · atención: ${fmtInt(r.filas_sin_anuncio)} filas no traían el identificador del anuncio y no se guardaron` : '') +
+      (r.filas_sin_comunidad ? ` · atención: ${fmtInt(r.filas_sin_comunidad)} filas de una campaña mapeada no tienen comunidad (${fmtMoney(r.gasto_sin_comunidad)})` : '') + '.' };
+  } catch (err) {
+    state.anunciosMeta = { tipo: 'error', texto: 'No se pudo traer los anuncios de Meta: ' + err.message };
   }
   renderAll();
 }
@@ -2464,15 +2603,16 @@ async function renderAll(){
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
-      const [comunidadesRango, desglose, global, entradasFlowControl] = await Promise.all([
+      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
         loadEntradasFlow(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
+        esMarketing() ? loadRendimientoAnuncios(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
       ]);
       // La fila de campañas globales va al final y suma en el total del cliente; con una comunidad elegida no aparece (no es de esa comunidad).
       const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
-      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento);
       wireControl();
 
     } else if (state.tab === 'atribucion') {
