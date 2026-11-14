@@ -198,7 +198,7 @@ test("sin clasificar: no es de ninguna comunidad (cada fila dice 'Sin comunidad'
 test("el panel guarda el orden en una clave nueva y le pasa a la tabla las personas sin clasificar del cliente", () => {
   assert.match(html, /const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas_v2'/);
   assert.match(html, /loadEntradasFlow\(state\.fechaDesde \|\| null, state\.fechaHasta \|\| null, state\.canalControl\)/);
-  assert.match(html, /state\.canalControl, desglose, entradasFlowControl\)/);
+  assert.match(html, /state\.canalControl, desglose, entradasFlowControl, rendimiento\)/);
 });
 
 // ---- La fuente de cada métrica no se pierde al agrupar por etapa (PR #65)

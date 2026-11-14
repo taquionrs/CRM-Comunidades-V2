@@ -1,6 +1,6 @@
 # Spec — Centro de rendimiento por anuncio (código por anuncio, datos de Windsor, panel e IA)
 
-Estado: **etapa 1 fusionada y aplicada (PR #70, 2026-11-13); etapa 2 en la PR #71; etapas 3 a 5 por construir.**
+Estado: **etapas 1 y 2 fusionadas y aplicadas (PR #70 y #71, 2026-11-13); etapa 3 en la PR #72; etapas 4 y 5 por construir.**
 Pedido de Juan Marroncle (2026-11-13), a partir del análisis de tracking para el 1:1 con la PO del mismo día.
 
 ## Para qué
@@ -17,7 +17,7 @@ Principio: **no perder ningún dato**. Todo lo que llega queda guardado tal cual
 |---|---|---|---|
 | 1 | Código por anuncio (piloto en Palermo) | #70 | — |
 | 2 | Datos por anuncio desde Windsor | #71 | — (puede ir en paralelo a la 1) |
-| 3 | Bloque "Rendimiento" dentro de Control_Comunidades (tabla por anuncio y filtros) | por definir | 1 y 2 |
+| 3 | Bloque "Rendimiento" dentro de Control_Comunidades (tabla por anuncio) | #72 | 1 y 2 |
 | 4 | Alertas y comparaciones | por definir | 3 |
 | 5 | IA con OpenRouter (prueba de 5 USD por mes) | por definir | 3 (mejor con la 4) |
 
@@ -53,7 +53,17 @@ Hoy Windsor llega por **conjunto de anuncios** y `meta_ads_metrica` guarda un re
 
 Riesgos a verificar con datos reales al desplegar: que los nombres de campo `ad_id` y `ad_name` los acepte el conector de Windsor, y que las conversaciones por anuncio sumen lo mismo que por conjunto (el cuadre lo muestra).
 
-## Etapa 3 — Bloque "Rendimiento" dentro de Control_Comunidades
+## Etapa 3 — Bloque "Rendimiento" dentro de Control_Comunidades (PR #72)
+
+**Construido:** `db/041` (función `rendimiento_por_anuncio()`, solo Marketing) y el bloque al final de Control_Comunidades, debajo del semáforo, solo para Marketing (lleva gasto). Botón **"Traer anuncios de Meta"** en el mismo bloque: llama a `meta-anuncios` con el período elegido (o los últimos 7 días si no hay fechas), sin pasar por la consola.
+
+- **Filtros:** no tiene filtros propios. Usa el período y la comunidad ya elegidos arriba en Control_Comunidades (más simple y consistente). Cliente: el del selector global.
+- **Agrupado por comunidad**, con una fila "Entradas sin código" y un total por zona. La suma de las entradas de una zona coincide con "Entradas únicas" de la tabla (mismo criterio de primer contacto).
+- **Aviso de cobertura de datos:** si los anuncios no suman la inversión de la tabla de arriba, avisa cuántos pesos faltan y cómo completarlos.
+- **Piloto a la vista:** muestra cuántas entradas de las zonas con códigos traen código (criterio de éxito del piloto de la etapa 1).
+- **Alcance y frecuencia:** no están (no se suman entre días); quedan para la etapa 4.
+
+**Diseño original de la etapa:**
 
 **No es una sección nueva del menú:** es un bloque al final de Control_Comunidades, debajo de la matriz y del desglose de campañas; no importa que haya que bajar para verlo. Comparte el período y la comunidad ya elegidos arriba. Una fila por anuncio, con filtros de cliente, zona, campaña y fechas (hora de Argentina, mismos selectores del resto del panel).
 

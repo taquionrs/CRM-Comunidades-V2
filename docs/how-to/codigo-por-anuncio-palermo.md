@@ -82,10 +82,12 @@ select * from crm_comunidades_v2.entradas_por_anuncio(
 - **Quien abre el chat y no manda nada** sigue sin aparecer: no es un problema de tracking sino de la campaña.
 - **El código no sirve para las entradas históricas** (anteriores al piloto).
 
+## Dónde se ve
+En **Control_Comunidades**, al final de la página, el bloque **"Rendimiento por anuncio"** (PR #72, solo Marketing): gasto y chats de Meta por anuncio y las entradas del CRM por código. Muestra también cuántas entradas de Palermo traen código, que es el criterio de éxito del piloto.
+
 ## Falta (próximas PRs, no incluido acá)
 
-- Vista por anuncio en el panel.
-- Datos por anuncio de Windsor (`ad_id`, `ad_name`: gasto, clics, conversaciones) y su cruce con estas entradas.
+- Alertas y comparaciones (etapa 4).
 - Extender a Devoto y Boedo.
 
 ## Criterio de éxito del piloto
