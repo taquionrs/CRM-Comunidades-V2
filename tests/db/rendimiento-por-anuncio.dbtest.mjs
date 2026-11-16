@@ -63,7 +63,7 @@ test("una fila por anuncio con Meta y entradas por código, más las entradas si
     ["Boedo", "sin código", 0, 1, 0],                // entradas de Boedo sin código
     ["Palermo", "P1", 150, 2, 0],
     ["Palermo", "P2", 30, 1, 1],
-    ["Palermo", "P3", 0, 0, 0],                      // código del catálogo sin datos de Meta en el período
+    ["Palermo", "P3", 0, null, null],                // código del catálogo que ninguna entrada usó todavía: "no se puede saber", no 0
     ["Palermo", "sin código", 0, 1, 0],
   ]);
 });
@@ -121,9 +121,11 @@ test("es plata: lo ve Marketing; un usuario General recibe la lista vacía y la 
 
 test("la migración corrige los nombres cortos del catálogo y es idempotente", async () => {
   await db.exec(`insert into ${S}.anuncio_codigo (cliente_id, comunidad_id, codigo, anuncio_nombre, campana_nombre) values ('${CLI}', '${PAL}', 'P7', 'PALERMO_07', 'CAMP_X')`);
+  // Solo la corrección de nombres de db/041 (el resto de ese archivo lo reemplaza db/042).
   const sql = (await import("node:fs")).readFileSync(new URL("../../db/041_rendimiento_por_anuncio.sql", import.meta.url), "utf8");
-  await db.exec(sql);
-  await db.exec(sql);
+  const correccion = sql.slice(sql.indexOf("update crm_comunidades_v2.anuncio_codigo"), sql.indexOf(";", sql.indexOf("update crm_comunidades_v2.anuncio_codigo")) + 1);
+  await db.exec(correccion);
+  await db.exec(correccion);
   const { rows } = await db.query(`select anuncio_nombre from ${S}.anuncio_codigo where codigo = 'P7'`);
   assert.equal(rows[0].anuncio_nombre, "CAMP_X_PALERMO_07");
 });

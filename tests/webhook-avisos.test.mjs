@@ -56,3 +56,24 @@ test("solo cuenta el código que existe y está activo en el catálogo del clien
   assert.equal(codigoDeAnuncio("Palermo P1", []), null);
   assert.equal(codigoDeAnuncio("Palermo p1", ["p1"]), "P1");
 });
+
+test("el código ZONA-NN (PAL-01) se reconoce, con paréntesis, en minúsculas y al final del mensaje", async () => {
+  const { codigosCandidatos, codigoDeAnuncio } = await import("../supabase/functions/manychat-webhook/avisos.mjs");
+  assert.deepEqual(codigosCandidatos("Hola, quiero unirme a la comunidad de Cortado en Jarrito Palermo ☕ (PAL-01)"), ["PAL-01"]);
+  assert.deepEqual(codigosCandidatos("palermo pal-02"), ["PAL-02"]);
+  assert.deepEqual(codigosCandidatos("BOE-4 y DEV-12"), ["BOE-4", "DEV-12"]);
+  assert.equal(codigoDeAnuncio("Cortado en Jarrito Palermo ☕ (PAL-03)", ["PAL-01", "PAL-03"]), "PAL-03");
+  assert.equal(codigoDeAnuncio("Cortado en Jarrito Palermo ☕ (PAL-09)", ["PAL-01"]), null);
+});
+
+test("lo que parece un código pero tiene guiones de más o letras de más no cuenta", async () => {
+  const { codigosCandidatos } = await import("../supabase/functions/manychat-webhook/avisos.mjs");
+  for (const t of ["PAL--01", "PALERMO-01", "x-PAL-01", "PAL-01-x", "PAL-", "-01", "PAL-1234"]) {
+    assert.deepEqual(codigosCandidatos(t), [], t);
+  }
+});
+
+test("el formato anterior (P1) sigue funcionando junto al nuevo", async () => {
+  const { codigosCandidatos } = await import("../supabase/functions/manychat-webhook/avisos.mjs");
+  assert.deepEqual(codigosCandidatos("Palermo (P1) o PAL-01"), ["P1", "PAL-01"]);
+});

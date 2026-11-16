@@ -1,6 +1,6 @@
 # Spec — Centro de rendimiento por anuncio (código por anuncio, datos de Windsor, panel e IA)
 
-Estado: **etapas 1 y 2 fusionadas y aplicadas (PR #70 y #71, 2026-11-13); etapa 3 en la PR #72; etapas 4 y 5 por construir.**
+Estado: **etapas 1, 2 y 3 fusionadas y aplicadas (PR #70, #71 y #72); catálogo automático y columnas Nombre/ID en la PR #73; etapas 4 y 5 por construir.**
 Pedido de Juan Marroncle (2026-11-13), a partir del análisis de tracking para el 1:1 con la PO del mismo día.
 
 ## Para qué
@@ -33,6 +33,23 @@ Cada anuncio de Meta tiene su plantilla de mensaje, que termina con un código c
 - Guía de uso: `docs/how-to/codigo-por-anuncio-palermo.md`.
 
 **Criterio de éxito del piloto** (una semana con las 4 plantillas activas): qué porcentaje de las entradas de Palermo trae código reconocido, y cuántas entradas y "sin clasificar" aparecen por anuncio. **Umbral para seguir con Devoto y Boedo: a definir con la PO.** Si el porcentaje es bajo se evalúa otra forma (por ejemplo, el código al principio del mensaje).
+
+## Cómo se vincula el anuncio con el mensaje de cada persona (decisión del 16/11)
+
+**El problema de fondo.** Todos los anuncios de una zona mandan exactamente el mismo mensaje precargado ("Hola, quiero unirme a la comunidad de Cortado en Jarrito Palermo ☕"), y los contactos llegan a ManyChat como "Directo", sin ningún dato de anuncio (verificado en los 34 campos de contacto de todos los eventos guardados). La zona se sabe por la frase; el anuncio no.
+
+**Lo que el CRM ya tiene, sea cual sea el camino:** catálogo automático (db/042). Cada anuncio de Windsor queda registrado solo con su **ID de Meta**, nombre, campaña, conjunto, zona y un código propio `ZONA-NN`. Es la mitad del vínculo.
+
+**Lo que falta es que algo del mensaje o del contacto diga qué anuncio fue.** Caminos, en orden de preferencia:
+
+| # | Camino | Qué hay que hacer | Estado |
+|---|---|---|---|
+| A | **ManyChat entrega el ID del anuncio** (disparador "WhatsApp Ads") | Una prueba con un solo anuncio; si funciona, el CRM lee ese ID y lo vincula por `ad_id` | Sin confirmar. Guía: `docs/how-to/probar-id-de-anuncio-en-manychat.md` |
+| B | **Código en el mensaje** | Agregar `ZONA-NN` al final del mensaje de cada anuncio | Listo del lado del CRM; un paso manual por anuncio |
+| C | **Estimación** | Repartir las entradas de cada zona entre sus anuncios según los chats que cuenta Meta por anuncio | No construido. No identifica personas ni detecta anuncios que traen chats que no entran |
+| D | **WhatsApp directo a la API de Meta** | Reemplazar a ManyChat como proveedor | No recomendado: rompe los flows |
+
+Se hace primero A. Si A funciona, B y C no hacen falta.
 
 ## Etapa 2 — Datos por anuncio desde Windsor (PR #71)
 
