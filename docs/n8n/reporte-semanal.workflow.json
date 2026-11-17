@@ -1,0 +1,408 @@
+{
+  "name": "Reporte semanal del CRM (Excel + historial)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Reporte semanal del CRM\nCada lunes a las 8:00 (Argentina) arma el reporte de la última semana completa y lo entrega.\n\n**Los números los calcula el CRM** (función `reporte_semanal`). Este flujo solo los pide, los ordena en un Excel y los entrega.\n\n1. Elegí el cliente en el nodo *Definir semana* (`SLUG`).\n2. Poné tus credenciales y los destinos (carpeta de Drive, hoja de historial, correo). Todo lo que dice REEMPLAZAR.\n3. Probalo con *Correr a mano* (podés fijar fechas en `DESDE_MANUAL` / `HASTA_MANUAL`).\n\nEl Excel se llama `... V47.xlsx` (la versión es el número de semana): nunca pisa uno anterior. Cada corrida también agrega las filas a la hoja *Historial* (la foto semanal para ver la tendencia).",
+        "height": 330,
+        "width": 520,
+        "color": 4
+      },
+      "id": "a10000001-0000-4000-8000-000000000001",
+      "name": "Nota 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "a10000002-0000-4000-8000-000000000002",
+      "name": "Cada lunes 8:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a10000003-0000-4000-8000-000000000003",
+      "name": "Correr a mano",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Define la semana del reporte: por defecto la última semana COMPLETA (lunes a domingo), con fechas de Argentina.\nconst SLUG = 'cortado-en-jarrito';     // cliente del CRM (columna slug)\nconst DESDE_MANUAL = '';               // para una corrida a mano: 'AAAA-MM-DD' (y HASTA_MANUAL también)\nconst HASTA_MANUAL = '';\n\nconst ahoraAR = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }));\nconst f = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;\nconst dow = (ahoraAR.getDay() + 6) % 7;                 // 0 = lunes\nconst domingo = new Date(ahoraAR); domingo.setDate(ahoraAR.getDate() - dow - 1);\nconst lunes = new Date(domingo); lunes.setDate(domingo.getDate() - 6);\nconst desde = DESDE_MANUAL || f(lunes);\nconst hasta = HASTA_MANUAL || f(domingo);\n\n// Número de semana ISO de la fecha \"hasta\": es la versión del archivo (V47, V48...), así nunca se pisa un reporte anterior.\nconst t = new Date(Date.UTC(+hasta.slice(0, 4), +hasta.slice(5, 7) - 1, +hasta.slice(8, 10)));\nt.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));\nconst semana = Math.ceil((((t - new Date(Date.UTC(t.getUTCFullYear(), 0, 1))) / 86400000) + 1) / 7);\n\nreturn [{ json: { slug: SLUG, desde, hasta, semana, version: 'V' + semana,\n  archivo: `Reporte semanal ${SLUG} ${desde} a ${hasta} V${semana}.xlsx` } }];"
+      },
+      "id": "a10000004-0000-4000-8000-000000000004",
+      "name": "Definir semana",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/cliente?select=id,nombre&slug=eq.{{ $json.slug }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a10000005-0000-4000-8000-000000000005",
+      "name": "Supabase: cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM (Custom Auth)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/reporte_semanal",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_cliente: $json.id, p_desde: $('Definir semana').first().json.desde, p_hasta: $('Definir semana').first().json.hasta }) }}"
+      },
+      "id": "a10000006-0000-4000-8000-000000000006",
+      "name": "Supabase: reporte semanal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma la tabla del reporte: una fila por comunidad y una de total. Los números vienen YA CALCULADOS por el CRM (reporte_semanal): acá no se calcula nada.\nconst sem = $('Definir semana').first().json;\nconst filas = $input.all().map((i) => i.json);\nconst num = (v) => (v === null || v === undefined || v === '' ? '' : Number(v));\nconst dia = (v) => (v ? String(v).slice(0, 10) : '');\nconst salida = filas.map((r) => ({ json: {\n  'Semana': sem.version, 'Desde': sem.desde, 'Hasta': sem.hasta,\n  'Comunidad': r.comunidad,\n  'Inversión': num(r.inversion), 'Chats de Meta': num(r.conversaciones), 'Clics en el enlace': num(r.clics_enlace),\n  'Entradas al flow': num(r.entradas), 'Cobertura (%)': num(r.cobertura_pct), 'Costo por entrada': num(r.costo_por_entrada),\n  'Última carga de miembros': dia(r.ultima_carga), 'Días sin carga': num(r.dias_sin_carga),\n  'Miembros: desde': dia(r.miembros_desde), 'Miembros: hasta': dia(r.miembros_hasta),\n  'Miembros al inicio': num(r.miembros_inicio), 'Nuevos': num(r.nuevos), 'Bajas': num(r.bajas), 'Miembros al final': num(r.miembros_fin),\n  'CRR (%)': num(r.crr_pct), 'Churn (%)': num(r.churn_pct), 'Las cargas cuadran': r.cuadra === null ? '' : (r.cuadra ? 'Sí' : 'No'),\n  'Inversión del intervalo': num(r.inversion_intervalo), 'Entradas del intervalo': num(r.entradas_intervalo),\n  'Costo por miembro nuevo': num(r.cpmn), 'Tasa de triaje (%)': num(r.triaje_pct),\n} }));\nreturn salida;"
+      },
+      "id": "a10000007-0000-4000-8000-000000000007",
+      "name": "Armar Excel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {
+          "fileName": "={{ $('Definir semana').first().json.archivo }}",
+          "sheetName": "Resumen",
+          "headerRow": true
+        }
+      },
+      "id": "a10000008-0000-4000-8000-000000000008",
+      "name": "Convertir a Excel",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Texto del correo con lo más importante. Solo lee números ya calculados; si algo falta, lo dice.\nconst sem = $('Definir semana').first().json;\nconst filas = $('Armar Excel').all().map((i) => i.json);\nconst tot = filas.find((r) => r['Comunidad'] === 'Total del cliente') || {};\nconst comunidades = filas.filter((r) => r['Comunidad'] !== 'Total del cliente');\nconst dinero = (v) => v === '' ? 'sin dato' : '$' + Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });\nconst pct = (v) => v === '' ? 'no calculable' : Number(v).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + ' %';\nconst viejas = comunidades.filter((r) => r['Días sin carga'] !== '' && r['Días sin carga'] > 8).map((r) => `${r['Comunidad']} (${r['Días sin carga']} días)`);\nconst lineas = comunidades.map((r) => `<li><b>${r['Comunidad']}</b>: inversión ${dinero(r['Inversión'])}, ${r['Entradas al flow']} entradas, cobertura ${pct(r['Cobertura (%)'])}, CRR ${pct(r['CRR (%)'])}, churn ${pct(r['Churn (%)'])}</li>`).join('');\nconst html = `<p>Reporte semanal del ${sem.desde} al ${sem.hasta} (${sem.version}).</p>\n<p><b>Total:</b> inversión ${dinero(tot['Inversión'])}, ${tot['Entradas al flow'] ?? 0} entradas al flow, cobertura ${pct(tot['Cobertura (%)'])}, CRR ${pct(tot['CRR (%)'])}.</p>\n<ul>${lineas}</ul>\n${viejas.length ? `<p style=\"color:#b45309\"><b>Atención:</b> datos de miembros viejos en ${viejas.join(', ')}. El CRR de esas comunidades no está al día.</p>` : ''}\n<p>El Excel adjunto tiene el detalle. Los números salen del CRM; lo que no se pudo calcular figura vacío o como \"no calculable\".</p>`;\nreturn [{ json: { asunto: `Reporte semanal ${sem.slug} ${sem.version}`, html }, binary: $input.first().binary }];"
+      },
+      "id": "a10000009-0000-4000-8000-000000000009",
+      "name": "Armar resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "name": "={{ $('Definir semana').first().json.archivo }}",
+        "inputDataFieldName": "data",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "PEGAR_ID_DE_LA_CARPETA_DE_DRIVE"
+        },
+        "options": {}
+      },
+      "id": "a10000010-0000-4000-8000-000000000010",
+      "name": "Guardar en Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1680,
+        -80
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REEMPLAZAR",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "PEGAR_CORREO_DESTINO",
+        "subject": "={{ $json.asunto }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "data"
+              }
+            ]
+          }
+        }
+      },
+      "id": "a10000011-0000-4000-8000-000000000011",
+      "name": "Enviar por correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        100
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZAR",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "PEGAR_ID_DE_LA_PLANILLA_DE_HISTORIAL",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Historial",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "Semana",
+            "Desde",
+            "Comunidad"
+          ],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "a10000012-0000-4000-8000-000000000012",
+      "name": "Foto semanal en Historial",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        220
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REEMPLAZAR",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Hoja *Historial*:** creá una pestaña con ese nombre y pegá en la fila 1 los encabezados del Excel (los mismos que arma *Armar Excel*). Las filas se actualizan por *Semana + Desde + Comunidad*: si corrés dos veces la misma semana no se duplica.",
+        "height": 150,
+        "width": 360,
+        "color": 7
+      },
+      "id": "a10000013-0000-4000-8000-000000000013",
+      "name": "Nota 13",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Cada lunes 8:00": {
+      "main": [
+        [
+          {
+            "node": "Definir semana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correr a mano": {
+      "main": [
+        [
+          {
+            "node": "Definir semana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir semana": {
+      "main": [
+        [
+          {
+            "node": "Supabase: cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: cliente": {
+      "main": [
+        [
+          {
+            "node": "Supabase: reporte semanal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: reporte semanal": {
+      "main": [
+        [
+          {
+            "node": "Armar Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar Excel": {
+      "main": [
+        [
+          {
+            "node": "Convertir a Excel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Foto semanal en Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir a Excel": {
+      "main": [
+        [
+          {
+            "node": "Armar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar resumen": {
+      "main": [
+        [
+          {
+            "node": "Guardar en Drive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Enviar por correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "pinData": {},
+  "active": false
+}

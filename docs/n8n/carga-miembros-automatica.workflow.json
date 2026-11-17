@@ -1,0 +1,499 @@
+{
+  "name": "Carga automática de miembros (con freno de seguridad)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Carga automática de miembros\nCuando aparece en una carpeta de Drive el archivo `conteo-miembros-AAAA-MM-DD.csv` (el que deja el conteo de WhatsApp), este flujo lo sube solo al CRM como **lista completa** de cada comunidad.\n\n**Tiene un freno:** si la carga dejaría demasiadas salidas, o el archivo parece incompleto, NO se hace sola y te avisa.\n\n⚠️ **Empieza en MODO 'prueba'** (nodo *Freno de seguridad*): solo mira la vista previa y avisa, no carga nada. Cuando comprobaste que las vistas previas son las esperadas, cambiá `MODO` a `'real'`.\n\nCredencial nueva: *Supabase CRM + clave de carga (Custom Auth)* → JSON con los encabezados de Supabase y `\"body\": {\"p_clave\": \"…\"}`. La clave la cargás vos en n8n; no hay que pasarla por ningún chat.\n\nEl archivo trae teléfonos: la carpeta de Drive tiene que ser privada.",
+        "height": 400,
+        "width": 560,
+        "color": 4
+      },
+      "id": "b20000001-0000-4000-8000-000000000001",
+      "name": "Nota 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 15,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "PEGAR_ID_DE_LA_CARPETA_DE_DRIVE",
+          "mode": "id"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "b20000002-0000-4000-8000-000000000002",
+      "name": "Archivo nuevo en Drive",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REEMPLAZAR",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "conteo-miembros-",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": ".csv",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b20000003-0000-4000-8000-000000000003",
+      "name": "Solo conteos",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {}
+      },
+      "id": "b20000004-0000-4000-8000-000000000004",
+      "name": "Descargar CSV",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        480,
+        -40
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REEMPLAZAR",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "encoding": "utf8"
+        }
+      },
+      "id": "b20000005-0000-4000-8000-000000000005",
+      "name": "Leer filas del CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agrupa el CSV del conteo (Comunidad, Fecha, Teléfono) por comunidad y lo deja en el formato que pide la carga del CRM: [{t: '549...', f: 'AAAA-MM-DD'}].\nconst archivo = $('Descargar CSV').first().json.name || $('Solo conteos').first().json.name || 'conteo-miembros.csv';\nconst porComunidad = {};\nlet leidas = 0, invalidas = 0;\nfor (const it of $input.all()) {\n  const r = it.json;\n  const comunidad = String(r['Comunidad'] ?? '').trim();\n  const tel = String(r['Teléfono'] ?? r['Telefono'] ?? '').replace(/\\D/g, '');\n  const m = String(r['Fecha'] ?? '').trim().match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);\n  leidas++;\n  if (!comunidad || tel.length < 8 || tel.length > 15) { invalidas++; continue; }\n  const f = m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;\n  (porComunidad[comunidad] ||= []).push({ t: tel, f });\n}\nreturn Object.entries(porComunidad).map(([comunidad, filas]) => ({ json: { archivo, comunidad, filas, filas_leidas: leidas, invalidos: invalidas } }));"
+      },
+      "id": "b20000006-0000-4000-8000-000000000006",
+      "name": "Armar cargas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/comunidad?select=id,nombre&order=nombre",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b20000007-0000-4000-8000-000000000007",
+      "name": "Supabase: comunidades",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -40
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM (Custom Auth)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Une cada comunidad del archivo con su id en el CRM (por el nombre exacto). Si un nombre no existe, la carga de esa comunidad NO se hace.\nconst ids = {};\nfor (const c of $('Supabase: comunidades').all().flatMap((i) => (Array.isArray(i.json) ? i.json : [i.json]))) ids[c.nombre] = c.id;\nreturn $('Armar cargas').all().map((i) => ({ json: { ...i.json, comunidad_id: ids[i.json.comunidad] || null } }));"
+      },
+      "id": "b20000008-0000-4000-8000-000000000008",
+      "name": "Unir con el id",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/vista_previa_carga_miembros",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_comunidad: $json.comunidad_id, p_filas: $json.filas, p_lista_completa: true }) }}"
+      },
+      "id": "b20000009-0000-4000-8000-000000000009",
+      "name": "Vista previa de la carga",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        -40
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM + clave de carga (Custom Auth)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FRENO DE SEGURIDAD: decide si la carga se hace sola o espera a una persona.\n// Una lectura incompleta de WhatsApp (por ejemplo, un grupo que no terminó de cargar) haría parecer que mucha gente se fue.\nconst MODO = 'prueba';             // 'prueba' = solo mira la vista previa y avisa, NO carga. Cambiar a 'real' cuando ya probaste.\nconst MAX_SALIDAS_PCT = 10;        // si la carga dejaría más de este % de los miembros actuales como salidas, no se hace sola\nconst MIN_TAMANO_PCT = 80;         // el archivo tiene que traer al menos este % de los miembros actuales\n\nconst carga = $('Unir con el id').item.json;\nconst vp = Array.isArray($json) ? $json[0] : $json;\nconst actuales = Number(vp.activos_actuales) || 0;\nconst salidas = Number(vp.salidas) || 0;\nconst total = Number(vp.total_archivo) || 0;\nconst motivos = [];\nif (!carga.comunidad_id) motivos.push('la comunidad no existe en el CRM con ese nombre');\nif (actuales > 0 && salidas / actuales * 100 > MAX_SALIDAS_PCT) motivos.push(`dejaría ${salidas} salidas de ${actuales} miembros (más del ${MAX_SALIDAS_PCT} %)`);\nif (actuales > 0 && total / actuales * 100 < MIN_TAMANO_PCT) motivos.push(`el archivo trae ${total} números y el grupo tenía ${actuales}: parece incompleto`);\nconst ok = motivos.length === 0;\nreturn [{ json: { ...carga, vista_previa: vp, hacer_carga: ok && MODO === 'real', modo: MODO, ok, motivos, resumen: `${carga.comunidad}: ${total} en el archivo, ${vp.nuevos ?? '?'} nuevos, ${salidas} salidas, ${vp.duplicados ?? '?'} ya estaban` } }];"
+      },
+      "id": "b20000010-0000-4000-8000-000000000010",
+      "name": "Freno de seguridad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.hacer_carga }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b20000011-0000-4000-8000-000000000011",
+      "name": "¿Se carga sola?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/cargar_miembros_grupo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_comunidad: $json.comunidad_id, p_archivo: $json.archivo, p_filas: $json.filas, p_cargada_por: 'n8n', p_filas_leidas: $json.filas_leidas, p_invalidos: $json.invalidos, p_lista_completa: true, p_duplicados: 'ignorar', p_confirmo_salidas: true, p_usar_como_mi: false }) }}"
+      },
+      "id": "b20000012-0000-4000-8000-000000000012",
+      "name": "Cargar lista completa en el CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        -140
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM + clave de carga (Custom Auth)"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Texto del aviso: qué se cargó solo y qué quedó esperando a una persona.\nconst filas = $input.all().map((i) => i.json);\nconst cargadas = filas.filter((r) => r.hacer_carga);\nconst esperan = filas.filter((r) => !r.hacer_carga);\nconst li = (r) => `<li>${r.resumen}${r.motivos && r.motivos.length ? ' — <b>no se cargó:</b> ' + r.motivos.join('; ') : (r.modo === 'prueba' ? ' — <i>modo prueba: no se cargó</i>' : '')}</li>`;\nconst html = `<p>Carga automática de miembros (${filas[0]?.archivo ?? ''}).</p>\n${cargadas.length ? '<p><b>Cargadas:</b></p><ul>' + cargadas.map(li).join('') + '</ul>' : ''}\n${esperan.length ? '<p><b>Esperan a una persona (o modo prueba):</b></p><ul>' + esperan.map(li).join('') + '</ul><p>Para cargarlas a mano: Overview → Cargar miembros → lista completa.</p>' : ''}`;\nreturn [{ json: { asunto: cargadas.length === filas.length ? 'Miembros cargados en el CRM' : 'Carga de miembros: hay comunidades para revisar', html } }];"
+      },
+      "id": "b20000013-0000-4000-8000-000000000013",
+      "name": "Armar aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "PEGAR_CORREO_DESTINO",
+        "subject": "={{ $json.asunto }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "b20000014-0000-4000-8000-000000000014",
+      "name": "Avisar por correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2880,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZAR",
+          "name": "Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Archivo nuevo en Drive": {
+      "main": [
+        [
+          {
+            "node": "Solo conteos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solo conteos": {
+      "main": [
+        [
+          {
+            "node": "Descargar CSV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Descargar CSV": {
+      "main": [
+        [
+          {
+            "node": "Leer filas del CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer filas del CSV": {
+      "main": [
+        [
+          {
+            "node": "Armar cargas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar cargas": {
+      "main": [
+        [
+          {
+            "node": "Supabase: comunidades",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: comunidades": {
+      "main": [
+        [
+          {
+            "node": "Unir con el id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unir con el id": {
+      "main": [
+        [
+          {
+            "node": "Vista previa de la carga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vista previa de la carga": {
+      "main": [
+        [
+          {
+            "node": "Freno de seguridad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Freno de seguridad": {
+      "main": [
+        [
+          {
+            "node": "¿Se carga sola?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se carga sola?": {
+      "main": [
+        [
+          {
+            "node": "Cargar lista completa en el CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Armar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar lista completa en el CRM": {
+      "main": [
+        [
+          {
+            "node": "Armar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar aviso": {
+      "main": [
+        [
+          {
+            "node": "Avisar por correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "pinData": {},
+  "active": false
+}
