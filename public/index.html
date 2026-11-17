@@ -995,13 +995,17 @@ const COLOR_GRUPO = Object.fromEntries(Object.entries(GRUPOS_TABLA).map(([nombre
 const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas_v2';
 
 // Orden y ocultas guardados. Ignora ids que ya no existen y agrega al final las columnas nuevas.
+// Columnas ocultas de fábrica (revisión de columnas del 17/11/2026, uso interno): lo que se repite o es de detalle. Se pueden activar desde "Columnas".
+// Solo vale para quien no guardó su propia elección; "Restablecer" vuelve a esto. Quien ya eligió sus columnas conserva su elección.
+const COLUMNAS_OCULTAS_DE_FABRICA = ['cpc_enlace', 'leads', 'costo_lead', 'chats_sin_registrar', 'sin_clasificar', 'tasa_me_sumo', 'costo_clic',
+  'mi', 'mf', 'crecimiento', 'bajas', 'fuga', 'crr_inicio', 'crr_nuevos', 'crr_bajas', 'crr_fin'];
 function leerColumnasControl(){
-  let g = {};
-  try { g = JSON.parse(localStorage.getItem(CLAVE_COLUMNAS_CONTROL) || '{}') || {}; } catch (_) { g = {}; }
+  let g = {}, guardado = false;
+  try { const crudo = localStorage.getItem(CLAVE_COLUMNAS_CONTROL); guardado = crudo != null; g = JSON.parse(crudo || '{}') || {}; } catch (_) { g = {}; }
   const ids = COLUMNAS_CONTROL.map(c => c.id);
   const orden = (Array.isArray(g.orden) ? g.orden : []).filter((id, i, a) => ids.includes(id) && a.indexOf(id) === i);
   for (const id of ids) if (!orden.includes(id)) orden.push(id);
-  const ocultas = (Array.isArray(g.ocultas) ? g.ocultas : []).filter(id => ids.includes(id));
+  const ocultas = (guardado && Array.isArray(g.ocultas) ? g.ocultas : COLUMNAS_OCULTAS_DE_FABRICA).filter(id => ids.includes(id));
   return { orden, ocultas };
 }
 function guardarColumnasControl(cfg){
