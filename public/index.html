@@ -1304,9 +1304,11 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       <div class="col-wrap"><button class="btn" id="btnColumnas" type="button" aria-expanded="${state.columnasAbierto ? 'true' : 'false'}">Columnas${cfg.ocultas.length ? ` (${cfg.ocultas.length} ocultas)` : ''}</button>${panelColumnas}</div>
       ${esMarketing() ? `<button class="btn" id="btnCampanas" type="button" title="Elegir qué campañas de Meta cuentan para las métricas">Campañas</button>
       <button class="btn" id="btnConsultas" type="button" title="Ver todo lo que pasó entre Windsor y el CRM">Consultas</button>
-      <button class="btn" id="btnMetaVivo" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, y actualiza el gasto y las conversaciones de Meta">Traer de Meta ahora</button>` : ''}
+      <button class="btn" id="btnMetaVivo" type="button" title="Consulta a Windsor ahora, para el rango de fechas elegido, y actualiza el gasto y las conversaciones de Meta">Traer de Meta ahora</button>
+      <button class="btn" id="btnReporteSemanal" type="button" title="Descarga el reporte semanal en Excel (V + número de semana) con el período elegido, o con la última semana completa si no elegiste fechas. Los números los calcula el CRM">Reporte semanal (Excel)</button>` : ''}
     </div>
     <div class="sub" id="metaVivoEstado" role="status" style="margin:0 0 10px; ${state.metaVivo && state.metaVivo.tipo === 'error' ? 'color:var(--danger)' : state.metaVivo && state.metaVivo.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.metaVivo && state.metaVivo.texto) || '')}</div>
+    <div class="sub" id="reporteEstado" role="status" style="margin:0 0 10px; ${state.reporteSemanal && state.reporteSemanal.tipo === 'error' ? 'color:var(--danger)' : state.reporteSemanal && state.reporteSemanal.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.reporteSemanal && state.reporteSemanal.texto) || '')}</div>
     <div class="card"><h3>Métricas por comunidad</h3>
       <div class="sub">Etapas, de izquierda a derecha: Alcanzar · Intención · Control del tracking · Activación · Ingreso · Permanencia</div>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion). Solo suman las campañas de conversión o tráfico a WhatsApp definidas en el mapeo: el gasto de las demás queda registrado en Consultas, sin sumarse.</div>
@@ -1389,6 +1391,8 @@ function wireControl(){
   if (metaVivo) metaVivo.onclick = traerMetaEnVivo;
   const anuncios = document.getElementById('btnAnuncios');
   if (anuncios) anuncios.onclick = traerAnunciosMeta;
+  const reporte = document.getElementById('btnReporteSemanal');
+  if (reporte) reporte.onclick = descargarReporteSemanal;
 }
 
 /* ================= "Traer de Meta ahora": consulta a Windsor en vivo para el rango elegido (db/027) ================= */
@@ -1442,6 +1446,73 @@ async function traerAnunciosMeta(){
     state.anunciosMeta = { tipo: 'error', texto: 'No se pudo traer los anuncios de Meta: ' + err.message };
   }
   renderAll();
+}
+
+/* REPORTE-SEMANAL:INICIO */
+// Reporte semanal (PR #75, db/044): los números los calcula el CRM (reporte_semanal); el panel solo los ordena y los baja como Excel.
+// Misma lógica que el flujo de n8n del lunes (docs/n8n/reporte-semanal.workflow.json): por defecto la última semana COMPLETA (lunes a domingo, Argentina).
+// Funciones puras (se prueban en tests/panel-reporte-semanal.test.mjs).
+function semanaReporte(hoy, desdeElegido, hastaElegido){
+  const pad = (n) => String(n).padStart(2, '0');
+  const f = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  let desde = desdeElegido, hasta = hastaElegido;
+  if (!desde || !hasta) {
+    const h = new Date(Date.UTC(+hoy.slice(0, 4), +hoy.slice(5, 7) - 1, +hoy.slice(8, 10)));
+    const dow = (h.getUTCDay() + 6) % 7;                 // 0 = lunes
+    const domingo = new Date(h); domingo.setUTCDate(h.getUTCDate() - dow - 1);
+    const lunes = new Date(domingo); lunes.setUTCDate(domingo.getUTCDate() - 6);
+    desde = f(lunes); hasta = f(domingo);
+  }
+  // La versión es el número de semana ISO de la fecha "hasta": un reporte nuevo nunca pisa a uno anterior.
+  const t = new Date(Date.UTC(+hasta.slice(0, 4), +hasta.slice(5, 7) - 1, +hasta.slice(8, 10)));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const semana = Math.ceil((((t - new Date(Date.UTC(t.getUTCFullYear(), 0, 1))) / 86400000) + 1) / 7);
+  return { desde, hasta, semana, version: 'V' + semana };
+}
+function nombreArchivoReporte(cliente, sem){
+  const limpio = String(cliente || 'cliente').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return `Reporte semanal ${limpio} ${sem.desde} a ${sem.hasta} ${sem.version}.xlsx`;
+}
+function filasReporte(filas, sem){
+  const num = (v) => (v === null || v === undefined || v === '' ? '' : Number(v));
+  const dia = (v) => (v ? String(v).slice(0, 10) : '');
+  return (filas || []).map((r) => ({
+    'Semana': sem.version, 'Desde': sem.desde, 'Hasta': sem.hasta, 'Comunidad': r.comunidad,
+    'Inversión': num(r.inversion), 'Chats de Meta': num(r.conversaciones), 'Clics en el enlace': num(r.clics_enlace),
+    'Entradas al flow': num(r.entradas), 'Cobertura (%)': num(r.cobertura_pct), 'Costo por entrada': num(r.costo_por_entrada),
+    'Última carga de miembros': dia(r.ultima_carga), 'Días sin carga': num(r.dias_sin_carga),
+    'Miembros: desde': dia(r.miembros_desde), 'Miembros: hasta': dia(r.miembros_hasta),
+    'Miembros al inicio': num(r.miembros_inicio), 'Nuevos': num(r.nuevos), 'Bajas': num(r.bajas), 'Miembros al final': num(r.miembros_fin),
+    'CRR (%)': num(r.crr_pct), 'Churn (%)': num(r.churn_pct), 'Las cargas cuadran': r.cuadra === null || r.cuadra === undefined ? '' : (r.cuadra ? 'Sí' : 'No'),
+    'Inversión del intervalo': num(r.inversion_intervalo), 'Entradas del intervalo': num(r.entradas_intervalo),
+    'Costo por miembro nuevo': num(r.cpmn), 'Tasa de triaje (%)': num(r.triaje_pct),
+  }));
+}
+/* REPORTE-SEMANAL:FIN */
+async function descargarReporteSemanal(){
+  const estado = document.getElementById('reporteEstado');
+  const boton = document.getElementById('btnReporteSemanal');
+  const sem = semanaReporte(hoyAR(), state.fechaDesde || '', state.fechaHasta || '');
+  const poner = (tipo, texto) => { state.reporteSemanal = { tipo, texto }; if (estado) { estado.textContent = texto; estado.style.color = tipo === 'error' ? 'var(--danger)' : tipo === 'ok' ? '#5fd39a' : ''; } };
+  if (boton) boton.disabled = true;
+  poner('info', `Armando el reporte del ${fmtDia(sem.desde)} al ${fmtDia(sem.hasta)}…`);
+  try {
+    const { data, error } = await supabase.rpc('reporte_semanal', { p_cliente: state.clienteId, p_desde: sem.desde, p_hasta: sem.hasta });
+    if (error) throw new Error(error.message);
+    if (!data || !data.length) throw new Error('El CRM no devolvió datos para ese período (¿está aplicada la migración db/044 y tenés rol Marketing?)');
+    const mod = await import('https://esm.sh/xlsx@0.18.5');
+    const XLSX = mod.default || mod;
+    const hoja = XLSX.utils.json_to_sheet(filasReporte(data, sem));
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Resumen');
+    const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre;
+    const archivo = nombreArchivoReporte(cliente, sem);
+    XLSX.writeFile(libro, archivo);
+    poner('ok', `Listo: se descargó "${archivo}". Lo que el CRM no pudo calcular figura vacío.`);
+  } catch (err) {
+    poner('error', 'No se pudo armar el reporte: ' + err.message);
+  }
+  if (boton) boton.disabled = false;
 }
 
 /* CAMPANAS:INICIO */
