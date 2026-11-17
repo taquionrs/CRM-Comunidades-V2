@@ -86,6 +86,8 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .semaforo .sem-total{padding-left:14px; border-left:1px solid var(--border)}
 .semaforo .sem-leyenda{display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; margin:0 0 2px}
 .semaforo .sem-leyenda span{display:inline-flex; align-items:center; gap:5px}
+.crr .crr-periodo th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
+.crr .vacio-tenue{color:var(--text-faint); font-size:11.5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
 .rendimiento .rend-cab{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px}
 .rendimiento .rend-tabla td:nth-child(2){text-align:left; white-space:nowrap}
@@ -478,6 +480,12 @@ async function loadDesgloseCampanas(desde, hasta, comunidad){
 async function loadRendimientoAnuncios(desde, hasta, comunidad){
   const { data, error } = await supabase.rpc('rendimiento_por_anuncio', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta, p_comunidad: comunidad });
   if (error) { console.warn('rendimiento_por_anuncio:', error.message); return null; }
+  return data || [];
+}
+// CRR: retención de miembros entre dos cargas de lista completa (db/043). Solo conteos: lo ve cualquier usuario del CRM. Si falla, el resto de la página sigue igual.
+async function loadCrr(desde, hasta){
+  const { data, error } = await supabase.rpc('crr_por_carga', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta });
+  if (error) { console.warn('crr_por_carga:', error.message); return null; }
   return data || [];
 }
 async function loadComunidades(){
@@ -1067,6 +1075,39 @@ function agruparRendimiento(filas){
 }
 /* RENDIMIENTO:FIN */
 
+/* CRR:INICIO */
+// CRR (PR #74, db/043): tasa de retención de miembros = (miembros al final − miembros nuevos) ÷ miembros al inicio × 100. Churn = 100 − CRR.
+// Se mide entre dos cargas de lista completa de cada comunidad. Funciones puras (se prueban en tests/panel-crr.test.mjs).
+function calcularCrr(inicio, nuevos, fin){
+  const s = Number(inicio) || 0, n = Number(nuevos) || 0, e = Number(fin) || 0;
+  if (s <= 0) return { crr: null, churn: null };
+  const crr = Math.round((e - n) / s * 10000) / 100;
+  return { crr, churn: Math.round((100 - crr) * 100) / 100 };
+}
+function agruparCrr(filas){
+  const dia = (d) => String(d == null ? '' : d).slice(0, 10);
+  const grupos = new Map();
+  for (const f of filas || []) {
+    const it = { comunidadId: f.comunidad_id, comunidad: f.comunidad || '', desde: dia(f.desde), hasta: dia(f.hasta), dias: Number(f.dias) || 0,
+      inicio: Number(f.miembros_inicio) || 0, nuevos: Number(f.nuevos) || 0, bajas: Number(f.bajas) || 0, fin: Number(f.miembros_fin) || 0,
+      crr: f.crr_pct == null ? null : Number(f.crr_pct), churn: f.churn_pct == null ? null : Number(f.churn_pct), cuadra: f.cuadra !== false };
+    const k = it.desde + '|' + it.hasta;
+    if (!grupos.has(k)) grupos.set(k, { desde: it.desde, hasta: it.hasta, dias: it.dias, filas: [] });
+    grupos.get(k).filas.push(it);
+  }
+  const lista = [...grupos.values()].map(g => {
+    g.filas.sort((a, b) => a.comunidad.localeCompare(b.comunidad, 'es'));
+    let total = null;
+    if (g.filas.length > 1) {
+      const t = g.filas.reduce((a, x) => ({ inicio: a.inicio + x.inicio, nuevos: a.nuevos + x.nuevos, bajas: a.bajas + x.bajas, fin: a.fin + x.fin }), { inicio: 0, nuevos: 0, bajas: 0, fin: 0 });
+      total = { ...t, ...calcularCrr(t.inicio, t.nuevos, t.fin), cuadra: g.filas.every(x => x.cuadra) };
+    }
+    return { ...g, total };
+  }).sort((a, b) => b.hasta.localeCompare(a.hasta) || b.desde.localeCompare(a.desde));
+  return { periodos: lista, comunidadesConCrr: new Set((filas || []).map(f => f.comunidad_id)) };
+}
+/* CRR:FIN */
+
 // Sección chica al final de Control_Comunidades: una fila por comunidad (sin las campañas globales, que no tienen entradas propias) y el total.
 function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
   const u = UMBRALES_COBERTURA;
@@ -1082,6 +1123,31 @@ function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
     <div class="sem-lista">${filas}${item('Total del cliente', totalConv, totalEnt, true)}</div>
     <div class="sub sem-leyenda"><span><i class="sem-dot sem-verde"></i>más de ${u.verdeMas} %</span> <span><i class="sem-dot sem-amarillo"></i>${u.amarilloDesde} a ${u.verdeMas} %</span> <span><i class="sem-dot sem-rojo"></i>menos de ${u.amarilloDesde} %</span> <span><i class="sem-dot sem-revisar"></i>más de 100 %: revisar</span> <span><i class="sem-dot sem-pocos"></i>menos de ${u.minChats} chats: pocos datos</span></div>
     <div class="sub">Cobertura = entradas al flow ÷ conversaciones de Meta del período. Umbrales de arranque, en revisión con la PO. Meta atribuye con ventana de 7 días y el CRM cuenta el primer contacto: es un indicador, no una igualdad.</div>
+  </div>`;
+}
+
+// Bloque "Retención de miembros (CRR)" (PR #74, db/043) de Control_Comunidades: solo conteos, lo ven todos los roles. Respeta el período y la comunidad elegidos.
+function renderCrr(filas, comunidades, filtroComunidad){
+  const pct = (v) => v == null ? '—' : Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
+  const titulo = `<h3 style="margin:0 0 4px">Retención de miembros (CRR) y churn</h3>`;
+  if (filas == null) return `<div class="card crr">${titulo}<div class="sub">No se pudo cargar el CRR (¿está aplicada la migración db/043?). La tabla de arriba no cambia.</div></div>`;
+  const soloEsta = filtroComunidad ? (filas || []).filter(f => f.comunidad_id === filtroComunidad) : filas;
+  const g = agruparCrr(soloEsta);
+  const visibles = (comunidades || []).filter(c => !c.es_global && (!filtroComunidad || c.id === filtroComunidad));
+  const sin = visibles.filter(c => !g.comunidadesConCrr.has(c.id)).map(c => c.nombre);
+  const dm = (d) => { const x = fmtDia(d); return x === '—' ? x : x.slice(0, 5); };
+  const fila = (x) => `<tr><th scope="row" class="td-com">${esc(x.comunidad)}</th><td class="num">${fmtInt(x.inicio)}</td><td class="num">${fmtInt(x.nuevos)}</td><td class="num">${fmtInt(x.bajas)}</td><td class="num">${fmtInt(x.fin)}</td>
+      <td class="num"><b>${pct(x.crr)}</b></td><td class="num">${pct(x.churn)}</td><td class="num">${x.cuadra ? '' : '<span class="vacio-tenue" title="Miembros al inicio + nuevos − bajas no da los miembros al final: revisar las cargas de esta comunidad">no cuadra</span>'}</td></tr>`;
+  const cuerpo = g.periodos.map(p => `<tr class="crr-periodo"><th colspan="8" scope="colgroup">Del ${esc(dm(p.desde))} al ${esc(fmtDia(p.hasta))} · ${fmtInt(p.dias)} ${p.dias === 1 ? 'día' : 'días'} entre cargas de lista completa</th></tr>
+      ${p.filas.map(fila).join('')}
+      ${p.total ? `<tr class="totales"><th scope="row" class="td-com">Total</th><td class="num">${fmtInt(p.total.inicio)}</td><td class="num">${fmtInt(p.total.nuevos)}</td><td class="num">${fmtInt(p.total.bajas)}</td><td class="num">${fmtInt(p.total.fin)}</td><td class="num"><b>${pct(p.total.crr)}</b></td><td class="num">${pct(p.total.churn)}</td><td class="num">${p.total.cuadra ? '' : '<span class="vacio-tenue">no cuadra</span>'}</td></tr>` : ''}`).join('');
+  const tabla = g.periodos.length
+    ? `<div class="tbl-wrap"><table class="tabla-metricas crr-tabla"><caption class="sr-only">CRR y churn por comunidad entre cargas de lista completa</caption><thead><tr><th scope="col" class="th-com">Comunidad</th><th scope="col" class="num" title="Miembros de la carga de lista completa anterior">Miembros al inicio</th><th scope="col" class="num" title="Personas que aparecen por primera vez o vuelven en la carga que cierra el período">Nuevos</th><th scope="col" class="num" title="Personas del grupo anterior que ya no están">Bajas</th><th scope="col" class="num" title="Miembros de la carga que cierra el período">Miembros al final</th><th scope="col" class="num" title="(Miembros al final − nuevos) ÷ miembros al inicio × 100">CRR</th><th scope="col" class="num" title="100 − CRR: de cada 100 miembros del inicio, cuántos ya no están">Churn</th><th scope="col"></th></tr></thead><tbody>${cuerpo}</tbody></table></div>`
+    : `<div class="sub">Ninguna comunidad tiene dos cargas de lista completa que cierren dentro de estas fechas, así que todavía no hay CRR para este período.</div>`;
+  const aviso = sin.length && g.periodos.length ? `<div class="sub" style="color:var(--warn)">Sin CRR en estas fechas: ${esc(sin.join(', '))}. Les falta una carga de lista completa del grupo dentro del período (Overview → Cargar miembros → "lista completa").</div>` : '';
+  return `<div class="card crr">${titulo}
+    <div class="sub">CRR = (miembros al final − nuevos) ÷ miembros al inicio × 100. Churn = 100 − CRR. Se mide entre dos cargas de lista completa de cada comunidad: son una foto exacta de quién está en el grupo, así que no se estima nada. Muestra los períodos cuya carga de cierre cae dentro de las fechas elegidas. No es la "fuga" de Overview (esa usa otra base: bajas ÷ (bajas + miembros finales)).</div>
+    ${aviso}${tabla}
   </div>`;
 }
 
@@ -1162,7 +1228,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
     </div>`;
 }
 
-function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null){
+function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null, crr = null){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.filter(c => !c.es_global).map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
@@ -1246,6 +1312,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     </div>
     ${!esMarketing() ? '' : renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}
     ${renderSemaforoCobertura(comunidades, t.convCom, t.ent, canalActivo)}
+    ${renderCrr(crr, comunidades, filtroComunidad)}
     ${!esMarketing() ? '' : renderRendimiento(rendimiento, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : sumaDe(comunidades.filter(c => !c.es_global), 'inversion'), filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '', canalActivo)}`;
 }
 
@@ -2603,16 +2670,17 @@ async function renderAll(){
       wireComunidadesForm();
 
     } else if (state.tab === 'control') {
-      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento] = await Promise.all([
+      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento, crr] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
         loadEntradasFlow(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadRendimientoAnuncios(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
+        loadCrr(state.fechaDesde || null, state.fechaHasta || null),
       ]);
       // La fila de campañas globales va al final y suma en el total del cliente; con una comunidad elegida no aparece (no es de esa comunidad).
       const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
-      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento, crr);
       wireControl();
 
     } else if (state.tab === 'atribucion') {

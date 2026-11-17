@@ -44,7 +44,7 @@ test("con menos de 20 chats (o sin dato) dice 'pocos datos' y no un color", () =
 
 test("la sección va debajo del desglose, sin las campañas globales, y no se divide por canal", () => {
   // El semáforo sigue debajo del desglose; desde la PR #72 el bloque "Rendimiento por anuncio" va al final, debajo del semáforo.
-  assert.match(html, /renderDesglose\([^\n]*\)\}\n\s*\$\{renderSemaforoCobertura\(comunidades, t\.convCom, t\.ent, canalActivo\)\}\n\s*\$\{!esMarketing\(\) \? '' : renderRendimiento\(/);
+  assert.match(html, /renderDesglose\([^\n]*\)\}\n\s*\$\{renderSemaforoCobertura\(comunidades, t\.convCom, t\.ent, canalActivo\)\}\n\s*\$\{renderCrr\(crr, comunidades, filtroComunidad\)\}\n\s*\$\{!esMarketing\(\) \? '' : renderRendimiento\(/);
   assert.match(html, /comunidades\.filter\(c => !c\.es_global\)\.map\(c => item\(c\.nombre, c\.conversaciones_meta, c\.clics_unicos, false\)\)/);
   assert.match(html, /if \(canalActivo\) return `<div class="card semaforo">/);
 });
