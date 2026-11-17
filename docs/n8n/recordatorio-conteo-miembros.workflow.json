@@ -1,0 +1,245 @@
+{
+  "name": "Recordatorio del CRM: lo que falta completar",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Recordatorio del CRM\nLos **lunes y jueves a las 8:00** le pregunta al CRM qué necesita que completes (listas de miembros vencidas, cargas que no cuadran, Meta sin sincronizar...) y te lo manda por correo, con el mismo mensaje que ves en la franja *Para completar*.\n\nSi **no hay nada pendiente, no manda nada**. No crea nada nuevo: el CRM decide qué pedir (función `acciones_pendientes`).\n\n1. Revisá `SLUG` (nodo *Definir cliente*) y `PANEL_URL` (nodo *Armar recordatorio*).\n2. Poné las credenciales (*Supabase CRM (Custom Auth)*, *Gmail*) y el correo destino.\n3. Probalo con *Correr a mano*.",
+        "height": 280,
+        "width": 540,
+        "color": 4
+      },
+      "id": "d40000001-0000-4000-8000-000000000001",
+      "name": "Nota 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1,4"
+            }
+          ]
+        }
+      },
+      "id": "d40000002-0000-4000-8000-000000000002",
+      "name": "Lunes y jueves 8:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d40000003-0000-4000-8000-000000000003",
+      "name": "Correr a mano",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cliente del que se piden las acciones pendientes (columna slug del CRM).\nconst SLUG = 'cortado-en-jarrito';\nreturn [{ json: { slug: SLUG } }];"
+      },
+      "id": "d40000004-0000-4000-8000-000000000004",
+      "name": "Definir cliente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/cliente?select=id,nombre&slug=eq.{{ $json.slug }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d40000005-0000-4000-8000-000000000005",
+      "name": "Supabase: cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM (Custom Auth)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/rpc/acciones_pendientes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Profile",
+              "value": "crm_comunidades_v2"
+            }
+          ]
+        },
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_cliente: $json.id }) }}"
+      },
+      "id": "d40000006-0000-4000-8000-000000000006",
+      "name": "Supabase: acciones pendientes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        80
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Supabase CRM (Custom Auth)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el correo con lo que el CRM está pidiendo (\"Para completar\"). Si no hay nada pendiente, NO manda nada: no hay correo vacío.\nconst PANEL_URL = '';   // pegá acá la dirección del CRM para que el correo lleve el enlace\nconst filas = $input.all().map((i) => i.json).filter((r) => r && r.codigo);\nif (!filas.length) return [];\nconst color = { 1: '#dc2626', 2: '#d97706', 3: '#6b7280' };\nconst lineas = filas.map((a) => `<li style=\"margin-bottom:8px\"><span style=\"color:${color[a.prioridad] || color[3]}\">●</span> ${a.mensaje} <i style=\"color:#6b7280\">(en el CRM: ${a.boton})</i></li>`).join('');\nconst html = `<p>Esto es lo que el CRM necesita que completes hoy:</p><ul style=\"list-style:none;padding-left:0\">${lineas}</ul>\n${PANEL_URL ? `<p><a href=\"${PANEL_URL}\">Abrir el CRM</a></p>` : ''}\n<p style=\"color:#6b7280\">Cada aviso se resuelve con el botón de la franja \"Para completar\" en Overview o Control_Comunidades. Si algo está apagado a propósito, podés posponerlo desde ahí.</p>`;\nreturn [{ json: { asunto: filas.length === 1 ? 'El CRM necesita 1 cosa de tu parte' : `El CRM necesita ${filas.length} cosas de tu parte`, html } }];"
+      },
+      "id": "d40000007-0000-4000-8000-000000000007",
+      "name": "Armar recordatorio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "PEGAR_CORREO_DESTINO",
+        "subject": "={{ $json.asunto }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "d40000008-0000-4000-8000-000000000008",
+      "name": "Enviar recordatorio",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        80
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZAR",
+          "name": "Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Lunes y jueves 8:00": {
+      "main": [
+        [
+          {
+            "node": "Definir cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correr a mano": {
+      "main": [
+        [
+          {
+            "node": "Definir cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir cliente": {
+      "main": [
+        [
+          {
+            "node": "Supabase: cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: cliente": {
+      "main": [
+        [
+          {
+            "node": "Supabase: acciones pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase: acciones pendientes": {
+      "main": [
+        [
+          {
+            "node": "Armar recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar recordatorio": {
+      "main": [
+        [
+          {
+            "node": "Enviar recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "pinData": {},
+  "active": false
+}

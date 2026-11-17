@@ -50,6 +50,33 @@ En esos casos te llega el motivo y la cargás a mano (Overview → Cargar miembr
 
 La carga automática usa siempre: **lista completa**, duplicados **ignorados** (se conservan las fechas originales) y **sin** marcar "miembros iniciales".
 
+## 3. Dos flujos más para producción
+| Flujo | Archivo | Para qué |
+|---|---|---|
+| **Aviso de errores** | [`aviso-de-errores.workflow.json`](../n8n/aviso-de-errores.workflow.json) | Si un flujo falla, te manda un correo con **cuál fue y en qué nodo**. Sin esto, un reporte del lunes que no sale se nota recién el martes |
+| **Recordatorio del CRM** | [`recordatorio-conteo-miembros.workflow.json`](../n8n/recordatorio-conteo-miembros.workflow.json) | Los lunes y jueves a las 8:00 le pregunta al CRM qué necesita que completes y te lo manda por correo (el mismo mensaje de la franja "Para completar"). Si no hay nada pendiente, **no manda nada** |
+
+Para que el aviso de errores funcione hay que **activarlo en cada flujo**: abrir el flujo → ⋯ → *Settings* → **Error workflow** → elegir "Aviso de errores de los flujos del CRM".
+
+## Lista para dejar todo en producción
+Hacela en este orden. Los flujos no avisan solos si les falta algo: por eso conviene tildar cada punto.
+
+1. **Credenciales** (una vez, en n8n → Credentials):
+   - **Supabase CRM (Custom Auth)**: JSON con los encabezados `apikey` y `Authorization: Bearer <clave de servicio>`. Tiene que ser la clave de servicio: el reporte lleva plata y la lee solo Marketing o el servidor.
+   - **Gmail** y **Google Sheets** (o la cuenta de servicio de Google; si usás cuenta de servicio, **compartí la planilla con el correo de esa cuenta**).
+2. **En *Reporte semanal*:**
+   - Que **ningún nodo esté deshabilitado** (el nodo gris con una raya): *Supabase: cliente*, *Guardar en Drive* y *Enviar por correo*.
+   - Completar `PEGAR_ID_DE_LA_CARPETA_DE_DRIVE`, `PEGAR_ID_DE_LA_PLANILLA_DE_HISTORIAL` y `PEGAR_CORREO_DESTINO`.
+   - En el nodo *Supabase: cliente*, la dirección tiene que estar en **modo expresión** (el campo se ve con el recuadro "Expression" activo). *Si importaste la versión del 17/11 a la mañana, este era un error del archivo: ya está corregido; volvé a importarlo o activá "Expression" en ese campo.*
+   - En la planilla de historial, pestaña **`Historial`** con los encabezados en la fila 1.
+3. **Probar con *Correr a mano*** y controlar el Excel contra el botón **"Reporte semanal (Excel)"** del CRM: tienen que dar lo mismo.
+4. **Importar el aviso de errores**, completar su correo y elegirlo como *Error workflow* en cada flujo (paso de arriba).
+5. **Importar el recordatorio**, completar `SLUG`, `PANEL_URL` y el correo, y probarlo con *Correr a mano*.
+6. **Activar** los flujos. Los de horario (*Reporte semanal*, *Recordatorio*) corren solos; la *Carga automática de miembros* sigue en **modo prueba** hasta que compruebes varias vistas previas.
+
+## Qué puede hacer Claude con el MCP de n8n
+El MCP de n8n que conectaste tiene **tres herramientas**: **buscar** flujos, **ver el detalle** de un flujo y **ejecutar** un flujo. Eso permite **mirar** cómo quedó cada nodo y **correr** el flujo para verificarlo, pero **no modificar nodos, credenciales ni activar o desactivar flujos**. Los cambios se hacen en n8n (o importando el JSON del repositorio), y después Claude puede correr el flujo y revisar el resultado.
+
 ## Limitaciones
 - Los dos flujos se armaron y probaron **sin n8n** (se probó la lógica de cada nodo de código con datos simulados y la estructura del JSON). La primera importación puede pedir ajustes menores en algún nodo de Google; si algo no se parece a esta guía, mandá una captura.
 - Lo que sigue necesitando una persona o un equipo es **leer los grupos de WhatsApp** (ver el plan, "Proceso del conteo de miembros").
