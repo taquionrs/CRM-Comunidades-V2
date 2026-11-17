@@ -15,8 +15,8 @@ const AYUDAS = `
   const fmtInt = (v) => v == null ? '—' : Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const fmtDia = (d) => { if (!d) return '—'; const [a, m, x] = String(d).slice(0, 10).split('-'); return x + '/' + m + '/' + a; };
 `;
-const { agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr } = new Function(
-  AYUDAS + bloque("CRR") + html.slice(iniR, finR) + "\nreturn { agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr };",
+const { agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr, flechaCrr, periodoAnteriorCrr } = new Function(
+  AYUDAS + bloque("CRR") + html.slice(iniR, finR) + "\nreturn { agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr, flechaCrr, periodoAnteriorCrr };",
 )();
 
 // Los períodos reales de Cortado en Jarrito al 17/11/2026 (los que devuelve el CRM).
@@ -184,4 +184,44 @@ test("el botón y el aviso están conectados, el panel guarda todos los período
   assert.match(f, /filtrarCrr\(state\.crrDatos, state\.fechaDesde \|\| '', state\.fechaHasta \|\| '', state\.filtroComunidad \|\| null\)/);
   assert.match(f, /csvCrr\(periodos, cliente\)/);
   assert.match(f, /type: 'text\/csv;charset=utf-8'/);
+});
+
+// ---------- flechitas de tendencia ----------
+test("CRR: sube y es verde si mejoró, baja y es roja si empeoró; churn al revés (bajar es bueno)", () => {
+  assert.match(flechaCrr(95, 90, true), /crr-flecha bien[^>]*>▲/);
+  assert.match(flechaCrr(85, 90, true), /crr-flecha mal[^>]*>▼/);
+  assert.match(flechaCrr(5, 10, false), /crr-flecha bien[^>]*>▼/);
+  assert.match(flechaCrr(14, 8, false), /crr-flecha mal[^>]*>▲/);
+});
+
+test("sin dato anterior o sin cambio no hay flechita, y dice contra qué compara", () => {
+  assert.equal(flechaCrr(90, null, true), "");
+  assert.equal(flechaCrr(null, 90, true), "");
+  assert.equal(flechaCrr(90, 90.004, true), "");
+  assert.match(flechaCrr(95.12, 90, true), /Mejoró respecto del período anterior \(90,0 %\)/);
+});
+
+test("compara con el período anterior de la misma comunidad (aunque otro período lo separe) y el total con el total", () => {
+  const ps = agruparCrr(FILAS).periodos;
+  const p = ps.find((x) => x.hasta === "2026-11-17" && x.filas.length === 3);
+  assert.equal(periodoAnteriorCrr(ps, p, "pal").hasta, "2026-10-26");
+  const pb = ps.find((x) => x.desde === "2026-11-13");
+  assert.equal(periodoAnteriorCrr(ps, pb, "boe").hasta, "2026-11-13");
+  assert.equal(periodoAnteriorCrr(ps, p, null).crr, 94.94);
+  const primero = ps[ps.length - 1];
+  assert.equal(periodoAnteriorCrr(ps, primero, "pal"), null);
+});
+
+test("la tabla muestra las flechas (Palermo 96,9 → 95,1: CRR baja en rojo, churn sube en rojo) y la aclaración 'más alto es mejor'", () => {
+  const out = renderCrr(FILAS, COMUNIDADES, "pal", { desde: "", hasta: "" });
+  assert.match(out, /95,1 %<\/b> <span class="crr-flecha mal"[^>]*>▼/);
+  assert.match(out, /4,9 % <span class="crr-flecha mal"[^>]*>▲/);
+  assert.match(out, /CRR \(más alto es mejor\)/);
+  assert.match(out, /Churn \(más bajo es mejor\)/);
+  assert.match(out, /Cuanto más <b>alto<\/b> el CRR, mejor/);
+});
+
+test("la flecha compara contra el histórico aunque las fechas elegidas oculten el período anterior", () => {
+  const out = renderCrr(FILAS, COMUNIDADES, "pal", { desde: "2026-11-01", hasta: "" });
+  assert.match(out, /crr-flecha mal/);
 });
