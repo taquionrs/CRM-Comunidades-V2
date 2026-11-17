@@ -102,6 +102,9 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .acciones-ok{border-left-color:#4FD39A; padding:10px 14px; font-size:13px}
 .crr .crr-cab{display:flex; justify-content:space-between; align-items:center; gap:8px 14px; flex-wrap:wrap}
 .crr .crr-periodo th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
+.crr .crr-flecha{font-size:10px; margin-left:3px; cursor:help}
+.crr .crr-flecha.bien{color:#5fd39a}
+.crr .crr-flecha.mal{color:var(--danger)}
 .crr .vacio-tenue{color:var(--text-faint); font-size:11.5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
 .rendimiento .rend-cab{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px}
@@ -1136,6 +1139,20 @@ function filtrarCrr(filas, desde, hasta, comunidadId){
   const dia = (d) => String(d == null ? '' : d).slice(0, 10);
   return (filas || []).filter(f => (!comunidadId || f.comunidad_id === comunidadId) && (!desde || dia(f.hasta) >= desde) && (!hasta || dia(f.hasta) <= hasta));
 }
+// Flechita de tendencia: compara con el período anterior de la misma comunidad (o del total). Sube/baja = hacia dónde se movió el número;
+// verde = mejoró, rojo = empeoró (en CRR sube es mejor; en churn, bajar es mejor). Sin período anterior o sin cambio: no muestra nada.
+function periodoAnteriorCrr(periodos, p, comunidadId){
+  const q = (periodos || []).filter(x => x.hasta < p.hasta && (comunidadId ? x.filas.some(f => f.comunidadId === comunidadId) : x.total)).sort((a, b) => b.hasta.localeCompare(a.hasta))[0];
+  if (!q) return null;
+  return comunidadId ? q.filas.find(f => f.comunidadId === comunidadId) : q.total;
+}
+function flechaCrr(actual, anterior, mejorSiSube){
+  if (actual == null || anterior == null || Math.round(actual * 100) === Math.round(anterior * 100)) return '';
+  const sube = actual > anterior, bueno = sube === mejorSiSube;
+  const fmt = (v) => Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
+  const txt = (bueno ? 'Mejoró' : 'Empeoró') + ' respecto del período anterior (' + fmt(anterior) + ')';
+  return `<span class="crr-flecha ${bueno ? 'bien' : 'mal'}" title="${txt}" aria-label="${txt}">${sube ? '▲' : '▼'}</span>`;
+}
 function crrMasRecientesFuera(filas, hasta, comunidadId){
   const dia = (d) => String(d == null ? '' : d).slice(0, 10);
   if (!hasta) return { n: 0, hasta: null };
@@ -1256,17 +1273,20 @@ function renderCrr(filas, comunidades, filtroComunidad, rango = null){
   const visibles = (comunidades || []).filter(c => !c.es_global && (!filtroComunidad || c.id === filtroComunidad));
   const sin = visibles.filter(c => !g.comunidadesConCrr.has(c.id)).map(c => c.nombre);
   const dm = (d) => { const x = fmtDia(d); return x === '—' ? x : x.slice(0, 5); };
-  const fila = (x) => `<tr><th scope="row" class="td-com">${esc(x.comunidad)}</th><td class="num">${fmtInt(x.inicio)}</td><td class="num">${fmtInt(x.nuevos)}</td><td class="num">${fmtInt(x.bajas)}</td><td class="num">${fmtInt(x.fin)}</td>
-      <td class="num"><b>${pct(x.crr)}</b></td><td class="num">${pct(x.churn)}</td><td class="num">${x.cuadra ? '' : '<span class="vacio-tenue" title="Miembros al inicio + nuevos − bajas no da los miembros al final: revisar las cargas de esta comunidad">no cuadra</span>'}</td></tr>`;
+  const todos = agruparCrr(filas).periodos;
+  const tend = (x, p, comId) => { const a = periodoAnteriorCrr(todos, p, comId); return a ? { crr: flechaCrr(x.crr, a.crr, true), churn: flechaCrr(x.churn, a.churn, false) } : { crr: '', churn: '' }; };
+  const fila = (x, p) => { const t = tend(x, p, x.comunidadId); return `<tr><th scope="row" class="td-com">${esc(x.comunidad)}</th><td class="num">${fmtInt(x.inicio)}</td><td class="num">${fmtInt(x.nuevos)}</td><td class="num">${fmtInt(x.bajas)}</td><td class="num">${fmtInt(x.fin)}</td>
+      <td class="num"><b>${pct(x.crr)}</b> ${t.crr}</td><td class="num">${pct(x.churn)} ${t.churn}</td><td class="num">${x.cuadra ? '' : '<span class="vacio-tenue" title="Miembros al inicio + nuevos − bajas no da los miembros al final: revisar las cargas de esta comunidad">no cuadra</span>'}</td></tr>`; };
   const cuerpo = g.periodos.map(p => `<tr class="crr-periodo"><th colspan="8" scope="colgroup">Del ${esc(dm(p.desde))} al ${esc(fmtDia(p.hasta))} · ${fmtInt(p.dias)} ${p.dias === 1 ? 'día' : 'días'} entre cargas de lista completa</th></tr>
-      ${p.filas.map(fila).join('')}
-      ${p.total ? `<tr class="totales"><th scope="row" class="td-com">Total</th><td class="num">${fmtInt(p.total.inicio)}</td><td class="num">${fmtInt(p.total.nuevos)}</td><td class="num">${fmtInt(p.total.bajas)}</td><td class="num">${fmtInt(p.total.fin)}</td><td class="num"><b>${pct(p.total.crr)}</b></td><td class="num">${pct(p.total.churn)}</td><td class="num">${p.total.cuadra ? '' : '<span class="vacio-tenue">no cuadra</span>'}</td></tr>` : ''}`).join('');
+      ${p.filas.map(x => fila(x, p)).join('')}
+      ${p.total ? `<tr class="totales"><th scope="row" class="td-com">Total</th><td class="num">${fmtInt(p.total.inicio)}</td><td class="num">${fmtInt(p.total.nuevos)}</td><td class="num">${fmtInt(p.total.bajas)}</td><td class="num">${fmtInt(p.total.fin)}</td><td class="num"><b>${pct(p.total.crr)}</b> ${tend(p.total, p, null).crr}</td><td class="num">${pct(p.total.churn)} ${tend(p.total, p, null).churn}</td><td class="num">${p.total.cuadra ? '' : '<span class="vacio-tenue">no cuadra</span>'}</td></tr>` : ''}`).join('');
   const tabla = g.periodos.length
-    ? `<div class="tbl-wrap"><table class="tabla-metricas crr-tabla"><caption class="sr-only">CRR y churn por comunidad entre cargas de lista completa</caption><thead><tr><th scope="col" class="th-com">Comunidad</th><th scope="col" class="num" title="Miembros de la carga de lista completa anterior">Miembros al inicio</th><th scope="col" class="num" title="Personas que aparecen por primera vez o vuelven en la carga que cierra el período">Nuevos</th><th scope="col" class="num" title="Personas del grupo anterior que ya no están">Bajas</th><th scope="col" class="num" title="Miembros de la carga que cierra el período">Miembros al final</th><th scope="col" class="num" title="(Miembros al final − nuevos) ÷ miembros al inicio × 100">CRR</th><th scope="col" class="num" title="100 − CRR: de cada 100 miembros del inicio, cuántos ya no están">Churn</th><th scope="col"></th></tr></thead><tbody>${cuerpo}</tbody></table></div>`
+    ? `<div class="tbl-wrap"><table class="tabla-metricas crr-tabla"><caption class="sr-only">CRR y churn por comunidad entre cargas de lista completa</caption><thead><tr><th scope="col" class="th-com">Comunidad</th><th scope="col" class="num" title="Miembros de la carga de lista completa anterior">Miembros al inicio</th><th scope="col" class="num" title="Personas que aparecen por primera vez o vuelven en la carga que cierra el período">Nuevos</th><th scope="col" class="num" title="Personas del grupo anterior que ya no están">Bajas</th><th scope="col" class="num" title="Miembros de la carga que cierra el período">Miembros al final</th><th scope="col" class="num" title="(Miembros al final − nuevos) ÷ miembros al inicio × 100. Cuanto más alto, mejor">CRR (más alto es mejor)</th><th scope="col" class="num" title="100 − CRR: de cada 100 miembros del inicio, cuántos ya no están. Cuanto más bajo, mejor">Churn (más bajo es mejor)</th><th scope="col"></th></tr></thead><tbody>${cuerpo}</tbody></table></div>`
     : `<div class="sub">Ninguna comunidad tiene dos cargas de lista completa que cierren dentro de estas fechas, así que todavía no hay CRR para este período.</div>`;
   const aviso = sin.length && g.periodos.length ? `<div class="sub" style="color:var(--warn)">Sin CRR en estas fechas: ${esc(sin.join(', '))}. Les falta una carga de lista completa del grupo dentro del período (Overview → Cargar miembros → "lista completa").</div>` : '';
   return `<div class="card crr"><div class="crr-cab">${titulo}${botonCsv}</div>
     <div class="sub">CRR = (miembros al final − nuevos) ÷ miembros al inicio × 100. Churn = 100 − CRR. Se mide entre dos cargas de lista completa de cada comunidad: son una foto exacta de quién está en el grupo, así que no se estima nada. Muestra los períodos cuya carga de cierre cae dentro de las fechas elegidas. No es la "fuga" de Overview (esa usa otra base: bajas ÷ (bajas + miembros finales)).</div>
+    <div class="sub">Cuanto más <b>alto</b> el CRR, mejor (se queda más gente); cuanto más <b>bajo</b> el churn, mejor. La flechita compara con el período anterior de la misma comunidad: <span class="crr-flecha bien">▲</span>/<span class="crr-flecha bien">▼</span> verde = mejoró, <span class="crr-flecha mal">▲</span>/<span class="crr-flecha mal">▼</span> roja = empeoró. Sin flechita: no hay período anterior o no cambió.</div>
     ${avisoFuera}${aviso}${tabla}
   </div>`;
 }
