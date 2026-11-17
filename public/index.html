@@ -522,7 +522,7 @@ async function loadAcciones(){
 async function loadComunidades(){
   const { data, error } = await supabase.from('comunidad').select('*').eq('cliente_id', state.clienteId).order('nombre');
   if (error) throw error;
-  return data || [];
+  return (data || []).filter(c => !c.oculta);   // db/047: las comunidades ocultas (el canal oficial "(general)") no se muestran en ningún lado
 }
 async function crearComunidad(payload){
   const { error } = await supabase.from('comunidad').insert({ ...payload, cliente_id: state.clienteId });
@@ -1863,9 +1863,9 @@ async function abrirCampanas(){
   const clientes = state.clientes || [];
   let comunidades = [];
   try {
-    const { data, error } = await supabase.from('comunidad').select('id,nombre,cliente_id').order('nombre');
+    const { data, error } = await supabase.from('comunidad').select('id,nombre,cliente_id,oculta').order('nombre');
     if (error) throw error;
-    comunidades = data || [];
+    comunidades = (data || []).filter(c => !c.oculta);
   } catch (err) { alert('No se pudieron leer las comunidades: ' + err.message); return; }
   let por = '';
   try { por = localStorage.getItem(CLAVE_NOMBRE_CAMPANAS) || ''; } catch (_) { /* sin almacenamiento */ }
@@ -2255,9 +2255,9 @@ async function abrirCargaMiembros(opciones = {}){
   let nombreGuardado = '';
   try { nombreGuardado = localStorage.getItem(CLAVE_NOMBRE_CARGA) || ''; } catch (_) { /* sin almacenamiento */ }
   const leerComunidades = async (clienteId) => {
-    const { data, error } = await supabase.from('comunidad').select('id,nombre,miembros_iniciales,miembros_finales').eq('cliente_id', clienteId).order('nombre');
+    const { data, error } = await supabase.from('comunidad').select('id,nombre,miembros_iniciales,miembros_finales,oculta').eq('cliente_id', clienteId).order('nombre');
     if (error) throw error;
-    return data || [];
+    return (data || []).filter(c => !c.oculta);
   };
   let comunidades = [];
   try { comunidades = await leerComunidades(state.clienteId || clientes[0].id); }
