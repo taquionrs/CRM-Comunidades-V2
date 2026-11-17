@@ -39,6 +39,7 @@ before(async () => {
     insert into webhook_intento_sin_cliente (slug_recibido, estado, motivo, payload) values ('desconocido', 404, 'Cliente inexistente', '{"contact":{"name":"Ana"}}');
     insert into windsor_entrega_log (tabla, operacion, filas) values ('windsor_raw.facebook_ads', 'insert', 1);
     insert into windsor_sync_log (tabla) values ('windsor_raw.facebook_ads');
+    insert into accion_pospuesta (cliente_id, codigo, hasta, motivo) values ('00000000-0000-0000-0000-0000000000c1', 'sin_clasificar', current_date + 7, 'prueba');
   `);
   for (const email of ["felipe.pampin@taquion.com.ar", "general@taquion.com.ar", "mkt@taquion.com.ar", "nadie@taquion.com.ar", "vencido@taquion.com.ar"]) {
     const { rows: [u] } = await db.query(`insert into auth.users (email) values ($1) returning id`, [email]);

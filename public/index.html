@@ -86,6 +86,20 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .semaforo .sem-total{padding-left:14px; border-left:1px solid var(--border)}
 .semaforo .sem-leyenda{display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; margin:0 0 2px}
 .semaforo .sem-leyenda span{display:inline-flex; align-items:center; gap:5px}
+.acciones{border-left:3px solid var(--warn)}
+.acciones ul{list-style:none; margin:8px 0 0; padding:0}
+.acciones li{display:flex; justify-content:space-between; align-items:center; gap:10px 16px; flex-wrap:wrap; padding:9px 0; border-top:1px solid var(--border)}
+.acciones li:first-child{border-top:0}
+.acciones .accion-texto{flex:1 1 380px; font-size:13px; line-height:1.4}
+.acciones .accion-texto::before{content:''; display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:9px; background:var(--text-faint)}
+.acciones .acc-p1 .accion-texto::before{background:#F5707A}
+.acciones .acc-p2 .accion-texto::before{background:#FFB35C}
+.acciones .accion-botones{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.acciones details{font-size:12px}
+.acciones summary{cursor:pointer; color:var(--text-muted)}
+.acciones details[open]{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.acciones .sel-motivo{font-size:12px}
+.acciones-ok{border-left-color:#4FD39A; padding:10px 14px; font-size:13px}
 .crr .crr-periodo th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
 .crr .vacio-tenue{color:var(--text-faint); font-size:11.5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
@@ -490,6 +504,13 @@ async function loadCrr(desde, hasta){
   if (error) { console.warn('crr_por_carga:', error.message); return null; }
   return data || [];
 }
+// Centro de acciones "Para completar" (db/045): lo que el CRM necesita que completes. Solo Marketing; si falla, el resto de la página sigue igual.
+async function loadAcciones(){
+  if (!esMarketing()) return null;
+  const { data, error } = await supabase.rpc('acciones_pendientes', { p_cliente: state.clienteId });
+  if (error) { console.warn('acciones_pendientes:', error.message); return null; }
+  return data || [];
+}
 async function loadComunidades(){
   const { data, error } = await supabase.from('comunidad').select('*').eq('cliente_id', state.clienteId).order('nombre');
   if (error) throw error;
@@ -625,7 +646,7 @@ const AYUDAS_OVERVIEW = {
 /* AYUDAS-OVERVIEW:FIN */
 const thAyuda = (texto, ayuda) => `<th>${texto} <button type="button" class="info-btn" data-info="${esc(ayuda)}" aria-label="Qué significa: ${esc(texto)}">i</button></th>`;
 // filtros: { todas, comunidad, desde, hasta } — `comunidades` ya viene filtrada por período y comunidad; `todas` alimenta el selector y el formulario de Mi/Mf.
-function renderOverview(kpis, comunidades, filtros = null){
+function renderOverview(kpis, comunidades, filtros = null, acciones = null){
   const k = kpis || {};
   const kpiCards = kpiGrid([
     [fmtMoney(k.inversion_total), 'Inversión total Meta', true, AYUDAS_OVERVIEW.inversion],
@@ -666,7 +687,7 @@ function renderOverview(kpis, comunidades, filtros = null){
         </tr>`
     : `<tr class="empty-row"><td colspan="6">Sin comunidades cargadas todavía — agregá una abajo.</td></tr>`;
 
-  return (filtros ? renderFiltrosPeriodo(filtros.todas, filtros.comunidad, filtros.desde, filtros.hasta) : '') + kpiCards + entradasFlowCards +
+  return renderAcciones(acciones) + (filtros ? renderFiltrosPeriodo(filtros.todas, filtros.comunidad, filtros.desde, filtros.hasta) : '') + kpiCards + entradasFlowCards +
     `<div class="card"><h3>Distribución de comunidad</h3><div class="sub">Miembros iniciales/finales son snapshots manuales; las entradas al flow se calculan solas (First-Contact Attribution) y las bajas salen de las cargas de la lista completa de cada grupo (desde la segunda carga).</div>
       <div class="tbl-wrap"><table><thead><tr><th>Comunidad / Barrio</th>${thAyuda('Miembros iniciales (Mi)', AYUDAS_OVERVIEW.mi)}${thAyuda('Entradas al flow (CRM)', AYUDAS_OVERVIEW.entradas_tabla)}${thAyuda('Bajas (B)', AYUDAS_OVERVIEW.bajas)}${thAyuda('Miembros efectivos finales (Mf)', AYUDAS_OVERVIEW.mf)}${thAyuda('% Participación', AYUDAS_OVERVIEW.participacion)}</tr></thead><tbody>${rows}</tbody></table></div>
     </div>` +
@@ -1110,6 +1131,19 @@ function agruparCrr(filas){
 }
 /* CRR:FIN */
 
+/* ACCIONES:INICIO */
+// Centro de acciones "Para completar" (PR #77, db/045): el CRM te pide lo que le falta, directo y con el botón que lo resuelve.
+// El CRM calcula las acciones y escribe el mensaje; el panel las muestra. Funciones puras (se prueban en tests/panel-acciones.test.mjs).
+const MAX_ACCIONES = 5;
+const MOTIVOS_POSPONER = ['Ya lo estoy haciendo', 'Campañas apagadas a propósito', 'No aplica por ahora'];
+function acotarAcciones(filas, max = MAX_ACCIONES){
+  const lista = (filas || []).slice().sort((a, b) => (Number(a.prioridad) || 9) - (Number(b.prioridad) || 9));
+  return { visibles: lista.slice(0, max), ocultas: Math.max(0, lista.length - max) };
+}
+// A la carga de miembros se va con la comunidad ya elegida; si son varias, con "Todas las comunidades" ('' = todas).
+function comunidadParaCarga(ids){ return Array.isArray(ids) && ids.length === 1 ? ids[0] : ''; }
+/* ACCIONES:FIN */
+
 // Sección chica al final de Control_Comunidades: una fila por comunidad (sin las campañas globales, que no tienen entradas propias) y el total.
 function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
   const u = UMBRALES_COBERTURA;
@@ -1126,6 +1160,50 @@ function renderSemaforoCobertura(comunidades, totalConv, totalEnt, canalActivo){
     <div class="sub sem-leyenda"><span><i class="sem-dot sem-verde"></i>más de ${u.verdeMas} %</span> <span><i class="sem-dot sem-amarillo"></i>${u.amarilloDesde} a ${u.verdeMas} %</span> <span><i class="sem-dot sem-rojo"></i>menos de ${u.amarilloDesde} %</span> <span><i class="sem-dot sem-revisar"></i>más de 100 %: revisar</span> <span><i class="sem-dot sem-pocos"></i>menos de ${u.minChats} chats: pocos datos</span></div>
     <div class="sub">Cobertura = entradas al flow ÷ conversaciones de Meta del período. Umbrales de arranque, en revisión con la PO. Meta atribuye con ventana de 7 días y el CRM cuenta el primer contacto: es un indicador, no una igualdad.</div>
   </div>`;
+}
+
+// Franja "Para completar" (PR #77): arriba de Overview y de Control_Comunidades. Sin acciones dice que está todo al día; sin respuesta de la base, no muestra nada.
+function renderAcciones(filas){
+  if (filas == null) return '';
+  if (!filas.length) return `<div class="card acciones acciones-ok" role="status"><b>Todo al día.</b> <span style="color:var(--text-muted)">El CRM no necesita que completes nada ahora.</span></div>`;
+  const { visibles, ocultas } = acotarAcciones(filas);
+  const item = (a) => {
+    const ids = (a.comunidad_ids || []).join(',');
+    return `<li class="acc-p${esc(String(a.prioridad || 3))}">
+      <div class="accion-texto">${esc(a.mensaje)}</div>
+      <div class="accion-botones">
+        <button type="button" class="btn" data-accion-destino="${esc(a.destino)}" data-accion-ids="${esc(ids)}">${esc(a.boton)}</button>
+        <details class="accion-posponer"><summary>Posponer</summary>
+          <select class="sel-motivo" aria-label="Motivo">${MOTIVOS_POSPONER.map(m => `<option>${esc(m)}</option>`).join('')}</select>
+          <button type="button" class="btn btn-mini" data-posponer="${esc(a.codigo)}">Posponer 7 días</button>
+        </details>
+      </div></li>`;
+  };
+  return `<div class="card acciones" role="region" aria-label="Para completar"><h3 style="margin:0">Para completar <span style="color:var(--text-muted); font-weight:400">(${fmtInt(filas.length)})</span></h3>
+    <ul>${visibles.map(item).join('')}</ul>
+    ${ocultas ? `<div class="sub" style="margin-top:6px">Hay ${fmtInt(ocultas)} más: aparecen cuando resuelvas estas.</div>` : ''}
+  </div>`;
+}
+async function ejecutarAccion(destino, ids){
+  if (destino === 'cargar_miembros') return abrirCargaMiembros({ comunidadId: comunidadParaCarga(ids) });
+  if (destino === 'consultas') return abrirConsultasWindsor();
+  if (destino === 'campanas') return abrirCampanas();
+  if (destino === 'data_cruda') { state.tab = 'crudo'; return renderAll(); }
+  if (destino === 'traer_meta') { state.tab = 'control'; await renderAll(); return traerMetaEnVivo(); }
+}
+function wireAcciones(){
+  document.querySelectorAll('[data-accion-destino]').forEach((b) => {
+    b.onclick = () => ejecutarAccion(b.dataset.accionDestino, (b.dataset.accionIds || '').split(',').filter(Boolean));
+  });
+  document.querySelectorAll('[data-posponer]').forEach((b) => {
+    b.onclick = async () => {
+      const motivo = (b.closest('details').querySelector('.sel-motivo') || {}).value || null;
+      b.disabled = true;
+      const { error } = await supabase.rpc('posponer_accion', { p_cliente: state.clienteId, p_codigo: b.dataset.posponer, p_dias: 7, p_motivo: motivo });
+      if (error) { alert('No se pudo posponer: ' + error.message); b.disabled = false; return; }
+      renderAll();
+    };
+  });
 }
 
 // Bloque "Retención de miembros (CRR)" (PR #74, db/043) de Control_Comunidades: solo conteos, lo ven todos los roles. Respeta el período y la comunidad elegidos.
@@ -1233,7 +1311,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
     </div>`;
 }
 
-function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null, crr = null){
+function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null, crr = null, acciones = null){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.filter(c => !c.es_global).map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
@@ -1294,7 +1372,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
       }).join('')}</ul>
     </div>` : '';
 
-  return `<div class="filters">
+  return `${renderAcciones(acciones)}<div class="filters">
       <label>Comunidad<select id="selFiltroComunidad">${opciones}</select></label>
       <label>Canal<select id="selCanal" aria-label="Canal"><option value="todos" ${canal === 'todos' ? 'selected' : ''}>Todos</option><option value="instagram" ${canal === 'instagram' ? 'selected' : ''}>Instagram</option><option value="whatsapp" ${canal === 'whatsapp' ? 'selected' : ''}>WhatsApp</option></select></label>
       <label>Desde<input type="date" id="inpFechaDesde" value="${esc(desde)}"></label>
@@ -1393,6 +1471,7 @@ function wireControl(){
   if (anuncios) anuncios.onclick = traerAnunciosMeta;
   const reporte = document.getElementById('btnReporteSemanal');
   if (reporte) reporte.onclick = descargarReporteSemanal;
+  wireAcciones();
 }
 
 /* ================= "Traer de Meta ahora": consulta a Windsor en vivo para el rango elegido (db/027) ================= */
@@ -1985,7 +2064,7 @@ function cerrarCargaMiembros(){
   document.body.style.overflow = '';
   if (window.__cargaEsc) { document.removeEventListener('keydown', window.__cargaEsc); window.__cargaEsc = null; }
 }
-async function abrirCargaMiembros(){
+async function abrirCargaMiembros(opciones = {}){
   cerrarCargaMiembros();
   const clientes = state.clientes || [];
   if (!clientes.length) { alert('No hay clientes cargados.'); return; }
@@ -2069,6 +2148,10 @@ async function abrirCargaMiembros(){
     el('cmCom').innerHTML = (comunidades.length > 1 ? `<option value="">Todas las comunidades (el archivo trae la columna Comunidad)</option>` : '') +
       comunidades.map(c => `<option value="${c.id}">${esc(c.nombre)} (Mf actual: ${fmtInt(c.miembros_finales)})</option>`).join('');
     if (comunidades.length > 1) el('cmCom').value = comunidades[0].id;
+    // Desde el centro de acciones se abre con la comunidad ya elegida ('' = todas las comunidades). Un clic común pasa un evento, que no trae comunidadId.
+    const pre = opciones && typeof opciones.comunidadId === 'string' ? opciones.comunidadId : null;
+    if (pre === '' && comunidades.length > 1) el('cmCom').value = '';
+    else if (pre && comunidades.some(c => c.id === pre)) el('cmCom').value = pre;
     modoTodas();
   };
   const modoTodas = () => {
@@ -2733,30 +2816,33 @@ async function renderAll(){
   try {
     if (state.tab === 'overview') {
       // Overview usa las mismas filas que Control_Comunidades para el período elegido; los totales se calculan con ellas.
-      const [todas, global, entradasFlow] = await Promise.all([
+      const [todas, global, entradasFlow, acciones] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, 'todos'),
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
         state.filtroComunidad ? Promise.resolve(null) : loadEntradasFlow(state.fechaDesde || null, state.fechaHasta || null, 'todos'),
+        loadAcciones(),
       ]);
       const visibles = state.filtroComunidad ? todas.filter(c => c.id === state.filtroComunidad) : todas;
       // Los KPIs incluyen el gasto de las campañas globales (es del cliente); la tabla de comunidades no tiene esa fila.
       const paraKpis = global && !state.filtroComunidad ? [...visibles, global] : visibles;
-      content.innerHTML = renderOverview({ ...kpisDesdeComunidades(paraKpis), entradas_flow: entradasFlow }, visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' });
+      content.innerHTML = renderOverview({ ...kpisDesdeComunidades(paraKpis), entradas_flow: entradasFlow }, visibles, { todas, comunidad: state.filtroComunidad || '', desde: state.fechaDesde || '', hasta: state.fechaHasta || '' }, acciones);
       wireFiltrosPeriodo();
       wireComunidadesForm();
+      wireAcciones();
 
     } else if (state.tab === 'control') {
-      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento, crr] = await Promise.all([
+      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento, crr, acciones] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
         loadEntradasFlow(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadRendimientoAnuncios(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
         loadCrr(state.fechaDesde || null, state.fechaHasta || null),
+        loadAcciones(),
       ]);
       // La fila de campañas globales va al final y suma en el total del cliente; con una comunidad elegida no aparece (no es de esa comunidad).
       const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
-      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento, crr);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento, crr, acciones);
       wireControl();
 
     } else if (state.tab === 'atribucion') {
