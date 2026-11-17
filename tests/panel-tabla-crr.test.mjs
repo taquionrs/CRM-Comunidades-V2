@@ -29,12 +29,15 @@ test("las columnas de CRR están en la tabla principal, dentro de Permanencia, y
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test("de cada comunidad toma el último período dentro de las fechas y trae el anterior para la flechita", () => {
+test("de cada comunidad toma el último período cerrado hasta el \"Hasta\" y trae el anterior para la flechita", () => {
   const v = api.crrVigente(FILAS, "", "", "pal");
   assert.equal(v.hasta, "2026-11-17"); assert.equal(v.crr, 95.12); assert.equal(v.anterior.crr, 96.88);
   const w = api.crrVigente(FILAS, "", "2026-10-31", "pal");
   assert.equal(w.hasta, "2026-10-26"); assert.equal(w.anterior, null);
-  assert.equal(api.crrVigente(FILAS, "2026-12-01", "", "pal"), null);
+  // el "Desde" no recorta: sin cargas dentro de las fechas se muestra el último período cerrado hasta el "Hasta"
+  assert.equal(api.crrVigente(FILAS, "2026-12-01", "", "pal").hasta, "2026-11-17");
+  assert.equal(api.crrVigente(FILAS, "2026-10-28", "2026-11-10", "pal").hasta, "2026-10-26");
+  assert.equal(api.crrVigente(FILAS, "", "2026-10-20", "pal"), null);   // todavía no había ningún período cerrado
   assert.equal(api.crrVigente(FILAS, "", "", "glob"), null);
 });
 
@@ -45,7 +48,7 @@ test("el total suma las comunidades y recalcula el CRR con los totales (sin la g
   assert.equal(t.churn, 10);
   assert.equal(t.desde, "2026-10-26"); assert.equal(t.hasta, "2026-11-17");
   assert.equal(t.comparacion.crrAntes, 94.83);   // (90-35)/58
-  assert.equal(api.crrTotalVigente(FILAS, "2026-12-01", "", COMS), null);
+  assert.equal(api.crrTotalVigente(FILAS, "", "2026-10-20", COMS), null);
 });
 
 test("celdas: CRR con flecha (Palermo bajó de 96,9 a 95,1: roja), churn con flecha, enteros y período", () => {
@@ -133,4 +136,30 @@ test("sin la inversión del período (db/046 sin aplicar o rol sin plata) no cal
 test("el panel pide la función con inversión y, si no existe todavía, vuelve a la de siempre", () => {
   assert.match(html, /supabase\.rpc\('crr_por_carga_con_inversion', args\)/);
   assert.match(html, /if \(r\.error\) r = await supabase\.rpc\('crr_por_carga', args\)/);
+});
+
+// ---------- opción A: la tabla casi siempre tiene datos; costo por miembro nuevo ----------
+test("con fechas que no tocan ninguna carga (1/11 a 10/11) igual muestra el último período cerrado y su período", () => {
+  const c = { _crr: api.crrVigente(FILAS, "2026-11-01", "2026-11-10", "dev") };
+  assert.equal(c._crr.hasta, "2026-10-26");
+  assert.match(col("crr").celda(c), /92,3%/);
+  assert.match(col("crr_periodo").celda(c), /14\/10 → 26\/10/);
+});
+
+test("el costo por miembro nuevo = inversión del período ÷ ingresos nuevos (nunca se rompe por bajas)", () => {
+  const pal = { _crr: api.crrVigente(CON_INV, "", "", "pal") };   // Palermo: $225,50 de inversión, 2 nuevos, sin crecimiento neto
+  assert.match(col("cpm_nuevo").celda(pal), /\$112,75/);
+  assert.match(col("cpmn").celda(pal), /Sin dato/);               // el neto sigue sin poder calcularse
+  const dev = { _crr: api.crrVigente(CON_INV, "", "", "dev") };
+  assert.match(col("cpm_nuevo").celda(dev), /\$21,43/);           // 300 ÷ 14
+});
+
+test("costo por miembro nuevo: el total divide la inversión total por los nuevos totales; sin nuevos o sin inversión dice por qué", () => {
+  const t = { crrTotal: api.crrTotalVigente(CON_INV, "", "", COMS) };
+  assert.match(col("cpm_nuevo").total(t), /\$32,84/);             // 525,5 ÷ 16
+  assert.match(col("cpm_nuevo").celda({ _crr: { ...api.crrVigente(CON_INV, "", "", "pal"), nuevos: 0 } }), /no hubo ingresos nuevos|No hubo ingresos nuevos/i);
+  assert.match(col("cpm_nuevo").celda({ _crr: api.crrVigente(FILAS, "", "", "pal") }), /db\/046/);
+  assert.match(col("cpm_nuevo").celda({ _crr: null }), /Sin dato/);
+  assert.equal(col("cpm_nuevo").plata, true);
+  assert.equal(col("cpm_nuevo").grupo, "Ingreso");
 });
