@@ -171,6 +171,8 @@ Se comparó, número por número, el archivo del conteo del 13/11 contra lo que 
 Es la fase que concreta el principio rector (sección 2 bis) y reemplaza a las "alertas" de la versión anterior del plan: en lugar de avisos sueltos, una lista corta de **acciones** que el CRM te pide.
 
 ### 7.1 Centro de acciones ("Para completar")
+> **Estado (17/11): primera versión hecha en la PR #77** (`db/045`, franja en Overview y Control_Comunidades, guía `docs/how-to/centro-de-acciones.md`). Ya pide: lista de miembros vencida o faltante, carga que no cuadra, Meta sin sincronizar, gasto sin comunidad y personas sin clasificar; con el botón que lo resuelve y la opción de posponer. **Falta:** reporte semanal sin bajar (necesita registrar las descargas), anuncios sin código y campañas pausadas (necesitan el estado de las campañas de Meta).
+
 Una franja arriba de **Overview** y de **Control_Comunidades**, con las acciones pendientes. Cada una: un mensaje directo, el dato concreto y el botón que la resuelve. Las calcula el CRM (una sola función), así que se ven igual en el panel, en el reporte y en los avisos de n8n.
 
 | Cuándo aparece | Qué dice el CRM | Botón |
@@ -308,7 +310,8 @@ Notas operativas:
 | 1 | Catálogo automático de anuncios | #73 | **En producción** |
 | 2 | CRR y churn | #74 | **En producción** |
 | 3 | Reporte semanal: función, botón, Excel versionado y los dos flujos de n8n | #75 | **En producción** (los flujos de n8n los prueba Juan) |
-| 4 | **Centro de acciones** ("Para completar") y **semáforo en columna** (sección 7) | por definir | **Siguiente.** Es el principio rector: que el CRM pida lo que falta |
+| 4 | **Centro de acciones** ("Para completar") | #77 | **Primera versión hecha** (ver 7.1) |
+| 4 bis | **Semáforo en columna** (sección 7.2) | por definir | **Siguiente.** Columna Estado y semáforos junto a Cobertura, CRR, Frescura y Triaje |
 | 5 | Métricas compuestas en el panel (CPMN, triaje, frescura) | por definir | Ya salen en el reporte; van junto con los semáforos en columna |
 | 6 | Recordatorio de lunes y jueves por n8n + rutina escrita del conteo | por definir | La rutina está en `docs/how-to/conteo-y-carga-semanal-de-miembros.md` |
 | 7 | Foto semanal en el CRM y alertas de tendencia | por definir | Depende de 3 o 4 semanas de fotos |
