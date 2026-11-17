@@ -100,6 +100,7 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .acciones details[open]{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .acciones .sel-motivo{font-size:12px}
 .acciones-ok{border-left-color:#4FD39A; padding:10px 14px; font-size:13px}
+.crr .crr-cab{display:flex; justify-content:space-between; align-items:center; gap:8px 14px; flex-wrap:wrap}
 .crr .crr-periodo th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
 .crr .vacio-tenue{color:var(--text-faint); font-size:11.5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
@@ -1129,6 +1130,41 @@ function agruparCrr(filas){
   }).sort((a, b) => b.hasta.localeCompare(a.hasta) || b.desde.localeCompare(a.desde));
   return { periodos: lista, comunidadesConCrr: new Set((filas || []).map(f => f.comunidad_id)) };
 }
+// Períodos cuya carga de cierre cae dentro de las fechas elegidas (mismo criterio que la base: fecha de cierre entre desde y hasta, inclusive).
+// El panel trae todos los períodos y los filtra acá, para poder avisar cuando hay cargas más recientes fuera de las fechas elegidas.
+function filtrarCrr(filas, desde, hasta, comunidadId){
+  const dia = (d) => String(d == null ? '' : d).slice(0, 10);
+  return (filas || []).filter(f => (!comunidadId || f.comunidad_id === comunidadId) && (!desde || dia(f.hasta) >= desde) && (!hasta || dia(f.hasta) <= hasta));
+}
+function crrMasRecientesFuera(filas, hasta, comunidadId){
+  const dia = (d) => String(d == null ? '' : d).slice(0, 10);
+  if (!hasta) return { n: 0, hasta: null };
+  const fuera = (filas || []).filter(f => (!comunidadId || f.comunidad_id === comunidadId) && dia(f.hasta) > hasta);
+  return { n: fuera.length, hasta: fuera.reduce((m, f) => (dia(f.hasta) > m ? dia(f.hasta) : m), '') || null };
+}
+// CSV para presentar a los clientes: UTF-8 con BOM y separador ";" con coma decimal (así Excel en español lo abre en columnas, con los acentos bien),
+// fechas dd/mm/aaaa, encabezados claros y una fila "Total" por período. Los números salen tal cual los calcula el CRM; lo que no se pudo calcular queda vacío.
+function csvCrr(periodos, cliente){
+  const texto = (v) => { let s = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[;"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const entero = (v) => (v == null || v === '' ? '' : String(Math.round(Number(v))));
+  const dec = (v) => (v == null || v === '' ? '' : Number(v).toFixed(2).replace('.', ','));
+  const fecha = (d) => { const [a, m, x] = String(d).slice(0, 10).split('-'); return `${x}/${m}/${a}`; };
+  const fila = (comunidad, p, x) => [texto(cliente), texto(comunidad), fecha(p.desde), fecha(p.hasta), entero(p.dias), entero(x.inicio), entero(x.nuevos), entero(x.bajas), entero(x.fin), dec(x.crr), dec(x.churn)].join(';');
+  const lineas = [['Cliente', 'Comunidad', 'Período desde', 'Período hasta', 'Días entre cargas', 'Miembros al inicio', 'Ingresos nuevos', 'Bajas', 'Miembros al final', 'Retención CRR (%)', 'Churn (%)'].map(texto).join(';')];
+  for (const p of periodos || []) {
+    for (const x of p.filas) lineas.push(fila(x.comunidad, p, x));
+    if (p.total) lineas.push(fila('Total', p, p.total));
+  }
+  return '﻿' + lineas.join('\r\n') + '\r\n';
+}
+function nombreArchivoCrr(periodos, cliente){
+  if (!periodos || !periodos.length) return null;
+  const desde = periodos.reduce((m, p) => (p.desde < m ? p.desde : m), periodos[0].desde);
+  const hasta = periodos.reduce((m, p) => (p.hasta > m ? p.hasta : m), periodos[0].hasta);
+  const f = (d) => { const [a, m, x] = String(d).slice(0, 10).split('-'); return `${x}-${m}-${a}`; };
+  const limpio = String(cliente || 'cliente').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return `CRR y churn - ${limpio} - ${f(desde)} a ${f(hasta)}.csv`;
+}
 /* CRR:FIN */
 
 /* ACCIONES:INICIO */
@@ -1207,12 +1243,16 @@ function wireAcciones(){
 }
 
 // Bloque "Retención de miembros (CRR)" (PR #74, db/043) de Control_Comunidades: solo conteos, lo ven todos los roles. Respeta el período y la comunidad elegidos.
-function renderCrr(filas, comunidades, filtroComunidad){
+function renderCrr(filas, comunidades, filtroComunidad, rango = null){
   const pct = (v) => v == null ? '—' : Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
   const titulo = `<h3 style="margin:0 0 4px">Retención de miembros (CRR) y churn</h3>`;
   if (filas == null) return `<div class="card crr">${titulo}<div class="sub">No se pudo cargar el CRR (¿está aplicada la migración db/043?). La tabla de arriba no cambia.</div></div>`;
-  const soloEsta = filtroComunidad ? (filas || []).filter(f => f.comunidad_id === filtroComunidad) : filas;
+  const desde = rango && rango.desde ? rango.desde : '', hasta = rango && rango.hasta ? rango.hasta : '';
+  const soloEsta = filtrarCrr(filas, desde, hasta, filtroComunidad);
   const g = agruparCrr(soloEsta);
+  const fuera = crrMasRecientesFuera(filas, hasta, filtroComunidad);
+  const avisoFuera = fuera.n ? `<div class="sub" style="color:var(--warn)">Hay cargas más recientes (hasta el ${esc(fmtDia(fuera.hasta))}) fuera de las fechas elegidas. <button class="btn btn-mini" id="btnCrrTodo" type="button">Ver todo el histórico</button></div>` : '';
+  const botonCsv = `<button class="btn" id="btnCrrCsv" type="button" ${g.periodos.length ? '' : 'disabled'} title="Descarga en CSV lo que ves en esta tabla (respeta las fechas y la comunidad elegidas), con formato para presentar a los clientes">Exportar CSV</button>`;
   const visibles = (comunidades || []).filter(c => !c.es_global && (!filtroComunidad || c.id === filtroComunidad));
   const sin = visibles.filter(c => !g.comunidadesConCrr.has(c.id)).map(c => c.nombre);
   const dm = (d) => { const x = fmtDia(d); return x === '—' ? x : x.slice(0, 5); };
@@ -1225,9 +1265,9 @@ function renderCrr(filas, comunidades, filtroComunidad){
     ? `<div class="tbl-wrap"><table class="tabla-metricas crr-tabla"><caption class="sr-only">CRR y churn por comunidad entre cargas de lista completa</caption><thead><tr><th scope="col" class="th-com">Comunidad</th><th scope="col" class="num" title="Miembros de la carga de lista completa anterior">Miembros al inicio</th><th scope="col" class="num" title="Personas que aparecen por primera vez o vuelven en la carga que cierra el período">Nuevos</th><th scope="col" class="num" title="Personas del grupo anterior que ya no están">Bajas</th><th scope="col" class="num" title="Miembros de la carga que cierra el período">Miembros al final</th><th scope="col" class="num" title="(Miembros al final − nuevos) ÷ miembros al inicio × 100">CRR</th><th scope="col" class="num" title="100 − CRR: de cada 100 miembros del inicio, cuántos ya no están">Churn</th><th scope="col"></th></tr></thead><tbody>${cuerpo}</tbody></table></div>`
     : `<div class="sub">Ninguna comunidad tiene dos cargas de lista completa que cierren dentro de estas fechas, así que todavía no hay CRR para este período.</div>`;
   const aviso = sin.length && g.periodos.length ? `<div class="sub" style="color:var(--warn)">Sin CRR en estas fechas: ${esc(sin.join(', '))}. Les falta una carga de lista completa del grupo dentro del período (Overview → Cargar miembros → "lista completa").</div>` : '';
-  return `<div class="card crr">${titulo}
+  return `<div class="card crr"><div class="crr-cab">${titulo}${botonCsv}</div>
     <div class="sub">CRR = (miembros al final − nuevos) ÷ miembros al inicio × 100. Churn = 100 − CRR. Se mide entre dos cargas de lista completa de cada comunidad: son una foto exacta de quién está en el grupo, así que no se estima nada. Muestra los períodos cuya carga de cierre cae dentro de las fechas elegidas. No es la "fuga" de Overview (esa usa otra base: bajas ÷ (bajas + miembros finales)).</div>
-    ${aviso}${tabla}
+    ${avisoFuera}${aviso}${tabla}
   </div>`;
 }
 
@@ -1397,7 +1437,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     </div>
     ${!esMarketing() ? '' : renderDesglose(desglose, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : t.inv, filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '')}
     ${renderSemaforoCobertura(comunidades, t.convCom, t.ent, canalActivo)}
-    ${renderCrr(crr, comunidades, filtroComunidad)}
+    ${renderCrr(crr, comunidades, filtroComunidad, { desde, hasta })}
     ${!esMarketing() ? '' : renderRendimiento(rendimiento, filtroComunidad ? (porComunidad[0] ? Number(porComunidad[0].inversion) || 0 : 0) : sumaDe(comunidades.filter(c => !c.es_global), 'inversion'), filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '', canalActivo)}`;
 }
 
@@ -1471,7 +1511,24 @@ function wireControl(){
   if (anuncios) anuncios.onclick = traerAnunciosMeta;
   const reporte = document.getElementById('btnReporteSemanal');
   if (reporte) reporte.onclick = descargarReporteSemanal;
+  const crrCsv = document.getElementById('btnCrrCsv');
+  if (crrCsv) crrCsv.onclick = descargarCrrCsv;
+  const crrTodo = document.getElementById('btnCrrTodo');
+  if (crrTodo) crrTodo.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   wireAcciones();
+}
+
+// Exporta a CSV lo que se ve en la tabla de CRR (respeta las fechas y la comunidad elegidas).
+function descargarCrrCsv(){
+  const periodos = agruparCrr(filtrarCrr(state.crrDatos, state.fechaDesde || '', state.fechaHasta || '', state.filtroComunidad || null)).periodos;
+  const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre || '';
+  const nombre = nombreArchivoCrr(periodos, cliente);
+  if (!nombre) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csvCrr(periodos, cliente)], { type: 'text/csv;charset=utf-8' }));
+  a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 /* ================= "Traer de Meta ahora": consulta a Windsor en vivo para el rango elegido (db/027) ================= */
@@ -2837,9 +2894,10 @@ async function renderAll(){
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
         loadEntradasFlow(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadRendimientoAnuncios(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
-        loadCrr(state.fechaDesde || null, state.fechaHasta || null),
+        loadCrr(null, null),   // todos los períodos: el filtro por fechas y comunidad se aplica en pantalla (renderCrr)
         loadAcciones(),
       ]);
+      state.crrDatos = crr;
       // La fila de campañas globales va al final y suma en el total del cliente; con una comunidad elegida no aparece (no es de esa comunidad).
       const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
       content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento, crr, acciones);

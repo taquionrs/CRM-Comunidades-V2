@@ -17,7 +17,7 @@ const AYUDAS = `
   const fmtInt = (v) => v == null ? '—' : Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const fmtDia = (d) => { if (!d) return '—'; const [a, m, x] = String(d).slice(0, 10).split('-'); return x + '/' + m + '/' + a; };
 `;
-const { calcularCrr, agruparCrr, renderCrr } = new Function(AYUDAS + bloque("CRR") + html.slice(iniR, finR) + "\nreturn { calcularCrr, agruparCrr, renderCrr };")();
+const { calcularCrr, agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr } = new Function(AYUDAS + bloque("CRR") + html.slice(iniR, finR) + "\nreturn { calcularCrr, agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr };")();
 
 // Las filas reales de Cortado en Jarrito (cargas del 14/10, 26/10 y 13/11).
 const fila = (o) => ({ comunidad_id: "boe", comunidad: "Boedo", desde: "2026-10-14", hasta: "2026-10-26", dias: 12, miembros_inicio: 11, nuevos: 40, bajas: 0, miembros_fin: 51, crr_pct: 100, churn_pct: 0, cuadra: true, ...o });
@@ -110,7 +110,7 @@ test("el nombre de la comunidad no rompe el HTML", () => {
 });
 
 test("el bloque queda dentro de Control_Comunidades, lo ven todos los roles y va antes del rendimiento por anuncio", () => {
-  assert.match(html, /\$\{renderCrr\(crr, comunidades, filtroComunidad\)\}\n\s*\$\{!esMarketing\(\) \? '' : renderRendimiento\(/);
-  assert.match(html, /loadCrr\(state\.fechaDesde \|\| null, state\.fechaHasta \|\| null\)/);
+  assert.match(html, /\$\{renderCrr\(crr, comunidades, filtroComunidad, \{ desde, hasta \}\)\}\n\s*\$\{!esMarketing\(\) \? '' : renderRendimiento\(/);
+  assert.match(html, /loadCrr\(null, null\)/);
   assert.ok(!/key:'crr'/.test(html), "no tiene que haber una pestaña aparte");
 });
