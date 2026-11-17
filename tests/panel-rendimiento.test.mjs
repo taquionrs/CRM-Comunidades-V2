@@ -27,11 +27,11 @@ const { etiquetaAnuncio, agruparRendimiento, renderRendimiento } = new Function(
 )();
 
 const P = "TQN_AON_META_CON_TRAFICO_MANUAL_CORTADO_EN_JARRITO_WHATSAPP_";
-const f = (o) => ({ comunidad_id: "pal", comunidad: "Palermo", codigo: "P1", ad_nombre: P + "PALERMO_01", campana_nombre: "CAMP", instrumentado: true, dias: 10, ultimo_dia: "2026-11-13",
+const f = (o) => ({ comunidad_id: "pal", comunidad: "Palermo", codigo: "PAL-01", ad_id: "120252390208400568", ad_nombre: P + "PALERMO_01", campana_nombre: "CAMP", adset_nombre: "ADS_PAL", instrumentado: true, dias: 10, ultimo_dia: "2026-11-13",
   inversion: "100", impresiones: "1000", clics_enlace: "40", impresiones_enlace: "1000", conversaciones: "10", entradas: "4", sin_clasificar: "1", ...o });
 const sinCod = (o) => ({ comunidad_id: "pal", comunidad: "Palermo", codigo: null, ad_nombre: null, campana_nombre: null, instrumentado: false, dias: 0, ultimo_dia: null,
   inversion: "0", impresiones: "0", clics_enlace: null, impresiones_enlace: null, conversaciones: "0", entradas: "6", sin_clasificar: "0", ...o });
-const boedo = (o) => f({ comunidad_id: "boe", comunidad: "Boedo", codigo: null, ad_nombre: P + "BOEDO_01", instrumentado: false, entradas: null, sin_clasificar: null, inversion: "300", conversaciones: "50", ...o });
+const boedo = (o) => f({ comunidad_id: "boe", comunidad: "Boedo", codigo: null, ad_id: "999", ad_nombre: P + "BOEDO_01", instrumentado: false, entradas: null, sin_clasificar: null, inversion: "300", conversaciones: "50", ...o });
 
 test("etiqueta corta: los dos últimos tramos del nombre de Meta; nombres cortos quedan como están", () => {
   assert.equal(etiquetaAnuncio(P + "PALERMO_01"), "PALERMO_01");
@@ -41,7 +41,7 @@ test("etiqueta corta: los dos últimos tramos del nombre de Meta; nombres cortos
 });
 
 test("agrupa por comunidad: la zona suma los anuncios y las entradas sin código (igual que 'Entradas únicas')", () => {
-  const g = agruparRendimiento([f({}), f({ codigo: "P2", ad_nombre: P + "PALERMO_02", inversion: "50", entradas: "1", sin_clasificar: "0", conversaciones: "5" }), sinCod({}), boedo()]);
+  const g = agruparRendimiento([f({}), f({ codigo: "PAL-02", ad_nombre: P + "PALERMO_02", inversion: "50", entradas: "1", sin_clasificar: "0", conversaciones: "5" }), sinCod({}), boedo()]);
   assert.deepEqual(g.zonas.map((z) => z.comunidad), ["Boedo", "Palermo"]);
   const pal = g.zonas[1];
   assert.equal(pal.anuncios.length, 2);
@@ -80,7 +80,7 @@ test("clics en el enlace: null en la base = sin dato (conEnlace false), no 0", (
 });
 
 test("último día con datos: el más reciente de todos los anuncios", () => {
-  const g = agruparRendimiento([f({ ultimo_dia: "2026-11-10" }), f({ codigo: "P2", ultimo_dia: "2026-11-13" })]);
+  const g = agruparRendimiento([f({ ultimo_dia: "2026-11-10" }), f({ codigo: "PAL-02", ultimo_dia: "2026-11-13" })]);
   assert.equal(g.ultimoDia, "2026-11-13");
   assert.equal(agruparRendimiento([]).ultimoDia, null);
 });
@@ -97,7 +97,7 @@ test("el bloque muestra los anuncios, el código, 'sin código' donde falta y el
   const out = renderRendimiento([f({}), sinCod({}), boedo()], 400, "", false);
   assert.match(out, /Rendimiento por anuncio/);
   assert.match(out, /PALERMO_01/);
-  assert.match(out, /<b>P1<\/b>/);
+  assert.match(out, /<b>PAL-01<\/b>/);
   assert.match(out, /BOEDO_01/);
   assert.match(out, /sin código/);
   assert.match(out, /Entradas sin código/);
@@ -130,8 +130,33 @@ test("con un canal elegido avisa que las entradas cuentan todos los canales", ()
   assert.ok(!/no se divide por canal/.test(renderRendimiento([f({})], 100, "", false)));
 });
 
-test("sin ninguna plantilla con código lo dice y manda a la guía", () => {
-  assert.match(renderRendimiento([boedo()], 300, "", false), /Ninguna plantilla lleva código todavía/);
+test("si ningún código se vio todavía en una entrada lo dice y manda a la guía", () => {
+  assert.match(renderRendimiento([f({ instrumentado: false, entradas: null, sin_clasificar: null })], 300, "", false), /Todavía no llegó ninguna entrada con código de anuncio/);
+});
+
+test("las columnas Nombre (completo) e ID se ven en cada fila y en el encabezado", () => {
+  const out = renderRendimiento([f({})], 100, "", false);
+  assert.match(out, />Nombre</);
+  assert.match(out, />ID</);
+  assert.ok(out.includes(">" + P + "PALERMO_01</th>"), "el nombre completo es el texto de la fila, no solo el título");
+  assert.ok(out.includes(">120252390208400568</td>"));
+});
+
+test("un anuncio con código que todavía no se vio muestra 'aún no se vio' y sus entradas del CRM en '—'; uno ya visto no", () => {
+  const sinVer = renderRendimiento([f({ instrumentado: false, entradas: null, sin_clasificar: null })], 100, "", false);
+  assert.match(sinVer, /<b>PAL-01<\/b> <span class="vacio-tenue"[^>]*>aún no se vio<\/span>/);
+  assert.ok(!/aún no se vio/.test(renderRendimiento([f({ instrumentado: true })], 100, "", false)));
+});
+
+test("un anuncio de Meta sin código en el catálogo (todavía no se trajo) muestra 'sin código'", () => {
+  assert.match(renderRendimiento([boedo()], 300, "", false), /sin código/);
+});
+
+test("agrupa guardando el ID y el conjunto del anuncio", () => {
+  const a = agruparRendimiento([f({})]).zonas[0].anuncios[0];
+  assert.equal(a.adId, "120252390208400568");
+  assert.equal(a.adset, "ADS_PAL");
+  assert.equal(a.nombre, P + "PALERMO_01");
 });
 
 test("el bloque queda dentro de Control_Comunidades, solo para Marketing, y la sección del menú no cambia", () => {

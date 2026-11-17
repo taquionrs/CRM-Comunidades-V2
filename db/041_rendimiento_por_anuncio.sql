@@ -26,7 +26,9 @@ update crm_comunidades_v2.anuncio_codigo
    set anuncio_nombre = campana_nombre || '_' || anuncio_nombre
  where campana_nombre is not null and anuncio_nombre ~ '^PALERMO_0[0-9]$';
 
-create or replace function crm_comunidades_v2.rendimiento_por_anuncio(
+-- (Desde db/042 la función devuelve más columnas: se la reemplaza entera, por eso el drop. Si se vuelve a aplicar esta migración, hay que volver a aplicar db/042.)
+drop function if exists crm_comunidades_v2.rendimiento_por_anuncio(uuid, date, date, uuid);
+create function crm_comunidades_v2.rendimiento_por_anuncio(
   p_cliente   uuid,
   p_desde     date default null,
   p_hasta     date default null,
