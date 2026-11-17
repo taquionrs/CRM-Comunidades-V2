@@ -99,3 +99,38 @@ test("el panel arma el botón y lo conecta; la tabla de CRR de abajo sigue exist
   assert.match(html, /\$\{renderCrr\(crr, comunidades, filtroComunidad, \{ desde, hasta \}\)\}/);
   assert.match(html, /id="btnCrrCsv"/);
 });
+
+// ---------- costo por miembro neto con los miembros del CRR (db/046) ----------
+const CON_INV = [
+  { ...F("Palermo", "pal", "2026-10-26", "2026-11-17", 22, 41, 2, 2, 41, "95.12", "4.88"), inversion_periodo: "225.50" },
+  { ...F("Villa Devoto", "dev", "2026-10-26", "2026-11-17", 22, 49, 14, 7, 56, "85.71", "14.29"), inversion_periodo: "300.00" },
+];
+
+test("costo por miembro neto = inversión del período entre cargas ÷ (miembros al final − al inicio), con los miembros del CRR", () => {
+  const dev = { _crr: api.crrVigente(CON_INV, "", "", "dev") };
+  assert.match(col("cpmn").celda(dev), /\$42,86/);   // 300 ÷ (56 − 49) = 42,857
+});
+
+test("el total del cliente divide la inversión total por el crecimiento neto total", () => {
+  const t = { crrTotal: api.crrTotalVigente(CON_INV, "", "", COMS) };
+  assert.equal(t.crrTotal.inversion, 525.5);
+  assert.match(col("cpmn").total(t), /\$75,07/);     // 525,5 ÷ (97 − 90) = 75,07
+});
+
+test("sin crecimiento neto no inventa un costo: dice por qué", () => {
+  const pal = { _crr: api.crrVigente(CON_INV, "", "", "pal") };   // 41 → 41: no sumó miembros
+  assert.match(col("cpmn").celda(pal), /Sin dato/);
+  assert.match(col("cpmn").celda(pal), /no sumó miembros netos/);
+});
+
+test("sin la inversión del período (db/046 sin aplicar o rol sin plata) no calcula ni muestra 0", () => {
+  const sinInv = { _crr: api.crrVigente(FILAS, "", "", "dev") };
+  assert.match(col("cpmn").celda(sinInv), /Sin dato/);
+  assert.match(col("cpmn").celda(sinInv), /db\/046/);
+  assert.match(col("cpmn").celda({ _crr: null }), /Sin dato/);
+});
+
+test("el panel pide la función con inversión y, si no existe todavía, vuelve a la de siempre", () => {
+  assert.match(html, /supabase\.rpc\('crr_por_carga_con_inversion', args\)/);
+  assert.match(html, /if \(r\.error\) r = await supabase\.rpc\('crr_por_carga', args\)/);
+});

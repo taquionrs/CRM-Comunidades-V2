@@ -505,9 +505,12 @@ async function loadRendimientoAnuncios(desde, hasta, comunidad){
 }
 // CRR: retención de miembros entre dos cargas de lista completa (db/043). Solo conteos: lo ve cualquier usuario del CRM. Si falla, el resto de la página sigue igual.
 async function loadCrr(desde, hasta){
-  const { data, error } = await supabase.rpc('crr_por_carga', { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta });
-  if (error) { console.warn('crr_por_carga:', error.message); return null; }
-  return data || [];
+  // Con la inversión del período (db/046) para el costo por miembro neto; si esa función todavía no está aplicada, los conteos salen igual (db/043).
+  const args = { p_cliente: state.clienteId, p_desde: desde, p_hasta: hasta };
+  let r = await supabase.rpc('crr_por_carga_con_inversion', args);
+  if (r.error) r = await supabase.rpc('crr_por_carga', args);
+  if (r.error) { console.warn('crr_por_carga:', r.error.message); return null; }
+  return r.data || [];
 }
 // Centro de acciones "Para completar" (db/045): lo que el CRM necesita que completes. Solo Marketing; si falla, el resto de la página sigue igual.
 async function loadAcciones(){
@@ -920,8 +923,8 @@ const COLUMNAS_CONTROL = [
     info:'MF − MI: cuánto creció el grupo. Requiere MI y MF cargados.',
     celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vEntero(c.crecimiento_neto), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vEntero(t.mf - t.mi) },
   { id:'cpmn', grupo:'Ingreso', fuente:'Financiera', etiqueta:'Costo por miembro neto', plata:true,
-    info:'Inversión ÷ (MF − MI): cuánto costó cada miembro que sumó el grupo. Requiere MI y MF cargados.',
-    celda:(c)=>sinMembresia(c.miembros_iniciales, c.miembros_finales) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(c.cpmn), total:(t)=>sinMembresia(t.mi, t.mf) ? vacio('no_disp', NO_MIEMBROS) : vMoneda(t.mf - t.mi > 0 ? t.inv / (t.mf - t.mi) : null) },
+    info:'Inversión de Meta del período entre cargas ÷ (miembros al final − miembros al inicio): cuánto costó cada miembro que sumó el grupo entre las dos últimas cargas de lista completa (las mismas del CRR; ver "Período entre cargas"). La inversión es la de ese período exacto, no la de las fechas elegidas. Sin crecimiento neto (el grupo no sumó miembros) no se calcula.',
+    celda:(c)=>costoMiembroNeto(c._crr), total:(t)=>costoMiembroNeto(t.crrTotal) },
 
   // ---- 6. Permanencia: la persona se queda en el grupo
   { id:'bajas', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Bajas (salidas cargadas)',
@@ -958,6 +961,15 @@ const COLUMNAS_CONTROL = [
 ];
 const NA_CRR = 'Todavía no hay dos cargas de lista completa de esta comunidad que cierren dentro de las fechas elegidas (Overview → Cargar miembros → "lista completa"). Probá con "Todo el histórico".';
 const filaCrr = (x, f) => x ? f(x) : vacio('sin_dato', NA_CRR);
+// Costo por miembro neto = inversión del período entre cargas ÷ (miembros al final − miembros al inicio).
+const NA_CMN_SIN_CRECIMIENTO = 'El grupo no sumó miembros netos entre las dos cargas (los que entraron no superan a los que salieron): no hay a quién repartirle el costo.';
+const NA_CMN_SIN_INVERSION = 'Falta la inversión de ese período (aplicar db/046 en Supabase) o tu rol no ve plata.';
+function costoMiembroNeto(x){
+  if (!x) return vacio('sin_dato', NA_CRR);
+  if (x.inversion == null) return vacio('sin_dato', NA_CMN_SIN_INVERSION);
+  const neto = (Number(x.fin) || 0) - (Number(x.inicio) || 0);
+  return neto > 0 ? vMoneda(x.inversion / neto) : vacio('sin_dato', NA_CMN_SIN_CRECIMIENTO);
+}
 const periodoCorto = (x) => { const d = (v) => { const p = fmtDia(v); return p === '—' ? p : p.slice(0, 5); }; return `${d(x.desde)} → ${d(x.hasta)}`; };
 // Fuente de una columna, chica y discreta: punto de color + nombre. Sin fuente conocida no se pinta nada.
 function htmlFuente(col){
@@ -1146,7 +1158,8 @@ function agruparCrr(filas){
   for (const f of filas || []) {
     const it = { comunidadId: f.comunidad_id, comunidad: f.comunidad || '', desde: dia(f.desde), hasta: dia(f.hasta), dias: Number(f.dias) || 0,
       inicio: Number(f.miembros_inicio) || 0, nuevos: Number(f.nuevos) || 0, bajas: Number(f.bajas) || 0, fin: Number(f.miembros_fin) || 0,
-      crr: f.crr_pct == null ? null : Number(f.crr_pct), churn: f.churn_pct == null ? null : Number(f.churn_pct), cuadra: f.cuadra !== false };
+      crr: f.crr_pct == null ? null : Number(f.crr_pct), churn: f.churn_pct == null ? null : Number(f.churn_pct), cuadra: f.cuadra !== false,
+      inversion: f.inversion_periodo == null ? null : Number(f.inversion_periodo) };
     const k = it.desde + '|' + it.hasta;
     if (!grupos.has(k)) grupos.set(k, { desde: it.desde, hasta: it.hasta, dias: it.dias, filas: [] });
     grupos.get(k).filas.push(it);
@@ -1197,7 +1210,8 @@ function crrTotalVigente(filas, desde, hasta, comunidades){
   if (!act.length) return null;
   const suma = (arr, k) => arr.reduce((s, x) => s + (Number(x[k]) || 0), 0);
   const juntar = (arr) => { const t = { inicio: suma(arr, 'inicio'), nuevos: suma(arr, 'nuevos'), bajas: suma(arr, 'bajas'), fin: suma(arr, 'fin') }; return { ...t, ...calcularCrr(t.inicio, t.nuevos, t.fin) }; };
-  const total = { ...juntar(act), desde: act.reduce((m, x) => (x.desde < m ? x.desde : m), act[0].desde), hasta: act.reduce((m, x) => (x.hasta > m ? x.hasta : m), act[0].hasta), dias: null, anterior: null };
+  const total = { ...juntar(act), desde: act.reduce((m, x) => (x.desde < m ? x.desde : m), act[0].desde), hasta: act.reduce((m, x) => (x.hasta > m ? x.hasta : m), act[0].hasta), dias: null, anterior: null,
+    inversion: act.every(x => x.inversion != null) ? suma(act, 'inversion') : null };
   const conAnt = act.filter(x => x.anterior);
   if (conAnt.length) {
     const ahora = juntar(conAnt);
