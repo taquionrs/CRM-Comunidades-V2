@@ -124,7 +124,7 @@ test("CTR del botón: explica que los clics se registran desde el 09/10", () => 
 
 // ---- Orden por etapas del recorrido y métricas del embudo (PR #65, db/036)
 test("las columnas van por etapas, cada etapa en un solo tramo y en este orden; la etapa Valor queda para después", () => {
-  const etapas = ["Alcanzar", "Intención", "Control del tracking", "Activación", "Ingreso", "Permanencia"];
+  const etapas = ["Estado", "Alcanzar", "Intención", "Control del tracking", "Activación", "Ingreso", "Permanencia"];
   assert.deepEqual(api.tramosDeGrupos(COLUMNAS_CONTROL).map((x) => x.grupo), etapas);
   assert.deepEqual(Object.keys(api.GRUPOS_TABLA), etapas);
   assert.ok(!COLUMNAS_CONTROL.some((c) => /valor|k-?factor/i.test(c.grupo + c.id)));
@@ -198,7 +198,7 @@ test("sin clasificar: no es de ninguna comunidad (cada fila dice 'Sin comunidad'
 test("el panel guarda el orden en una clave nueva y le pasa a la tabla las personas sin clasificar del cliente", () => {
   assert.match(html, /const CLAVE_COLUMNAS_CONTROL = 'crm_v2_control_comunidades_columnas_v2'/);
   assert.match(html, /loadEntradasFlow\(state\.fechaDesde \|\| null, state\.fechaHasta \|\| null, state\.canalControl\)/);
-  assert.match(html, /state\.canalControl, desglose, entradasFlowControl, rendimiento, crr, acciones\)/);
+  assert.match(html, /state\.canalControl, desglose, entradasFlowControl, rendimiento, crr, acciones, frescura\)/);
 });
 
 // ---- La fuente de cada métrica no se pierde al agrupar por etapa (PR #65)

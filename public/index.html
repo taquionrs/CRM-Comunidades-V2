@@ -108,6 +108,8 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .crr-flecha.mal{color:var(--danger)}
 .crr .vacio-tenue{color:var(--text-faint); font-size:11.5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
+.tabla-metricas .sem-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap; cursor:help}
+.tabla-metricas .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
 .rendimiento .rend-cab{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px}
 .rendimiento .rend-tabla td:nth-child(2){text-align:left; white-space:nowrap}
 .rendimiento .rend-zona th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
@@ -519,6 +521,12 @@ async function loadAcciones(){
   if (error) { console.warn('acciones_pendientes:', error.message); return null; }
   return data || [];
 }
+// Frescura de la lista de miembros (db/049): última carga de lista completa de cada comunidad. Si la función todavía no existe, el semáforo de frescura dice que falta aplicarla.
+async function loadFrescura(){
+  const { data, error } = await supabase.rpc('frescura_miembros', { p_cliente: state.clienteId });
+  if (error) { console.warn('frescura_miembros:', error.message); return null; }
+  return data || [];
+}
 async function loadComunidades(){
   const { data, error } = await supabase.from('comunidad').select('*').eq('cliente_id', state.clienteId).order('nombre');
   if (error) throw error;
@@ -777,6 +785,7 @@ async function refrescarOverview(){
 // Presentación de la tabla "Métricas por comunidad". Funciones puras (se prueban en tests/panel-tabla.test.mjs).
 const ICONO = (trazos) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${trazos}</svg>`;
 const GRUPOS_TABLA = {
+  'Estado':               { k: 'estado',      color: '#9AA3B5', icono: ICONO('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>') },
   'Alcanzar':             { k: 'alcanzar',    color: '#6E9BFF', icono: ICONO('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>') },
   'Intención':            { k: 'intencion',   color: '#4DC3E8', icono: ICONO('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>') },
   'Control del tracking': { k: 'tracking',    color: '#4FD39A', icono: ICONO('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.2a5 5 0 0 1 4.5 4.8"/>') },
@@ -840,6 +849,10 @@ const NA_SIN_CLASIFICAR = 'Todavía no llegó ningún aviso de "sin clasificar" 
 // Las columnas van en el orden del recorrido de la persona: Alcanzar → Intención → Control del tracking → Activación → Ingreso → Permanencia.
 // Una etapa de "Valor" (K-Factor, prescriptores) queda para más adelante.
 const COLUMNAS_CONTROL = [
+  // ---- 0. Estado: el semáforo general de cada comunidad (el peor de sus indicadores con color)
+  { id:'estado', grupo:'Estado', fuente:'CRM', etiqueta:'Estado',
+    info:'El peor de los semáforos de la comunidad: cobertura del tracking (entradas al flow ÷ conversaciones de Meta) y frescura de la lista de miembros (días desde la última carga de lista completa). Pasá el mouse para ver el detalle. Gris = todavía no hay datos suficientes. El CRR y el triaje no tienen color: sus umbrales se fijan después de 3 o 4 semanas de fotos semanales.',
+    celda:(c)=>celdaEstado(c), total:(t)=>celdaEstadoTotal(t) },
   // ---- 1. Alcanzar: la pauta llega y se hace clic
   { id:'inversion', grupo:'Alcanzar', fuente:'Meta Ads', etiqueta:'Inversión', plata:true,
     info:'Gasto de Meta Ads asignado a la comunidad en el período. Viene de Windsor y se actualiza una vez al día, con un día de retraso. Se asigna por el nombre de la campaña y del conjunto de anuncios.',
@@ -893,6 +906,9 @@ const COLUMNAS_CONTROL = [
   { id:'costo_entrada', grupo:'Control del tracking', fuente:'Financiera', etiqueta:'Costo por entrada al flow', plata:true,
     info:'Inversión ÷ Entradas al flow. La inversión es la de Meta; las entradas incluyen a quienes llegan sin pasar por la pauta.',
     celda:(c)=>vMoneda(c.cpcu), total:(t)=>vMoneda(t.razon(t.inv, t.ent)) },
+  { id:'cobertura', grupo:'Control del tracking', fuente:'Meta Ads + CRM', etiqueta:'Cobertura del tracking',
+    info:'Entradas al flow ÷ Conversaciones de Meta, con semáforo: verde más de 60 %, amarillo de 35 a 60 %, rojo menos de 35 %, "revisar" si pasa de 100 % (hay más entradas que chats) y gris con menos de 20 chats. Es 100 % − desfasaje. Umbrales de arranque, en revisión con la PO. Meta atribuye con ventana de 7 días y el CRM cuenta el primer contacto: es un indicador.',
+    celda:(c)=>c.es_global ? vacio('sin_dato', NA_GLOBAL) : celdaCobertura(c.conversaciones_meta, c.clics_unicos), total:(t)=>celdaCobertura(t.convCom, t.ent) },
 
   // ---- 4. Activación: la persona recibe el flow y toca "Me sumo"
   { id:'trigger', porCanal:true, grupo:'Activación', fuente:'ManyChat', etiqueta:'Trigger entregados',
@@ -930,6 +946,9 @@ const COLUMNAS_CONTROL = [
     celda:(c)=>costoMiembroNuevo(c._crr), total:(t)=>costoMiembroNuevo(t.crrTotal) },
 
   // ---- 6. Permanencia: la persona se queda en el grupo
+  { id:'frescura', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Frescura de la lista',
+    info:'Días desde la última carga de lista completa del grupo, con semáforo: verde hasta 7 días, amarillo de 8 a 14, rojo más de 14 y gris si nunca se cargó. Sin una lista al día, el CRR y el churn quedan viejos. En el total, la comunidad con la lista más vieja.',
+    celda:(c)=>celdaFrescura(c._frescura), total:(t)=>celdaFrescura(t.frescuraPeor) },
   { id:'bajas', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Bajas (salidas cargadas)',
     info:'Personas que quedaron como salidas al cargar la lista completa del grupo, con fecha de salida dentro del período. Se puede calcular desde la segunda carga de lista completa de la comunidad; antes no hay con qué comparar.',
     celda:(c)=>c.bajas_estimadas == null ? vacio('no_calc') : vEntero(c.bajas_estimadas), total:(t)=>t.bajasMed > 0 ? vEntero(t.bajas) : vacio('no_calc') },
@@ -979,6 +998,58 @@ function costoMiembroNeto(x){
   const neto = (Number(x.fin) || 0) - (Number(x.inicio) || 0);
   return neto > 0 ? vMoneda(x.inversion / neto) : vacio('sin_dato', NA_CMN_SIN_CRECIMIENTO);
 }
+// ---- Semáforos en columna (PR #89): cobertura, frescura de la lista y estado general. Todo con punto de color + explicación al pasar el mouse.
+const UMBRALES_FRESCURA = { verdeHasta: 7, amarilloHasta: 14 };
+const SEMAFORO_ETIQUETA = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', revisar: 'Revisar', pocos: 'Sin datos' };
+const SEMAFORO_GRAVEDAD = { rojo: 4, revisar: 3, amarillo: 2, verde: 1, pocos: 0 };
+function semaforoFrescura(dias){
+  if (dias == null || dias === '') return { estado: 'pocos', dias: null };
+  const d = Number(dias);
+  return { estado: d <= UMBRALES_FRESCURA.verdeHasta ? 'verde' : d <= UMBRALES_FRESCURA.amarilloHasta ? 'amarillo' : 'rojo', dias: d };
+}
+// El peor de varios semáforos; los grises (sin datos) no cuentan salvo que todos lo sean.
+function peorSemaforo(estados){
+  const con = (estados || []).filter(e => e && e !== 'pocos');
+  return con.length ? con.reduce((a, b) => (SEMAFORO_GRAVEDAD[b] > SEMAFORO_GRAVEDAD[a] ? b : a)) : 'pocos';
+}
+const puntoSemaforo = (estado, texto, ayuda) => `<span class="sem-item" title="${esc(ayuda)}"><i class="sem-dot sem-${estado}" aria-hidden="true"></i><span>${esc(texto)}</span><span class="sr-only"> (${esc(SEMAFORO_ETIQUETA[estado])})</span></span>`;
+function explicacionCobertura(s, conv, ent){
+  const u = UMBRALES_COBERTURA, p = s.cobertura == null ? '' : fmtPctTabla(s.cobertura);
+  if (s.estado === 'pocos') return `Menos de ${u.minChats} chats de Meta (${fmtEnteroTabla(conv)}): pocos datos para interpretar la cobertura.`;
+  if (s.estado === 'revisar') return `Cobertura ${p}: hay más entradas que chats de Meta. Revisar (entran personas que no vinieron de la pauta, o Meta atribuye con ventana de 7 días).`;
+  const rango = s.estado === 'verde' ? `más de ${u.verdeMas} %` : s.estado === 'amarillo' ? `entre ${u.amarilloDesde} y ${u.verdeMas} %` : `menos de ${u.amarilloDesde} %`;
+  return `Cobertura ${p}: ${rango} (${fmtEnteroTabla(ent)} entradas de ${fmtEnteroTabla(conv)} chats).`;
+}
+function celdaCobertura(conv, ent){
+  const s = semaforoCobertura(conv, ent);
+  const txt = s.cobertura == null ? `${fmtEnteroTabla(conv)} chats` : fmtPctTabla(s.cobertura);
+  return puntoSemaforo(s.estado, txt, explicacionCobertura(s, conv, ent));
+}
+function explicacionFrescura(f){
+  const u = UMBRALES_FRESCURA;
+  if (f.dias == null) return 'Todavía no hay ninguna carga de lista completa de esta comunidad.';
+  const rango = f.estado === 'verde' ? `hasta ${u.verdeHasta} días` : f.estado === 'amarillo' ? `de ${u.verdeHasta + 1} a ${u.amarilloHasta} días` : `más de ${u.amarilloHasta} días`;
+  return `Última carga de lista completa hace ${f.dias} ${f.dias === 1 ? 'día' : 'días'}: ${rango}.`;
+}
+function celdaFrescura(fila){
+  if (fila === undefined) return vacio('sin_dato', 'Falta aplicar db/049 en Supabase (frescura de la lista de miembros).');
+  const f = semaforoFrescura(fila && fila.dias);
+  return puntoSemaforo(f.estado, f.dias == null ? 'Sin cargas' : `${f.dias} ${f.dias === 1 ? 'día' : 'días'}`, explicacionFrescura(f));
+}
+function celdaEstadoDe(cob, fres, esGlobal){
+  if (esGlobal) return vacio('sin_comunidad');
+  const estado = peorSemaforo([cob.estado, fres ? fres.estado : 'pocos']);
+  const detalle = [explicacionCobertura(cob, cob.conv, cob.ent), fres ? explicacionFrescura(fres) : 'Frescura de la lista: sin dato.'].join(' ');
+  return puntoSemaforo(estado, SEMAFORO_ETIQUETA[estado], detalle);
+}
+function celdaEstado(c){
+  const cob = { ...semaforoCobertura(c.conversaciones_meta, c.clics_unicos), conv: c.conversaciones_meta, ent: c.clics_unicos };
+  return celdaEstadoDe(cob, c._frescura === undefined ? null : semaforoFrescura(c._frescura && c._frescura.dias), c.es_global);
+}
+function celdaEstadoTotal(t){
+  const cob = { ...semaforoCobertura(t.convCom, t.ent), conv: t.convCom, ent: t.ent };
+  return celdaEstadoDe(cob, t.frescuraPeor === undefined ? null : semaforoFrescura(t.frescuraPeor && t.frescuraPeor.dias), false);
+}
 const periodoCorto = (x) => { const d = (v) => { const p = fmtDia(v); return p === '—' ? p : p.slice(0, 5); }; return `${d(x.desde)} → ${d(x.hasta)}`; };
 // Fuente de una columna, chica y discreta: punto de color + nombre. Sin fuente conocida no se pinta nada.
 function htmlFuente(col){
@@ -1004,7 +1075,13 @@ function leerColumnasControl(){
   try { const crudo = localStorage.getItem(CLAVE_COLUMNAS_CONTROL); guardado = crudo != null; g = JSON.parse(crudo || '{}') || {}; } catch (_) { g = {}; }
   const ids = COLUMNAS_CONTROL.map(c => c.id);
   const orden = (Array.isArray(g.orden) ? g.orden : []).filter((id, i, a) => ids.includes(id) && a.indexOf(id) === i);
-  for (const id of ids) if (!orden.includes(id)) orden.push(id);
+  // Una columna nueva (que esta persona no tenía guardada) se inserta en su lugar natural, detrás de la que la precede en la tabla.
+  for (const id of ids) {
+    if (orden.includes(id)) continue;
+    let k = ids.indexOf(id) - 1;
+    while (k >= 0 && !orden.includes(ids[k])) k--;
+    orden.splice(k >= 0 ? orden.indexOf(ids[k]) + 1 : 0, 0, id);
+  }
   const ocultas = (guardado && Array.isArray(g.ocultas) ? g.ocultas : COLUMNAS_OCULTAS_DE_FABRICA).filter(id => ids.includes(id));
   return { orden, ocultas };
 }
@@ -1469,7 +1546,7 @@ function renderDesglose(filas, inversionTabla, filtroNombre){
     </div>`;
 }
 
-function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null, crr = null, acciones = null){
+function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todos', desglose = null, entradasFlow = null, rendimiento = null, crr = null, acciones = null, frescura = null){
   const opciones = `<option value="">Todas las comunidades</option>` + comunidades.filter(c => !c.es_global).map(c => `<option value="${c.id}" ${filtroComunidad===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('');
   const porComunidad = filtroComunidad ? comunidades.filter(c => c.id === filtroComunidad) : comunidades;
 
@@ -1498,7 +1575,10 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     // CRR y churn entre cargas de lista completa: último período cerrado hasta el "Hasta" elegido (null si el CRM no mandó los datos o no hay dos cargas).
     crrTotal: crr ? crrTotalVigente(crr, desde, hasta, comunidades) : null,
   };
-  const conCrr = (c) => ({ ...c, _crr: crr ? crrVigente(crr, desde, hasta, c.id) : null });
+  // Frescura de la lista (db/049): de cada comunidad, cuántos días pasaron desde su última carga de lista completa. undefined = la función todavía no está aplicada.
+  const filaFrescura = (c) => (frescura ? (frescura.find(r => r.comunidad_id === c.id) || { dias: null }) : undefined);
+  const conCrr = (c) => ({ ...c, _crr: crr ? crrVigente(crr, desde, hasta, c.id) : null, _frescura: filaFrescura(c) });
+  t.frescuraPeor = frescura ? frescura.reduce((p, r) => (r.dias != null && (!p || r.dias > p.dias) ? r : p), null) || { dias: null } : undefined;
 
   const inicios = iniciosDeTramo(visibles);
   const claseGrupo = (col, k) => 'g-' + (GRUPOS_TABLA[col.grupo] ? GRUPOS_TABLA[col.grupo].k : 'otro') + (inicios[k] ? ' g-ini' : '');
@@ -3029,7 +3109,7 @@ async function renderAll(){
       wireAcciones();
 
     } else if (state.tab === 'control') {
-      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento, crr, acciones] = await Promise.all([
+      const [comunidadesRango, desglose, global, entradasFlowControl, rendimiento, crr, acciones, frescura] = await Promise.all([
         loadComunidadesRango(state.fechaDesde || null, state.fechaHasta || null, state.canalControl),
         esMarketing() ? loadDesgloseCampanas(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
         loadGlobalCliente(state.fechaDesde || null, state.fechaHasta || null),
@@ -3037,11 +3117,12 @@ async function renderAll(){
         esMarketing() ? loadRendimientoAnuncios(state.fechaDesde || null, state.fechaHasta || null, state.filtroComunidad || null) : Promise.resolve(null),
         loadCrr(null, null),   // todos los períodos: el filtro por fechas y comunidad se aplica en pantalla (renderCrr)
         loadAcciones(),
+        loadFrescura(),
       ]);
       state.crrDatos = crr;
       // La fila de campañas globales va al final y suma en el total del cliente; con una comunidad elegida no aparece (no es de esa comunidad).
       const comunidades = global && state.canalControl === 'todos' ? [...comunidadesRango, global] : comunidadesRango;
-      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento, crr, acciones);
+      content.innerHTML = renderControl(comunidades, state.filtroComunidad || null, state.fechaDesde || '', state.fechaHasta || '', state.canalControl, desglose, entradasFlowControl, rendimiento, crr, acciones, frescura);
       wireControl();
 
     } else if (state.tab === 'atribucion') {

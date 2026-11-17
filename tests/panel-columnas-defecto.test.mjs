@@ -11,12 +11,12 @@ const armar = (almacen) => new Function("esc", "fmtDia", "localStorage", html.sl
 const vacio = { getItem: () => null };
 const con = (obj) => ({ getItem: () => JSON.stringify(obj) });
 
-test("sin elección guardada: se ocultan de fábrica las 16 columnas repetidas o de detalle, y quedan 17 visibles", () => {
+test("sin elección guardada: se ocultan de fábrica las 16 columnas repetidas o de detalle, y quedan 20 visibles (17 más los 3 semáforos)", () => {
   const api = armar(vacio);
   const cfg = api.leerColumnasControl();
   assert.equal(cfg.ocultas.length, 16);
-  assert.equal(api.COLUMNAS_CONTROL.length - cfg.ocultas.length, 17);
-  for (const id of ["inversion", "clics_enlace", "ctr_enlace", "conversaciones", "cpl", "clic_conv", "entradas", "desfasaje", "costo_entrada", "trigger", "clics_me_sumo", "ctr_boton", "cpmn", "cpm_nuevo", "crr_periodo", "crr", "churn"])
+  assert.equal(api.COLUMNAS_CONTROL.length - cfg.ocultas.length, 20);
+  for (const id of ["inversion", "clics_enlace", "ctr_enlace", "conversaciones", "cpl", "clic_conv", "entradas", "desfasaje", "costo_entrada", "trigger", "clics_me_sumo", "ctr_boton", "cpmn", "cpm_nuevo", "crr_periodo", "crr", "churn", "estado", "cobertura", "frescura"])
     assert.ok(!cfg.ocultas.includes(id), `${id} debe quedar visible`);
 });
 
@@ -30,7 +30,9 @@ test("quien ya eligió sus columnas conserva su elección (aunque sea mostrar to
   const api = armar(con({ orden: ["crr", "inversion"], ocultas: [] }));
   const cfg = api.leerColumnasControl();
   assert.deepEqual(cfg.ocultas, []);
-  assert.deepEqual(cfg.orden.slice(0, 2), ["crr", "inversion"]);
+  assert.equal(cfg.orden[0], "estado");   // la columna nueva se inserta en su lugar natural, no al final
+  assert.ok(cfg.orden.indexOf("crr") < cfg.orden.indexOf("inversion"));
+  assert.equal(new Set(cfg.orden).size, api.COLUMNAS_CONTROL.length);
   assert.deepEqual(armar(con({ ocultas: ["mi"] })).leerColumnasControl().ocultas, ["mi"]);
 });
 
@@ -41,5 +43,5 @@ test("sin almacenamiento disponible también arranca con las de fábrica", () =>
 
 test("no se saca ninguna columna: todas siguen existiendo, solo cambia cuáles se ven", () => {
   const api = armar(vacio);
-  assert.equal(api.COLUMNAS_CONTROL.length, 33);
+  assert.equal(api.COLUMNAS_CONTROL.length, 36);
 });
