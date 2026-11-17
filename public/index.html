@@ -102,9 +102,10 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
 .acciones-ok{border-left-color:#4FD39A; padding:10px 14px; font-size:13px}
 .crr .crr-cab{display:flex; justify-content:space-between; align-items:center; gap:8px 14px; flex-wrap:wrap}
 .crr .crr-periodo th{text-align:left; background:rgba(255,255,255,.05); font-size:12px; padding:6px 10px}
-.crr .crr-flecha{font-size:10px; margin-left:3px; cursor:help}
-.crr .crr-flecha.bien{color:#5fd39a}
-.crr .crr-flecha.mal{color:var(--danger)}
+.tabla-cab{display:flex; justify-content:space-between; align-items:center; gap:8px 14px; flex-wrap:wrap; margin-bottom:4px}
+.crr-flecha{font-size:10px; margin-left:3px; cursor:help}
+.crr-flecha.bien{color:#5fd39a}
+.crr-flecha.mal{color:var(--danger)}
 .crr .vacio-tenue{color:var(--text-faint); font-size:11.5px}
 .semaforo .sem-dot{display:inline-block; width:9px; height:9px; border-radius:50%; flex:none}
 .rendimiento .rend-cab{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px}
@@ -929,7 +930,35 @@ const COLUMNAS_CONTROL = [
   { id:'fuga', grupo:'Permanencia', fuente:'Financiera', etiqueta:'Tasa de fuga',
     info:'Bajas ÷ (bajas + miembros finales): de todas las personas que estuvieron en el grupo, cuántas se fueron. Se puede calcular desde la segunda carga de lista completa de la comunidad.',
     celda:(c)=>c.tasa_fuga_pct == null ? vacio('no_calc') : vPct(c.tasa_fuga_pct), total:(t)=>t.bajasMed > 0 ? vPct(t.razon(t.bajas, t.bajas + t.mfMed, 100)) : vacio('no_calc') },
+
+  // ---- Retención entre cargas de lista completa (CRR y churn, db/043): el último período que cierra dentro de las fechas elegidas
+  { id:'crr_periodo', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Período entre cargas (CRR)',
+    info:'Entre qué dos cargas de la lista completa se miden el CRR y el churn: la última carga que cae dentro de las fechas elegidas y la anterior. En el total del cliente va desde la carga más antigua hasta la más reciente de las comunidades. Si una comunidad tiene un período distinto, se ve acá.',
+    celda:(c)=>filaCrr(c._crr, (x)=>`<span class="entero" title="${esc(x.dias ? x.dias + ' días entre cargas' : '')}">${esc(periodoCorto(x))}</span>`), total:(t)=>filaCrr(t.crrTotal, (x)=>`<span class="entero">${esc(periodoCorto(x))}</span>`) },
+  { id:'crr_inicio', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Miembros al inicio (CRR)',
+    info:'Cuántos miembros había en la carga de lista completa anterior (el inicio del período de CRR).',
+    celda:(c)=>filaCrr(c._crr, (x)=>vEntero(x.inicio)), total:(t)=>filaCrr(t.crrTotal, (x)=>vEntero(x.inicio)) },
+  { id:'crr_nuevos', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Ingresos nuevos (CRR)',
+    info:'Personas que aparecen en la carga nueva y no estaban en la anterior (período de CRR).',
+    celda:(c)=>filaCrr(c._crr, (x)=>vEntero(x.nuevos)), total:(t)=>filaCrr(t.crrTotal, (x)=>vEntero(x.nuevos)) },
+  { id:'crr_bajas', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Bajas entre cargas (CRR)',
+    info:'Personas que estaban en la carga anterior y ya no están en la nueva (período de CRR).',
+    celda:(c)=>filaCrr(c._crr, (x)=>vEntero(x.bajas)), total:(t)=>filaCrr(t.crrTotal, (x)=>vEntero(x.bajas)) },
+  { id:'crr_fin', grupo:'Permanencia', fuente:'WhatsApp & Salud', etiqueta:'Miembros al final (CRR)',
+    info:'Cuántos miembros hay en la carga de lista completa que cierra el período de CRR.',
+    celda:(c)=>filaCrr(c._crr, (x)=>vEntero(x.fin)), total:(t)=>filaCrr(t.crrTotal, (x)=>vEntero(x.fin)) },
+  { id:'crr', grupo:'Permanencia', fuente:'Financiera', etiqueta:'Retención (CRR)',
+    info:'(Miembros al final − ingresos nuevos) ÷ miembros al inicio × 100: de los que ya estaban, qué porcentaje sigue. Cuanto más alto, mejor. La flechita compara con el período anterior de la misma comunidad: verde = mejoró, roja = empeoró. El total recalcula con los totales, no promedia porcentajes.',
+    celda:(c)=>filaCrr(c._crr, (x)=>x.crr == null ? vacio('sin_dato') : `${vPct(x.crr)} ${flechaCrr(x.crr, x.anterior && x.anterior.crr, true)}`),
+    total:(t)=>filaCrr(t.crrTotal, (x)=>x.crr == null ? vacio('sin_dato') : `${vPct(x.crr)} ${x.comparacion ? flechaCrr(x.comparacion.crr, x.comparacion.crrAntes, true) : ''}`) },
+  { id:'churn', grupo:'Permanencia', fuente:'Financiera', etiqueta:'Churn',
+    info:'100 − CRR: de cada 100 miembros del inicio, cuántos ya no están. Cuanto más bajo, mejor. La flechita compara con el período anterior: verde = mejoró (bajó), roja = empeoró (subió). No es la "tasa de fuga" (esa usa otra base: bajas ÷ (bajas + miembros finales)).',
+    celda:(c)=>filaCrr(c._crr, (x)=>x.churn == null ? vacio('sin_dato') : `${vPct(x.churn)} ${flechaCrr(x.churn, x.anterior && x.anterior.churn, false)}`),
+    total:(t)=>filaCrr(t.crrTotal, (x)=>x.churn == null ? vacio('sin_dato') : `${vPct(x.churn)} ${x.comparacion ? flechaCrr(x.comparacion.churn, x.comparacion.churnAntes, false) : ''}`) },
 ];
+const NA_CRR = 'Todavía no hay dos cargas de lista completa de esta comunidad que cierren dentro de las fechas elegidas (Overview → Cargar miembros → "lista completa"). Probá con "Todo el histórico".';
+const filaCrr = (x, f) => x ? f(x) : vacio('sin_dato', NA_CRR);
+const periodoCorto = (x) => { const d = (v) => { const p = fmtDia(v); return p === '—' ? p : p.slice(0, 5); }; return `${d(x.desde)} → ${d(x.hasta)}`; };
 // Fuente de una columna, chica y discreta: punto de color + nombre. Sin fuente conocida no se pinta nada.
 function htmlFuente(col){
   const f = FUENTES_TABLA[col.fuente];
@@ -1152,6 +1181,47 @@ function flechaCrr(actual, anterior, mejorSiSube){
   const fmt = (v) => Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
   const txt = (bueno ? 'Mejoró' : 'Empeoró') + ' respecto del período anterior (' + fmt(anterior) + ')';
   return `<span class="crr-flecha ${bueno ? 'bien' : 'mal'}" title="${txt}" aria-label="${txt}">${sube ? '▲' : '▼'}</span>`;
+}
+// CRR para la tabla principal "Métricas por comunidad": de cada comunidad, el último período (carga de cierre) que cae dentro de las fechas elegidas,
+// con el período anterior (de todo el histórico) para la flechita. El total del cliente suma esos períodos y recalcula el CRR con los totales.
+function crrVigente(filas, desde, hasta, comunidadId){
+  const todos = agruparCrr(filas).periodos;
+  for (const p of agruparCrr(filtrarCrr(filas, desde, hasta, null)).periodos) {
+    const x = p.filas.find(f => f.comunidadId === comunidadId);
+    if (x) return { ...x, anterior: periodoAnteriorCrr(todos, p, comunidadId) };
+  }
+  return null;
+}
+function crrTotalVigente(filas, desde, hasta, comunidades){
+  const act = (comunidades || []).filter(c => !c.es_global).map(c => crrVigente(filas, desde, hasta, c.id)).filter(Boolean);
+  if (!act.length) return null;
+  const suma = (arr, k) => arr.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+  const juntar = (arr) => { const t = { inicio: suma(arr, 'inicio'), nuevos: suma(arr, 'nuevos'), bajas: suma(arr, 'bajas'), fin: suma(arr, 'fin') }; return { ...t, ...calcularCrr(t.inicio, t.nuevos, t.fin) }; };
+  const total = { ...juntar(act), desde: act.reduce((m, x) => (x.desde < m ? x.desde : m), act[0].desde), hasta: act.reduce((m, x) => (x.hasta > m ? x.hasta : m), act[0].hasta), dias: null, anterior: null };
+  const conAnt = act.filter(x => x.anterior);
+  if (conAnt.length) {
+    const ahora = juntar(conAnt);
+    const antes = (() => { const t = { inicio: suma(conAnt.map(x => x.anterior), 'inicio'), nuevos: suma(conAnt.map(x => x.anterior), 'nuevos'), fin: suma(conAnt.map(x => x.anterior), 'fin') }; return calcularCrr(t.inicio, t.nuevos, t.fin); })();
+    total.comparacion = { crr: ahora.crr, churn: ahora.churn, crrAntes: antes.crr, churnAntes: antes.churn };
+  }
+  return total;
+}
+// CSV de la tabla "Métricas por comunidad": lo que se ve en pantalla (columnas visibles), en texto. Mismo formato que el de CRR (Excel en español).
+function textoDeCelda(html){
+  return String(html == null ? '' : html)
+    .replace(/<span class="vacio"[^>]*>[\s\S]*?<\/span>/g, '').replace(/<span class="crr-flecha[^>]*>[\s\S]*?<\/span>/g, '').replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').trim();
+}
+function csvTabla(encabezados, filas, cliente){
+  const texto = (v) => { let s = String(v == null ? '' : v); if (/^[=+@\t\r]/.test(s) || /^-(?![\d$])/.test(s)) s = "'" + s; return /[;"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lineas = [['Cliente', 'Comunidad', ...encabezados].map(texto).join(';')];
+  for (const f of filas || []) lineas.push([cliente, f.nombre, ...f.celdas.map(textoDeCelda)].map(texto).join(';'));
+  return '﻿' + lineas.join('\r\n') + '\r\n';
+}
+function nombreArchivoTabla(cliente, desde, hasta){
+  const f = (d) => { const [a, m, x] = String(d).slice(0, 10).split('-'); return `${x}-${m}-${a}`; };
+  const limpio = String(cliente || 'cliente').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return `Métricas por comunidad - ${limpio} - ${desde || hasta ? `${desde ? f(desde) : 'inicio'} a ${hasta ? f(hasta) : 'hoy'}` : 'todo el histórico'}.csv`;
 }
 function crrMasRecientesFuera(filas, hasta, comunidadId){
   const dia = (d) => String(d == null ? '' : d).slice(0, 10);
@@ -1397,7 +1467,10 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     // Conversaciones de las comunidades (sin las campañas globales, que no tienen entradas propias): base del desfasaje y de los chats sin registrar.
     convCom: sumaDe(comunidades.filter(c => !c.es_global), 'conversaciones_meta'),
     sinClas: entradasFlow ? entradasFlow.sin_clasificar : null,
+    // CRR y churn entre cargas de lista completa: último período dentro de las fechas elegidas (null si el CRM no mandó los datos o no hay dos cargas).
+    crrTotal: crr ? crrTotalVigente(crr, desde, hasta, comunidades) : null,
   };
+  const conCrr = (c) => ({ ...c, _crr: crr ? crrVigente(crr, desde, hasta, c.id) : null });
 
   const inicios = iniciosDeTramo(visibles);
   const claseGrupo = (col, k) => 'g-' + (GRUPOS_TABLA[col.grupo] ? GRUPOS_TABLA[col.grupo].k : 'otro') + (inicios[k] ? ' g-ini' : '');
@@ -1411,11 +1484,19 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     return `<td class="num ${claseGrupo(col, k)}" style="--gc:${g.color}">${canalActivo && !col.porCanal ? vacio('no_canal') : fn(col)}</td>`; }).join('');
 
   const filas = porComunidad.length
-    ? porComunidad.map(c => `<tr><th scope="row" class="td-com">${esc(c.nombre)}</th>${celdas(col => col.celda(c))}</tr>`).join('')
+    ? porComunidad.map(c => { const cc = conCrr(c); return `<tr><th scope="row" class="td-com">${esc(c.nombre)}</th>${celdas(col => col.celda(cc))}</tr>`; }).join('')
     : `<tr class="empty-row"><td colspan="${visibles.length + 1}">Sin datos todavía.</td></tr>`;
   const filaTotal = comunidades.length
     ? `<tr class="totales"><th scope="row" class="td-com">Total del cliente</th>${celdas(col => col.total(t))}</tr>`
     : '';
+
+  // Lo que se ve, para el botón "Exportar CSV": mismas columnas visibles, mismas celdas (el CSV las pasa a texto).
+  const valores = (fn) => visibles.map(col => (canalActivo && !col.porCanal ? vacio('no_canal') : fn(col)));
+  state.tablaControl = {
+    encabezados: visibles.map(col => `${col.grupo} - ${col.etiqueta}`),
+    filas: [...porComunidad.map(c => { const cc = conCrr(c); return { nombre: c.nombre, celdas: valores(col => col.celda(cc)) }; }),
+            ...(comunidades.length ? [{ nombre: 'Total del cliente', celdas: valores(col => col.total(t)) }] : [])],
+  };
 
   const panelColumnas = state.columnasAbierto ? `<div class="col-panel" id="panelColumnas">
       <div class="col-panel-head"><b>Columnas</b><span>${visibles.length} de ${Object.keys(porId).length} visibles · arrastrá para reordenar</span>
@@ -1447,8 +1528,8 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     </div>
     <div class="sub" id="metaVivoEstado" role="status" style="margin:0 0 10px; ${state.metaVivo && state.metaVivo.tipo === 'error' ? 'color:var(--danger)' : state.metaVivo && state.metaVivo.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.metaVivo && state.metaVivo.texto) || '')}</div>
     <div class="sub" id="reporteEstado" role="status" style="margin:0 0 10px; ${state.reporteSemanal && state.reporteSemanal.tipo === 'error' ? 'color:var(--danger)' : state.reporteSemanal && state.reporteSemanal.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.reporteSemanal && state.reporteSemanal.texto) || '')}</div>
-    <div class="card"><h3>Métricas por comunidad</h3>
-      <div class="sub">Etapas, de izquierda a derecha: Alcanzar · Intención · Control del tracking · Activación · Ingreso · Permanencia</div>
+    <div class="card"><div class="tabla-cab"><h3 style="margin:0">Métricas por comunidad</h3><button class="btn" id="btnTablaCsv" type="button" ${visibles.length && comunidades.length ? '' : 'disabled'} title="Descarga en CSV lo que ves en esta tabla (columnas visibles, comunidad, canal y fechas elegidos), con formato para presentar a los clientes. Para elegir qué columnas salen, usá el botón Columnas">Exportar CSV</button></div>
+      <div class="sub">Etapas, de izquierda a derecha: Alcanzar · Intención · Control del tracking · Activación · Ingreso · Permanencia (incluye el CRR y el churn entre cargas de lista completa: Retención de miembros)</div>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion). Solo suman las campañas de conversión o tráfico a WhatsApp definidas en el mapeo: el gasto de las demás queda registrado en Consultas, sin sumarse.</div>
       ${canalActivo ? `<div class="sub" style="color:var(--warn)">Mostrando solo el flow de ${canal === 'instagram' ? 'Instagram' : 'WhatsApp'}: se dividen las entradas, los triggers y los clics en "Me sumo". El resto de las columnas (Meta, miembros y costos) no se divide por canal y aparece como "No se divide".</div>` : ''}
       ${(desde || hasta) && (!hasta || hasta >= hoyAR()) ? `<div class="sub" style="color:var(--warn)">El período incluye hoy: las entradas del CRM están al día, pero la inversión y las conversaciones de Meta llegan a la mañana siguiente.</div>` : ''}
@@ -1533,12 +1614,24 @@ function wireControl(){
   if (reporte) reporte.onclick = descargarReporteSemanal;
   const crrCsv = document.getElementById('btnCrrCsv');
   if (crrCsv) crrCsv.onclick = descargarCrrCsv;
+  const tablaCsv = document.getElementById('btnTablaCsv');
+  if (tablaCsv) tablaCsv.onclick = descargarTablaCsv;
   const crrTodo = document.getElementById('btnCrrTodo');
   if (crrTodo) crrTodo.onclick = () => { state.fechaDesde = null; state.fechaHasta = null; renderAll(); };
   wireAcciones();
 }
 
 // Exporta a CSV lo que se ve en la tabla de CRR (respeta las fechas y la comunidad elegidas).
+function descargarTablaCsv(){
+  const tc = state.tablaControl;
+  if (!tc || !tc.filas.length) return;
+  const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre || '';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csvTabla(tc.encabezados, tc.filas, cliente)], { type: 'text/csv;charset=utf-8' }));
+  a.download = nombreArchivoTabla(cliente, state.fechaDesde || '', state.fechaHasta || '');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 function descargarCrrCsv(){
   const periodos = agruparCrr(filtrarCrr(state.crrDatos, state.fechaDesde || '', state.fechaHasta || '', state.filtroComunidad || null)).periodos;
   const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre || '';
