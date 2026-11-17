@@ -64,7 +64,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/cliente?select=id,nombre&slug=eq.{{ $json.slug }}",
+        "url": "=https://zyyxsammrryhfrgfwlxr.supabase.co/rest/v1/cliente?select=id,nombre&slug=eq.{{ $json.slug }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth",
         "sendHeaders": true,

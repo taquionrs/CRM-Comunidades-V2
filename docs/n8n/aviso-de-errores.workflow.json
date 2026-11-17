@@ -1,0 +1,97 @@
+{
+  "name": "Aviso de errores de los flujos del CRM",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Aviso de errores del CRM\nSi un flujo falla, este te manda un correo con **cuál fue y en qué nodo**, para que no pase en silencio (un reporte del lunes que no sale se nota recién el martes).\n\n**Para activarlo en cada flujo:** abrí el flujo → ⋯ → *Settings* → **Error workflow** → elegí este. Hacelo en *Reporte semanal*, *Recordatorio del conteo* y *Carga automática de miembros*.\n\nCompletá la credencial de Gmail y el correo destino.",
+        "height": 250,
+        "width": 520,
+        "color": 4
+      },
+      "id": "c30000001-0000-4000-8000-000000000001",
+      "name": "Nota 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -280
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c30000002-0000-4000-8000-000000000002",
+      "name": "Un flujo falló",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el aviso de un flujo que falló. Lee lo que n8n manda al disparador de errores.\nconst e = $json.execution || {};\nconst w = $json.workflow || {};\nconst nodo = e.lastNodeExecuted || 'un nodo que no se pudo identificar';\nconst mensaje = (e.error && e.error.message) || 'sin detalle';\nconst html = `<p>El flujo <b>${w.name || '(sin nombre)'}</b> falló en el nodo <b>${nodo}</b>.</p>\n<p><b>Qué dijo n8n:</b> ${mensaje}</p>\n<p>${e.url ? `Ver la ejecución: <a href=\"${e.url}\">${e.url}</a>` : 'n8n no mandó el enlace de la ejecución.'}</p>\n<p style=\"color:#6b7280\">Mientras no se corrija, el reporte o la carga de esa vez no se hizo. Se puede correr a mano desde n8n con \"Correr a mano\".</p>`;\nreturn [{ json: { asunto: `Falló un flujo del CRM: ${w.name || ''}`, html } }];"
+      },
+      "id": "c30000003-0000-4000-8000-000000000003",
+      "name": "Armar aviso de error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "PEGAR_CORREO_DESTINO",
+        "subject": "={{ $json.asunto }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "c30000004-0000-4000-8000-000000000004",
+      "name": "Avisar por correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REEMPLAZAR",
+          "name": "Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Un flujo falló": {
+      "main": [
+        [
+          {
+            "node": "Armar aviso de error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar aviso de error": {
+      "main": [
+        [
+          {
+            "node": "Avisar por correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "pinData": {},
+  "active": false
+}
