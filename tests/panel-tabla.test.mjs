@@ -89,7 +89,7 @@ test("total de bajas y de fuga: suman solo las comunidades donde se pueden calcu
 test("canal: solo trigger, clics en Me sumo, CTR del botón, entradas y clic/entradas se dividen por canal", () => {
   assert.deepEqual(COLUMNAS_CONTROL.filter((c) => c.porCanal).map((c) => c.id).sort(), ["clics_me_sumo", "ctr_boton", "entradas", "sin_clasificar", "tasa_me_sumo", "trigger"]);
   // lo que usa Meta, los miembros o la inversión no se divide (incluye el desfasaje y los chats sin registrar, que usan las conversaciones de Meta)
-  for (const id of ["inversion", "clics_enlace", "ctr_enlace", "cpc_enlace", "conversaciones", "cpl", "clic_conv", "leads", "costo_lead", "desfasaje", "chats_sin_registrar", "mi", "mf", "crecimiento", "bajas", "costo_entrada", "costo_clic", "cpmn", "fuga"]) {
+  for (const id of ["inversion", "clics_enlace", "ctr_enlace", "cpc_enlace", "conversaciones", "cpl", "clic_conv", "leads", "costo_lead", "desfasaje", "chats_sin_registrar", "mi", "mf", "crecimiento", "bajas", "costo_entrada", "costo_clic", "cpmn", "cpm_nuevo", "fuga"]) {
     assert.ok(!col(id).porCanal, id);
   }
 });
