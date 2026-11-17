@@ -33,7 +33,8 @@ export function mensajeDeContacto(contact, maximo = 500) {
 export function codigosCandidatos(texto) {
   if (typeof texto !== "string") return [];
   const vistos = [];
-  for (const m of texto.matchAll(/(?<![\p{L}\p{N}])([A-Za-z]{1,3}\d{1,3})(?![\p{L}\p{N}])/gu)) {
+  // Formato nuevo ZONA-NN ("PAL-01", db/042) o el anterior ("P1"). Un guion pegado antes o después no cuenta como límite de palabra.
+  for (const m of texto.matchAll(/(?<![\p{L}\p{N}-])([A-Za-z]{2,4}-\d{1,3}|[A-Za-z]{1,3}\d{1,3})(?![\p{L}\p{N}-])/gu)) {
     const c = m[1].toUpperCase();
     if (!vistos.includes(c)) vistos.push(c);
   }

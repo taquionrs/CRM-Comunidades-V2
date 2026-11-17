@@ -1,10 +1,12 @@
-# Código por anuncio — piloto en Palermo (PR #70)
+# Código por anuncio — piloto en Palermo (PR #70, formato y catálogo automático en la PR #73)
+
+> **Desde la PR #73** el catálogo se arma solo: cada anuncio que llega de Windsor recibe un código con la forma `ZONA-NN` (por ejemplo `PAL-01`, `BOE-04`, `DEV-02`), con la zona de la comunidad y el número que ya trae el nombre del anuncio en Meta. El código está en la columna **Código** del bloque Rendimiento. Lo que sigue en esta guía vale igual: el código tiene que viajar al final del mensaje. Si ManyChat llega a entregar el ID del anuncio (ver `probar-id-de-anuncio-en-manychat.md`), este paso deja de hacer falta.
 
 ## Para qué sirve
 
 ManyChat no dice de qué anuncio viene cada persona: el contacto aparece como "Directo" y no trae anuncio ni fuente. Hoy el CRM sabe **la zona que eligió la persona**, no **el anuncio que vio**.
 
-La solución es que cada anuncio de Meta tenga su propia plantilla de mensaje, y que la plantilla termine con un **código corto** (`P1`, `P2`, `P3`, `P4`). La persona manda el código dentro del primer mensaje, ManyChat ya lo entrega en `contact.last_input_text` y el CRM lo reconoce.
+La solución es que cada anuncio de Meta tenga su propia plantilla de mensaje, y que la plantilla termine con un **código corto** (`PAL-01`, `PAL-02`, `PAL-03`, `PAL-04`). La persona manda el código dentro del primer mensaje, ManyChat ya lo entrega en `contact.last_input_text` y el CRM lo reconoce.
 
 Es un **piloto en Palermo** (los 4 anuncios `PALERMO_01` a `PALERMO_04` de la campaña de tráfico a WhatsApp de Cortado en Jarrito). Si funciona, se repite en Devoto y Boedo.
 
@@ -26,10 +28,10 @@ El código solo cuenta si está en el catálogo y activo. Un texto parecido ("A1
 
 | Código | Anuncio | Comunidad |
 |---|---|---|
-| `P1` | `PALERMO_01` | Palermo |
-| `P2` | `PALERMO_02` | Palermo |
-| `P3` | `PALERMO_03` | Palermo |
-| `P4` | `PALERMO_04` | Palermo |
+| `PAL-01` | `PALERMO_01` | Palermo |
+| `PAL-02` | `PALERMO_02` | Palermo |
+| `PAL-03` | `PALERMO_03` | Palermo |
+| `PAL-04` | `PALERMO_04` | Palermo |
 
 La migración los carga sola. Si el nombre de algún anuncio en Meta es distinto, se corrige el nombre en la tabla (el código no cambia).
 
@@ -46,10 +48,10 @@ El orden 1 → 2 es el recomendado, pero la función no rompe si se despliega an
 En cada anuncio de Palermo, editar la **plantilla del mensaje** y agregar el código **al final**, separado por un espacio:
 
 ```
-<frase actual de Palermo> P1
+<frase actual de Palermo> PAL-01
 ```
 
-- `PALERMO_01` → termina en `P1`, `PALERMO_02` → `P2`, y así.
+- `PALERMO_01` → termina en `PAL-01`, `PALERMO_02` → `PAL-02`, y así.
 - No cambiar nada más de la frase: la comunidad se decide por ella.
 - Un anuncio tiene que tener **un solo** código y **una sola** zona (la zona se define en el conjunto de anuncios).
 - Editar el texto de un anuncio activo puede reiniciar su etapa de aprendizaje; conviene hacerlo de a un anuncio o aprovechar un anuncio nuevo.
@@ -58,8 +60,8 @@ En cada anuncio de Palermo, editar la **plantilla del mensaje** y agregar el có
 ## Cómo verificarlo
 
 1. Abrí el anuncio en WhatsApp con tu teléfono y mandá el mensaje tal cual viene (con el código).
-2. En Data_Cruda, el contacto nuevo tiene `anuncio_codigo = P1` (o consultá abajo).
-3. Probá también sin el código y con un código inventado (`P9`): tiene que entrar igual y quedar sin anuncio.
+2. En Data_Cruda, el contacto nuevo tiene `anuncio_codigo = PAL-01` (o consultá abajo).
+3. Probá también sin el código y con un código inventado (`PAL-09`): tiene que entrar igual y quedar sin anuncio.
 
 Consulta de conteos (SQL Editor de Supabase):
 
