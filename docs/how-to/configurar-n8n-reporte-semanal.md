@@ -31,6 +31,12 @@ Los **números siempre los calcula el CRM** (función `reporte_semanal`, `db/044
 - **Miembros del último intervalo cerrado entre dos cargas de lista completa:** miembros al inicio, nuevos, bajas, miembros al final, **CRR**, **churn**, **costo por miembro nuevo** y **tasa de triaje**.
 - **Frescura:** fecha de la última carga y días sin carga. Si pasan de 8 días, el correo lo avisa.
 
+- **Semáforos (desde la PR #92), tres columnas al final:** **Semáforo cobertura**, **Semáforo frescura** y **Estado general** (el peor de los dos). Salen como texto: **Verde, Amarillo, Rojo, Revisar o Sin datos**, para quien solo abre el archivo.
+  - Cobertura (entradas ÷ chats de Meta): más de 60 % Verde, de 35 a 60 % Amarillo, menos de 35 % Rojo, más de 100 % Revisar, menos de 20 chats Sin datos.
+  - Frescura (días sin carga de lista completa): hasta 7 Verde, de 8 a 14 Amarillo, más de 14 Rojo, sin cargas Sin datos.
+  - El CRR y el triaje **no llevan color todavía**: sus umbrales se fijan después de 3 o 4 semanas de fotos semanales.
+  - **Si ya tenés la hoja *Historial*:** agregá a la derecha de los encabezados actuales estas tres columnas, con esos nombres exactos (van al final para no correr las que ya tenés).
+
 Lo que el CRM no puede calcular figura **vacío** (nunca 0): por ejemplo, el CRR de una comunidad con una sola carga.
 
 ## 2. Carga automática de miembros
