@@ -1,4 +1,4 @@
-// Pruebas del bloque "Retención de miembros (CRR)" de Control_Comunidades (bloque CRR y renderCrr de public/index.html). Correr: npm test
+// Pruebas del cálculo y la agrupación del CRR (bloque CRR de public/index.html). Correr: npm test
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -9,15 +9,13 @@ const bloque = (nombre) => {
   assert.ok(ini >= 0 && fin > ini, `no se encontró el bloque ${nombre} en public/index.html`);
   return html.slice(ini, fin);
 };
-const iniR = html.indexOf("function renderCrr("), finR = html.indexOf("function renderRendimiento(");
-assert.ok(iniR >= 0 && finR > iniR, "no se encontró renderCrr en public/index.html");
 
 const AYUDAS = `
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   const fmtInt = (v) => v == null ? '—' : Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const fmtDia = (d) => { if (!d) return '—'; const [a, m, x] = String(d).slice(0, 10).split('-'); return x + '/' + m + '/' + a; };
 `;
-const { calcularCrr, agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr } = new Function(AYUDAS + bloque("CRR") + html.slice(iniR, finR) + "\nreturn { calcularCrr, agruparCrr, renderCrr, filtrarCrr, crrMasRecientesFuera, csvCrr, nombreArchivoCrr };")();
+const { calcularCrr, agruparCrr } = new Function(AYUDAS + bloque("CRR") + "\nreturn { calcularCrr, agruparCrr };")();
 
 // Las filas reales de Cortado en Jarrito (cargas del 14/10, 26/10 y 13/11).
 const fila = (o) => ({ comunidad_id: "boe", comunidad: "Boedo", desde: "2026-10-14", hasta: "2026-10-26", dias: 12, miembros_inicio: 11, nuevos: 40, bajas: 0, miembros_fin: 51, crr_pct: 100, churn_pct: 0, cuadra: true, ...o });
@@ -62,55 +60,4 @@ test("las fechas vienen como Date o como texto y se normalizan a AAAA-MM-DD", ()
 
 test("lista vacía o nula no rompe", () => {
   for (const x of [[], null, undefined]) assert.equal(agruparCrr(x).periodos.length, 0);
-});
-
-test("el bloque muestra el período, las cifras y el total", () => {
-  const out = renderCrr([fila({}), PAL, DEV], COMUNIDADES, null);
-  assert.match(out, /Retención de miembros \(CRR\) y churn/);
-  assert.match(out, /Del 14\/10 al 26\/10\/2026 · 12 días/);
-  assert.match(out, /96,9 %/);        // Palermo 96,88 → 96,9 %
-  assert.match(out, /92,3 %/);        // Devoto
-  assert.match(out, />Total</);
-  assert.match(out, /95,7 %/);        // total 95,65 → 95,7 %
-});
-
-test("avisa qué comunidades no tienen CRR en las fechas elegidas", () => {
-  const out = renderCrr([BOE2], COMUNIDADES, null);
-  assert.match(out, /Sin CRR en estas fechas: Palermo, Villa Devoto, Cortado en Jarrito \(general\)/);
-  assert.ok(!/Campañas globales/.test(out), "las campañas globales no son una comunidad");
-});
-
-test("con una comunidad elegida muestra solo esa", () => {
-  const out = renderCrr([fila({}), PAL, DEV], COMUNIDADES, "pal");
-  assert.match(out, /Palermo/);
-  assert.ok(!/Villa Devoto/.test(out));
-  assert.ok(!/>Total</.test(out));
-});
-
-test("si las cargas no cuadran lo marca en la fila", () => {
-  const out = renderCrr([fila({ cuadra: false })], COMUNIDADES, null);
-  assert.match(out, /no cuadra/);
-  assert.ok(!/no cuadra/.test(renderCrr([fila({})], COMUNIDADES, null)));
-});
-
-test("sin períodos explica qué falta; sin respuesta de la base lo dice sin romper la página", () => {
-  assert.match(renderCrr([], COMUNIDADES, null), /Ninguna comunidad tiene dos cargas de lista completa/);
-  assert.match(renderCrr(null, COMUNIDADES, null), /No se pudo cargar el CRR/);
-});
-
-test("un CRR sin base (null) se muestra como guion", () => {
-  const out = renderCrr([fila({ miembros_inicio: 0, crr_pct: null, churn_pct: null })], COMUNIDADES, null);
-  assert.match(out, /<b>—<\/b>/);
-});
-
-test("el nombre de la comunidad no rompe el HTML", () => {
-  const out = renderCrr([fila({ comunidad: 'A "B" <i>' })], COMUNIDADES, null);
-  assert.ok(!out.includes("<i>"));
-  assert.match(out, /A &quot;B&quot; &lt;i&gt;/);
-});
-
-test("el bloque queda dentro de Control_Comunidades, lo ven todos los roles y va antes del rendimiento por anuncio", () => {
-  assert.match(html, /\$\{renderCrr\(crr, comunidades, filtroComunidad, \{ desde, hasta \}\)\}\n\s*\$\{!esMarketing\(\) \? '' : renderRendimiento\(/);
-  assert.match(html, /loadCrr\(null, null\)/);
-  assert.ok(!/key:'crr'/.test(html), "no tiene que haber una pestaña aparte");
 });

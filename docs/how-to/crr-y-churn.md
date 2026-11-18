@@ -4,7 +4,7 @@
 - **CRR** (tasa de retención de miembros) = (miembros al final − miembros nuevos) ÷ miembros al inicio × 100.
 - **Churn** = 100 − CRR: de cada 100 miembros que había al inicio, cuántos ya no están.
 
-Aparecen en **Control_Comunidades**, en el bloque **"Retención de miembros (CRR) y churn"**, debajo del semáforo de cobertura. Los ven todos los roles (son solo conteos).
+Aparecen en **Control_Comunidades**, dentro de la tabla **"Métricas por comunidad"** (etapa Permanencia): **Período entre cargas**, miembros al inicio, ingresos nuevos, bajas, miembros al final, **Retención (CRR)** y **Churn**, con una flechita contra el período anterior. Cada comunidad muestra el último período cerrado hasta el "Hasta" elegido. Los ven todos los roles (son solo conteos). Hasta el 18/11 había además una tabla aparte debajo del semáforo: se quitó porque estaba toda dentro de la principal. Para bajarla: **Exportar Excel**, **Exportar CSV** o **Flyer del reporte (PDF)**.
 
 ## De dónde salen los números
 De las **cargas de lista completa** del grupo (Overview → Cargar miembros → "lista completa"). Cada una es una foto exacta de quién está en el grupo ese día. El CRR se mide **entre dos cargas seguidas** de la misma comunidad:

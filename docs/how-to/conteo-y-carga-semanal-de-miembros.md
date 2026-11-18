@@ -41,9 +41,9 @@ Compará con lo que anotaste en el paso 1:
 8. Tildá la confirmación de salidas y tocá **Confirmar y guardar**.
 
 ## Paso 5 — Comprobar que quedó bien (1 minuto)
-1. Entrá a **Control_Comunidades** y bajá hasta el bloque **"Retención de miembros (CRR) y churn"**.
-2. Cada comunidad que cargaste tiene que aparecer con su período nuevo (desde la carga anterior hasta hoy).
-3. No tiene que aparecer la marca **"no cuadra"**. Si aparece, hay un problema con esa carga: avisá antes de usar el número.
+1. Entrá a **Control_Comunidades** y mirá, en la tabla **"Métricas por comunidad"**, las columnas **Período entre cargas**, **Retención (CRR)** y **Churn** (si las tenés ocultas, activalas desde el botón **Columnas**).
+2. Cada comunidad que cargaste tiene que aparecer con su período nuevo (desde la carga anterior hasta hoy). Con "Todo el histórico" o un "Hasta" de hoy ves el último.
+3. No tiene que aparecer la marca **"no cuadra"** (se ve en la columna Período o en las cargas; la avisa también "Para completar"). Si aparece, hay un problema con esa carga: avisá antes de usar el número.
 
 ---
 

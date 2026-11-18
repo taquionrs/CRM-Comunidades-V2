@@ -95,12 +95,12 @@ test("el nombre del archivo lleva cliente y fechas, o 'todo el histórico'", () 
   assert.ok(!/[\/:*?"<>|]/.test(api.nombreArchivoTabla('A/B: "x"', "", "").replace(/\.csv$/, "").replace(/ - /g, " ")));
 });
 
-test("el panel arma el botón y lo conecta; la tabla de CRR de abajo sigue existiendo", () => {
+test("el panel arma el botón y lo conecta; la tabla de retención de abajo ya no existe (todo está en la principal)", () => {
   assert.match(html, /id="btnTablaCsv"/);
   assert.match(html, /tablaCsv\.onclick = descargarTablaCsv;/);
   assert.match(html, /crrTotal: crr \? crrTotalVigente\(crr, desde, hasta, comunidades\) : null/);
-  assert.match(html, /\$\{renderCrr\(crr, comunidades, filtroComunidad, \{ desde, hasta \}\)\}/);
-  assert.match(html, /id="btnCrrCsv"/);
+  assert.ok(!/renderCrr\(|btnCrrCsv|btnCrrTodo/.test(html), "no queda la tabla de CRR de abajo ni sus botones");
+  assert.match(html, /<h3 style="margin:0">Métricas por comunidad<\/h3>/);
 });
 
 // ---------- costo por miembro neto con los miembros del CRR (db/046) ----------
