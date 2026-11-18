@@ -283,6 +283,9 @@ const TAB_SUB = {
 const NOVEDAD_TIPO = { nuevo: 'Nuevo', mejora: 'Mejora', cambio: 'Cambio', arreglo: 'Arreglo', aviso: 'Aviso' };
 const NOVEDAD_AREA = { general: 'Todo el CRM', overview: 'Overview', control: 'Control_Comunidades', atribucion: 'Atribución', datos: 'Datos', reportes: 'Reportes' };
 const NOVEDADES = [
+  { id: '2026-11-18-flyer-del-reporte', fecha: '2026-11-18', tipo: 'nuevo', area: 'control', ruta: 'control',
+    titulo: 'Flyer del reporte en PDF',
+    detalle: 'El botón Flyer del reporte (PDF) de Métricas por comunidad baja una página lista para mandar al cliente: números clave, semáforo de cada comunidad, retención y churn con sus flechitas, y cómo leer el reporte. Usa las fechas y la comunidad elegidas.' },
   { id: '2026-11-18-excel-con-formato', fecha: '2026-11-18', tipo: 'nuevo', area: 'control', ruta: 'control',
     titulo: 'Exportar Excel con formato profesional',
     detalle: 'El botón Exportar Excel de Métricas por comunidad baja un archivo listo para presentar: etapas con color, números y monedas con su formato, semáforos pintados, flechitas, fila del total destacada y filtros. El CSV sigue disponible.' },
@@ -1545,6 +1548,118 @@ function armarLibroTabla(ExcelJS, d){
   hoja.getRow(pie).height = 28;
   return libro;
 }
+// Flyer visual de una página (PDF) del reporte (PR #95): los números clave del cliente, el semáforo de cada comunidad y cómo leerlo.
+// Lee las mismas celdas de la tabla, pero de TODAS las columnas (también las ocultas): lo que ocultes en pantalla no le saca contenido al flyer.
+// La plata (inversión, costo por miembro) solo sale si el rol es Marketing.
+const FLYER_KPIS = [
+  { id: 'inversion', titulo: 'Inversión en pauta', plata: true }, { id: 'conversaciones', titulo: 'Conversaciones iniciadas' }, { id: 'entradas', titulo: 'Entradas al flow' },
+  { id: 'crr', titulo: 'Retención de miembros (CRR)' }, { id: 'churn', titulo: 'Churn' }, { id: 'cpm_nuevo', titulo: 'Costo por miembro nuevo', plata: true }, { id: 'cobertura', titulo: 'Cobertura del tracking' },
+];
+function datosFlyer(d){
+  const idx = Object.fromEntries((d.columnas || []).map((c, i) => [c.id, i]));
+  const celda = (fila, id) => (fila && idx[id] != null ? { ...celdaParaExcel(fila.celdas[idx[id]]), texto: textoDeCelda(fila.celdas[idx[id]]) } : null);
+  const util = (c) => (c && c.tipo !== 'vacio' ? c : null);
+  const total = (d.filas || []).find(f => f.total) || null;
+  const filas = (d.filas || []).filter(f => !f.total);
+  const kpis = FLYER_KPIS.filter(k => !k.plata || d.marketing).map(k => ({ id: k.id, titulo: k.titulo, celda: util(celda(total, k.id)) })).filter(k => k.celda).slice(0, 6);
+  const comunidades = filas.map(f => ({ nombre: f.nombre, estado: celda(f, 'estado'), entradas: util(celda(f, 'entradas')), cobertura: util(celda(f, 'cobertura')), crr: util(celda(f, 'crr')), churn: util(celda(f, 'churn')), miembros: util(celda(f, 'crr_fin')) }));
+  const totalFila = total ? { nombre: 'Total del cliente', estado: celda(total, 'estado'), entradas: util(celda(total, 'entradas')), cobertura: util(celda(total, 'cobertura')), crr: util(celda(total, 'crr')), churn: util(celda(total, 'churn')), miembros: util(celda(total, 'crr_fin')) } : null;
+  return { cliente: d.cliente, desde: d.desde, hasta: d.hasta, generado: d.generado, kpis, comunidades, total: totalFila };
+}
+const FLYER_SEMAFORO = { verde: '#1E9E63', amarillo: '#E8A317', rojo: '#D93A58', revisar: '#3C6AE0', pocos: '#9AA3B5' };
+function armarFlyerPdf(jsPDF, d){
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const rgb = (hex) => [1, 3, 5].map(i => parseInt(String(hex).replace('#', '').slice(i - 1, i + 1), 16));
+  const relleno = (hex) => doc.setFillColor(...rgb(hex)), trazo = (hex) => doc.setDrawColor(...rgb(hex)), tinta = (hex) => doc.setTextColor(...rgb(hex));
+  const INK = '#1B2330', AZUL = '#2B59C3', SOFT = '#EEF2FA', LINEA = '#D5DBE7', GRIS = '#5B6678', BUENO = '#1E9E63', MALO = '#D93A58';
+  const M = 14, W = 210, ANCHO = W - 2 * M;
+  const f = (v) => { const [a, m, x] = String(v).slice(0, 10).split('-'); return `${x}/${m}/${a}`; };
+  const periodo = d.desde || d.hasta ? `${d.desde ? f(d.desde) : 'inicio'} al ${d.hasta ? f(d.hasta) : 'hoy'}` : 'Todo el histórico';
+  const triangulo = (x, y, sube, color) => { relleno(color); sube ? doc.triangle(x, y + 2.4, x + 2.8, y + 2.4, x + 1.4, y, 'F') : doc.triangle(x, y, x + 2.8, y, x + 1.4, y + 2.4, 'F'); };
+  const punto = (x, y, estado) => { relleno(FLYER_SEMAFORO[estado] || FLYER_SEMAFORO.pocos); doc.circle(x, y, 1.6, 'F'); };
+
+  // Encabezado
+  relleno(INK); doc.rect(0, 0, W, 40, 'F'); relleno(AZUL); doc.rect(0, 40, W, 1.6, 'F');
+  tinta('#FFFFFF'); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.text('Reporte de comunidades', M, 18);
+  doc.setFontSize(13); tinta('#9DB8FF'); doc.text(String(d.cliente || ''), M, 28);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); tinta('#C7CBD4');
+  doc.text('Período', W - M, 15, { align: 'right' }); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); tinta('#FFFFFF'); doc.text(periodo, W - M, 21, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); tinta('#C7CBD4'); doc.text(`Generado el ${d.generado || ''}`, W - M, 30, { align: 'right' });
+
+  // Números clave (hasta 6 tarjetas, 3 por fila)
+  let y = 50;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); tinta(AZUL); doc.text('Números clave', M, y);
+  y += 4;
+  const gap = 5, tw = (ANCHO - 2 * gap) / 3, th = 29;
+  (d.kpis || []).forEach((k, i) => {
+    const x = M + (i % 3) * (tw + gap), yy = y + Math.floor(i / 3) * (th + gap);
+    relleno(SOFT); trazo(LINEA); doc.setLineWidth(0.3); doc.roundedRect(x, yy, tw, th, 2.5, 2.5, 'FD');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); tinta(GRIS); doc.text(doc.splitTextToSize(k.titulo, tw - 8)[0], x + 4, yy + 7);
+    const texto = k.celda.texto || '';
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(texto.length > 11 ? 16 : 20); tinta(INK); doc.text(texto, x + 4, yy + 19);
+    const ancho = doc.getTextWidth(texto);
+    if (k.celda.flecha) triangulo(x + 4 + ancho + 2.5, yy + 15.5, k.celda.flecha.sube, k.celda.flecha.bueno ? BUENO : MALO);
+    if (k.celda.estado) punto(x + tw - 6, yy + 15, k.celda.estado);
+    if (k.celda.flecha) { doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); tinta(k.celda.flecha.bueno ? BUENO : MALO); doc.text(k.celda.flecha.bueno ? 'Mejoró contra el período anterior' : 'Empeoró contra el período anterior', x + 4, yy + 25); }
+  });
+  y += Math.ceil((d.kpis || []).length / 3) * (th + gap) + 4;
+
+  // Tabla por comunidad
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); tinta(AZUL); doc.text('Por comunidad', M, y);
+  y += 4;
+  const cols = [{ t: 'Comunidad', x: M + 3, a: 'left' }, { t: 'Estado', x: 66, a: 'left' }, { t: 'Entradas', x: 106, a: 'right' }, { t: 'Cobertura', x: 129, a: 'right' }, { t: 'Retención', x: 153, a: 'right' }, { t: 'Churn', x: 171, a: 'right' }, { t: 'Miembros', x: W - M - 3, a: 'right' }];
+  relleno(AZUL); doc.rect(M, y, ANCHO, 9, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); tinta('#FFFFFF');
+  cols.forEach(c => doc.text(c.t, c.x, y + 6, { align: c.a }));
+  y += 9;
+  const filas = [...(d.comunidades || []), ...(d.total ? [d.total] : [])];
+  const alto = Math.min(11, Math.max(7.5, 92 / Math.max(1, filas.length)));
+  filas.forEach((r, i) => {
+    const esTotal = r === d.total;
+    relleno(esTotal ? '#E3EAF8' : (i % 2 ? '#F7F9FD' : '#FFFFFF')); doc.rect(M, y, ANCHO, alto, 'F');
+    trazo(esTotal ? AZUL : LINEA); doc.setLineWidth(esTotal ? 0.5 : 0.2); doc.line(M, esTotal ? y : y + alto, M + ANCHO, esTotal ? y : y + alto);
+    const base = y + alto / 2 + 1.4;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); tinta(INK); doc.text(String(r.nombre), cols[0].x, base);
+    doc.setFont('helvetica', esTotal ? 'bold' : 'normal'); doc.setFontSize(9);
+    if (r.estado && r.estado.estado) { punto(cols[1].x + 1.6, base - 1.2, r.estado.estado); tinta(INK); doc.text(r.estado.texto || '', cols[1].x + 5, base); }
+    else { tinta('#9AA3B5'); doc.text('—', cols[1].x, base); }
+    const dato = (c, col) => {
+      if (!c) { tinta('#9AA3B5'); doc.text('—', col.x, base, { align: 'right' }); return; }
+      tinta(INK); doc.text(c.texto || '', col.x, base, { align: 'right' });
+      if (c.estado) punto(col.x - doc.getTextWidth(c.texto || '') - 3, base - 1.2, c.estado);
+      if (c.flecha) triangulo(col.x + 1.2, base - 2.4, c.flecha.sube, c.flecha.bueno ? BUENO : MALO);
+    };
+    dato(r.entradas, cols[2]); dato(r.cobertura, cols[3]); dato(r.crr, { ...cols[4], x: cols[4].x - 2.5 }); dato(r.churn, { ...cols[5], x: cols[5].x - 2.5 }); dato(r.miembros, cols[6]);
+    y += alto;
+  });
+  y += 8;
+
+  // Cómo leerlo
+  relleno(SOFT); trazo(LINEA); doc.setLineWidth(0.3);
+  const notas = [
+    ['Retención (CRR)', 'de los miembros que ya estaban, qué porcentaje sigue en el grupo. Más alto es mejor. El churn es 100 menos el CRR: más bajo es mejor.'],
+    ['Cobertura del tracking', 'entradas al flow ÷ conversaciones de Meta. Verde más de 60 %, amarillo de 35 a 60 %, rojo menos de 35 %.'],
+    ['Estado', 'el peor semáforo entre la cobertura y la frescura de la lista de miembros (verde hasta 7 días, amarillo hasta 14, rojo más de 14).'],
+    ['Flechitas', 'comparan con el período anterior: verde mejoró, roja empeoró.'],
+  ];
+  const lineas = notas.map(([t, x]) => doc.splitTextToSize(`${t}: ${x}`, ANCHO - 10));
+  const altoNotas = 12 + lineas.reduce((a, l) => a + l.length * 4.2 + 2, 0);
+  doc.roundedRect(M, y, ANCHO, altoNotas, 2.5, 2.5, 'FD');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); tinta(INK); doc.text('Cómo leer este reporte', M + 5, y + 7);
+  let yy = y + 12;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); tinta(GRIS);
+  lineas.forEach((l) => { doc.text(l, M + 5, yy + 2); yy += l.length * 4.2 + 2; });
+
+  // Pie
+  trazo(LINEA); doc.setLineWidth(0.3); doc.line(M, 284, W - M, 284);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); tinta(GRIS);
+  doc.text('Fuente: CRM de Comunidades · Taquión', M, 290); doc.text('Las celdas con — no tienen dato para ese período.', W - M, 290, { align: 'right' });
+  return doc;
+}
+function nombreArchivoFlyer(cliente, desde, hasta){
+  const f = (d) => { const [a, m, x] = String(d).slice(0, 10).split('-'); return `${x}-${m}-${a}`; };
+  const limpio = String(cliente || 'cliente').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return `Reporte visual - ${limpio} - ${desde || hasta ? `${desde ? f(desde) : 'inicio'} a ${hasta ? f(hasta) : 'hoy'}` : 'todo el histórico'}.pdf`;
+}
 function crrMasRecientesFuera(filas, hasta, comunidadId){
   const dia = (d) => String(d == null ? '' : d).slice(0, 10);
   if (!hasta) return { n: 0, hasta: null };
@@ -1824,6 +1939,15 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
             ...(comunidades.length ? [{ nombre: 'Total del cliente', total: true, celdas: valores(col => col.total(t)) }] : [])],
     comunidad: filtroComunidad && porComunidad[0] ? porComunidad[0].nombre : '', canal, desde, hasta,
   };
+  // Para el flyer: TODAS las columnas del rol (también las que ocultaste), con su id, en las mismas filas.
+  const todasCols = cfg.orden.map(id => porId[id]).filter(Boolean);
+  const valoresTodas = (fn) => todasCols.map(col => (canalActivo && !col.porCanal ? vacio('no_canal') : fn(col)));
+  state.flyerControl = {
+    columnas: todasCols.map(col => ({ id: col.id, etiqueta: col.etiqueta })),
+    filas: [...porComunidad.map(c => { const cc = conCrr(c); return { nombre: c.nombre, celdas: valoresTodas(col => col.celda(cc)) }; }),
+            ...(comunidades.length ? [{ nombre: 'Total del cliente', total: true, celdas: valoresTodas(col => col.total(t)) }] : [])],
+    desde, hasta,
+  };
 
   const panelColumnas = state.columnasAbierto ? `<div class="col-panel" id="panelColumnas">
       <div class="col-panel-head"><b>Columnas</b><span>${visibles.length} de ${Object.keys(porId).length} visibles · arrastrá para reordenar</span>
@@ -1855,7 +1979,7 @@ function renderControl(comunidades, filtroComunidad, desde, hasta, canal = 'todo
     </div>
     <div class="sub" id="metaVivoEstado" role="status" style="margin:0 0 10px; ${state.metaVivo && state.metaVivo.tipo === 'error' ? 'color:var(--danger)' : state.metaVivo && state.metaVivo.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.metaVivo && state.metaVivo.texto) || '')}</div>
     <div class="sub" id="reporteEstado" role="status" style="margin:0 0 10px; ${state.reporteSemanal && state.reporteSemanal.tipo === 'error' ? 'color:var(--danger)' : state.reporteSemanal && state.reporteSemanal.tipo === 'ok' ? 'color:#5fd39a' : ''}">${esc((state.reporteSemanal && state.reporteSemanal.texto) || '')}</div>
-    <div class="card"><div class="tabla-cab"><h3 style="margin:0">Métricas por comunidad</h3><span class="tabla-botones"><button class="btn" id="btnTablaXlsx" type="button" ${visibles.length && comunidades.length ? '' : 'disabled'} title="Descarga un Excel con formato profesional (etapas con color, números y monedas, semáforos, fila del total) de lo que ves en esta tabla: columnas visibles, comunidad, canal y fechas elegidos. Para elegir qué columnas salen, usá el botón Columnas">Exportar Excel</button><button class="btn" id="btnTablaCsv" type="button" ${visibles.length && comunidades.length ? '' : 'disabled'} title="Descarga en CSV lo que ves en esta tabla (columnas visibles, comunidad, canal y fechas elegidos), con formato para presentar a los clientes. Para elegir qué columnas salen, usá el botón Columnas">Exportar CSV</button></span></div>
+    <div class="card"><div class="tabla-cab"><h3 style="margin:0">Métricas por comunidad</h3><span class="tabla-botones"><button class="btn" id="btnTablaFlyer" type="button" ${visibles.length && comunidades.length ? '' : 'disabled'} title="Descarga un PDF de una página con los números clave, el semáforo de cada comunidad y cómo leerlo, listo para mandar al cliente. Usa las fechas y la comunidad elegidas">Flyer del reporte (PDF)</button><button class="btn" id="btnTablaXlsx" type="button" ${visibles.length && comunidades.length ? '' : 'disabled'} title="Descarga un Excel con formato profesional (etapas con color, números y monedas, semáforos, fila del total) de lo que ves en esta tabla: columnas visibles, comunidad, canal y fechas elegidos. Para elegir qué columnas salen, usá el botón Columnas">Exportar Excel</button><button class="btn" id="btnTablaCsv" type="button" ${visibles.length && comunidades.length ? '' : 'disabled'} title="Descarga en CSV lo que ves en esta tabla (columnas visibles, comunidad, canal y fechas elegidos), con formato para presentar a los clientes. Para elegir qué columnas salen, usá el botón Columnas">Exportar CSV</button></span></div>
       <div class="sub" id="tablaXlsxEstado" role="status" style="margin:0 0 6px"></div>
       <div class="sub">Etapas, de izquierda a derecha: Alcanzar · Intención · Control del tracking · Activación · Ingreso · Permanencia (incluye el CRR y el churn entre cargas de lista completa: Retención de miembros)</div>
       <div class="sub">Celdas marcadas "sin fuente" son datos que el webhook/integración actual todavía no captura — no se fabrican. El gasto y las conversaciones de Meta se asignan a cada comunidad por el nombre de la campaña y del conjunto de anuncios; no se atribuyen persona por persona (ver la sección Atribucion). Solo suman las campañas de conversión o tráfico a WhatsApp definidas en el mapeo: el gasto de las demás queda registrado en Consultas, sin sumarse.</div>
@@ -1942,6 +2066,8 @@ function wireControl(){
   if (reporte) reporte.onclick = descargarReporteSemanal;
   const crrCsv = document.getElementById('btnCrrCsv');
   if (crrCsv) crrCsv.onclick = descargarCrrCsv;
+  const tablaFlyer = document.getElementById('btnTablaFlyer');
+  if (tablaFlyer) tablaFlyer.onclick = descargarFlyerPdf;
   const tablaXlsx = document.getElementById('btnTablaXlsx');
   if (tablaXlsx) tablaXlsx.onclick = descargarTablaXlsx;
   const tablaCsv = document.getElementById('btnTablaCsv');
@@ -1962,6 +2088,36 @@ function cargarExcelJS(){
     sc.onerror = () => mal(new Error('no se pudo cargar la librería de Excel (¿hay conexión?)'));
     document.head.appendChild(sc);
   });
+}
+function cargarJsPDF(){
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  return new Promise((ok, mal) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    sc.onload = () => (window.jspdf && window.jspdf.jsPDF ? ok(window.jspdf.jsPDF) : mal(new Error('la librería de PDF no quedó disponible')));
+    sc.onerror = () => mal(new Error('no se pudo cargar la librería de PDF (¿hay conexión?)'));
+    document.head.appendChild(sc);
+  });
+}
+async function descargarFlyerPdf(){
+  const fc = state.flyerControl;
+  if (!fc || !fc.filas.length) return;
+  const estado = document.getElementById('tablaXlsxEstado'), boton = document.getElementById('btnTablaFlyer');
+  const poner = (tipo, texto) => { if (estado) { estado.textContent = texto; estado.style.color = tipo === 'error' ? 'var(--danger)' : tipo === 'ok' ? '#5fd39a' : ''; } };
+  if (boton) boton.disabled = true;
+  poner('info', 'Armando el flyer…');
+  try {
+    const jsPDF = await cargarJsPDF();
+    const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre || '';
+    const datos = datosFlyer({ cliente, columnas: fc.columnas, filas: fc.filas, desde: fc.desde, hasta: fc.hasta, generado: fmtDia(hoyAR()), marketing: esMarketing() });
+    const doc = armarFlyerPdf(jsPDF, datos);
+    const nombre = nombreArchivoFlyer(cliente, state.fechaDesde || '', state.fechaHasta || '');
+    doc.save(nombre);
+    poner('ok', `Listo: se descargó "${nombre}".`);
+  } catch (err) {
+    poner('error', 'No se pudo armar el flyer: ' + err.message);
+  }
+  if (boton) boton.disabled = false;
 }
 async function descargarTablaXlsx(){
   const tc = state.tablaControl;
