@@ -240,7 +240,7 @@ const TABS = [
 const TAB_SUB = {
   overview:'Panel ejecutivo macro — KPIs globales y distribución por comunidad',
   control:'Métricas de performance por plataforma (Meta Ads · ManyChat · WhatsApp)',
-  atribucion:'Modelo de atribución: qué anuncio o canal trajo a cada persona — en construcción',
+  atribucion:'Atribución: qué anuncio trajo a cada persona — qué se atribuye hoy, cómo y qué falta',
   base_limpia:'Gestor de usuarios nominados — vista de cliente',
   dedup:'Log técnico de atribución — primer evento por teléfono',
   crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
@@ -2569,24 +2569,33 @@ async function abrirCargaMiembros(opciones = {}){
 // Esta sección va a mostrar a qué anuncio, campaña o canal se atribuye cada persona. Hoy el CRM NO tiene ese dato: lo único que
 // existe es la regla de "primer contacto" (qué comunidad se queda con una persona que escribió a varias) y la asignación del gasto
 // de Meta a cada comunidad por nombre de campaña. La lista de abajo es lo que hace falta para construir el modelo.
+// Estado de la atribución (revisión del 18/11/2026; la anterior era del 14/10). Cada requisito dice cómo está hoy, no cómo se imaginó.
 const REQUISITOS_ATRIBUCION = [
-  { requisito: 'Anuncio o campaña de origen de cada persona', estado: 'No disponible', detalle: 'El contacto de ManyChat no trae el anuncio. Hay que verificar qué señales llegan por canal (el campo user_refs, last_growth_tool y, en WhatsApp, el identificador del clic en el anuncio).' },
-  { requisito: 'Regla de atribución definida', estado: 'Pendiente de decidir', detalle: 'Primer o último contacto, y ventana de tiempo en días. Hoy solo existe "primer contacto" entre comunidades de un mismo cliente.' },
+  { requisito: 'Anuncio o campaña de origen de cada persona', estado: 'Parcial', detalle: 'Cada anuncio ya tiene su código (ZONA-NN, por ejemplo PAL-01; el CRM los genera solo). La persona queda atribuida a su anuncio cuando el código viaja en el mensaje de WhatsApp. Falta ponerlo en las plantillas de los anuncios: Meta Ads no permite editar ese mensaje por la herramienta que usamos, se hace en Ads Manager. Hoy está pospuesto porque las campañas están apagadas. ManyChat por sí solo no trae el anuncio.' },
+  { requisito: 'Regla de atribución definida', estado: 'Pendiente de decidir', detalle: 'Hoy la regla es "primer contacto" (qué comunidad se queda con quien escribió a varias). Falta decidir la ventana de días y si, entre anuncios, cuenta el primero o el último.' },
   { requisito: 'Identidad de la persona entre canales', estado: 'No disponible', detalle: 'Una misma persona por WhatsApp (teléfono) y por Instagram (identificador) cuenta como dos personas distintas.' },
-  { requisito: 'Ingreso real al grupo', estado: 'Sin fuente', detalle: 'Sin saber quién entra al grupo, la atribución llega hasta la entrada al flow y no hasta el miembro.' },
+  { requisito: 'Ingreso real al grupo', estado: 'Disponible', detalle: 'Ya existe: las cargas de lista completa dicen quién está en cada grupo, y de ahí salen miembros nuevos, bajas, CRR y churn. Falta unir ese dato con el anuncio de cada persona, y eso depende del punto de datos personales.' },
   { requisito: 'Uso de datos personales', estado: 'Pendiente', detalle: 'Consentimiento y política de retención, a definir con Legal antes de cruzar datos de personas con anuncios.' },
 ];
 function renderAtribucion(){
-  const clase = (e) => e === 'No disponible' || e === 'Sin fuente' ? 'mal' : 'medio';
-  return `<div class="card"><h3>Modelo de atribución <span class="pill" style="margin-left:8px">En construcción</span></h3>
-      <div class="sub">Esta sección todavía no tiene contenido. Va a mostrar qué anuncio, campaña o canal trajo a cada persona, y cuánto aportó cada uno a las entradas y a los miembros.</div>
-      <div class="sub" style="margin-top:8px">Hoy el CRM <b>no</b> hace atribución de personas a anuncios. Control_Comunidades asigna el gasto de Meta a cada comunidad por el nombre de la campaña, y la única regla de atribución que existe es "primer contacto" (qué comunidad se queda con una persona que escribió a varias).</div>
+  const clase = (e) => e === 'No disponible' || e === 'Sin fuente' ? 'mal' : e === 'Disponible' ? 'ok' : 'medio';
+  return `<div class="card"><h3>Atribución: qué anuncio trajo a cada persona <span class="pill" style="margin-left:8px">Parcial</span></h3>
+      <div class="sub">Qué se atribuye hoy y cómo, para no confundir lo que el CRM mide con lo que todavía no puede medir.</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Qué se atribuye</th><th>Cómo se hace hoy</th><th>Dónde se ve</th></tr></thead><tbody>
+        <tr><td>El gasto de Meta a una comunidad</td><td style="color:var(--text-muted)">Por el nombre de la campaña y del conjunto de anuncios (reglas en Campañas).</td><td style="color:var(--text-muted)">Control_Comunidades (Inversión).</td></tr>
+        <tr><td>Una persona a una comunidad</td><td style="color:var(--text-muted)">Por primer contacto: si escribió a varias comunidades, se queda con la primera.</td><td style="color:var(--text-muted)">Control_Comunidades (Entradas al flow) y Base_Limpia.</td></tr>
+        <tr><td>Una entrada a un anuncio</td><td style="color:var(--text-muted)">Por el código del anuncio (ZONA-NN) que viaja en el mensaje de WhatsApp. Solo los anuncios que llevan el código en su plantilla, y solo si la persona no lo borra ni abre el chat sin enviar nada. Hoy: piloto en Palermo, pospuesto mientras las campañas están apagadas.</td><td style="color:var(--text-muted)">Control_Comunidades, bloque Rendimiento por anuncio (solo Marketing).</td></tr>
+        <tr><td>Un miembro del grupo a su anuncio</td><td style="color:var(--text-muted)">Todavía no se hace: las listas de miembros dicen quién está, pero no cruzan con el anuncio de cada persona.</td><td style="color:var(--text-muted)">—</td></tr>
+      </tbody></table></div>
     </div>
-    <div class="card"><h3>Qué hace falta para construirlo</h3>
-      <div class="sub">Revisión del 14/10/2026. Cuando estos puntos estén resueltos se completa la sección.</div>
+    <div class="card"><h3>Estado de los requisitos</h3>
+      <div class="sub">Revisión del 18/11/2026. Lo que falta para una atribución exacta por anuncio y por miembro.</div>
       <div class="tbl-wrap"><table><thead><tr><th>Requisito</th><th>Estado hoy</th><th>Detalle</th></tr></thead><tbody>
         ${REQUISITOS_ATRIBUCION.map(r => `<tr><td>${esc(r.requisito)}</td><td><span class="est ${clase(r.estado)}">${esc(r.estado)}</span></td><td style="color:var(--text-muted)">${esc(r.detalle)}</td></tr>`).join('')}
       </tbody></table></div>
+    </div>
+    <div class="card"><h3>Qué sigue</h3>
+      <div class="sub">El camino elegido es el código en el mensaje de cada anuncio: cuando se vuelva a pautar se agrega a las plantillas y el bloque Rendimiento por anuncio empieza a llenarse. Las alternativas en evaluación (formulario de Meta, enlace con el ID del anuncio) están en las pruebas de campaña del plan global (specs/2026-11-16-plan-global-reportes-y-metricas.md).</div>
     </div>`;
 }
 
