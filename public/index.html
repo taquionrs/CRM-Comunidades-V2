@@ -33,6 +33,32 @@ button,input,select{font-family:inherit}
 .icono-btn{width:30px; height:30px; flex-shrink:0; border:1px solid var(--border-strong); background:transparent; color:var(--text-body); border-radius:var(--r-in); cursor:pointer; font-size:15px; line-height:1; display:inline-flex; align-items:center; justify-content:center}
 .icono-btn:hover{background:var(--panel-raised); color:#fff}
 .main-head-fila{display:flex; align-items:flex-start; gap:12px}
+.novedades-wrap{position:relative; margin-left:auto; flex:none}
+.novedades-btn{position:relative; display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; border:1px solid var(--border-strong); background:var(--panel); color:var(--text-body); cursor:pointer; padding:0}
+.novedades-btn:hover, .novedades-btn[aria-expanded="true"]{color:var(--accent); border-color:var(--accent)}
+.novedades-btn[aria-expanded="true"]{background:var(--accent-dim)}
+.novedades-badge{position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; line-height:18px; text-align:center}
+.novedades-panel{position:absolute; right:0; top:44px; z-index:60; width:min(420px, calc(100vw - 32px)); max-height:min(70vh, 560px); display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--border-strong); border-radius:var(--r-card); box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.novedades-head{display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); font-size:14px; color:var(--text-strong)}
+.novedades-close{font-size:22px; line-height:1; color:var(--text-muted); cursor:pointer; padding:0 4px; background:none; border:none}
+.novedades-close:hover{color:var(--text-strong)}
+.novedades-list{list-style:none; margin:0; padding:0; overflow-y:auto}
+.novedad{padding:12px 16px; border-bottom:1px solid var(--border)}
+.novedad:last-child{border-bottom:none}
+.novedad.fresh{background:var(--accent-dim)}
+.novedad-meta{display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:11.5px; color:var(--text-muted); margin-bottom:4px}
+.novedad-tipo{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:1px 7px; border-radius:999px; background:rgba(255,255,255,.08); color:var(--text-body)}
+.novedad-tipo.nuevo{background:rgba(79,211,154,.16); color:#5fd39a}
+.novedad-tipo.mejora{background:var(--accent-dim); color:var(--accent)}
+.novedad-tipo.cambio{background:rgba(183,156,255,.16); color:#B79CFF}
+.novedad-tipo.arreglo{background:rgba(255,157,61,.16); color:var(--warn)}
+.novedad-tipo.aviso{background:rgba(255,92,122,.16); color:var(--danger)}
+.novedad-new{margin-left:auto; font-size:10.5px; font-weight:700; color:var(--accent)}
+.novedad-titulo{font-size:13.5px; font-weight:700; line-height:1.35; color:var(--text-strong)}
+.novedad-detalle{font-size:12.5px; color:var(--text-body); line-height:1.5; margin-top:3px}
+.novedad-ir{margin-top:6px; padding:0; font-size:12.5px; font-weight:600; color:var(--accent); background:none; border:none; cursor:pointer}
+.novedad-ir:hover{text-decoration:underline}
+@media (max-width:640px){ .novedades-panel{position:fixed; left:16px; right:16px; top:72px; width:auto; max-height:calc(100vh - 96px)} }
 .app.menu-oculto{grid-template-columns:1fr}
 .app.menu-oculto .sidebar{display:none}
 .app.menu-oculto .main{max-width:none}
@@ -212,6 +238,7 @@ tbody tr.totales td{font-weight:800; color:#fff; border-top:1px solid var(--bord
           <h2 id="hTitle">—</h2>
           <div class="sub" id="hSub">—</div>
         </div>
+        <div class="novedades-wrap" id="novedadesWrap" hidden></div>
       </div>
     </div>
     <div id="configError" class="card" style="display:none; border-color:var(--danger)"></div>
@@ -246,6 +273,66 @@ const TAB_SUB = {
   crudo:'Registro de eventos recibidos de ManyChat — con nombre, comunidad y detalle',
   usuarios:'Quién entra al CRM y con qué rol — solo administradores',
 };
+/* NOVEDADES:INICIO */
+// Novedades del CRM: lo que se muestra al tocar la campanita del encabezado (como en Pulso). Lista escrita a mano, sin base de datos:
+// cada PR que cambia algo que el equipo ve, o cada comunicación que haya que dar, agrega UNA entrada ARRIBA DE TODO. Ver docs/how-to/agregar-una-novedad.md.
+// Reglas: más nueva primero; el id es único y estable (la campanita recuerda en el navegador cuál fue la última que se vio); texto en lenguaje simple,
+// sin datos de clientes ni claves. `marketing: true` = solo la ve el rol Marketing (habla de plata o de funciones solo de Marketing).
+// `ruta` = pestaña donde se ve el cambio. Tipos: nuevo, mejora, cambio, arreglo y aviso (una comunicación: fechas, pedidos, recordatorios).
+const NOVEDAD_TIPO = { nuevo: 'Nuevo', mejora: 'Mejora', cambio: 'Cambio', arreglo: 'Arreglo', aviso: 'Aviso' };
+const NOVEDAD_AREA = { general: 'Todo el CRM', overview: 'Overview', control: 'Control_Comunidades', atribucion: 'Atribución', datos: 'Datos', reportes: 'Reportes' };
+const NOVEDADES = [
+  { id: '2026-11-18-semaforo-en-el-excel', fecha: '2026-11-18', tipo: 'nuevo', area: 'reportes', marketing: true, ruta: 'control',
+    titulo: 'El reporte semanal en Excel trae semáforos',
+    detalle: 'Tres columnas nuevas al final: semáforo de cobertura, de frescura de la lista y estado general (Verde, Amarillo, Rojo, Revisar o Sin datos). Son los mismos umbrales que la tabla. Si usás la hoja Historial, agregá esos tres encabezados a la derecha.' },
+  { id: '2026-11-18-consultas-generales', fecha: '2026-11-18', tipo: 'nuevo', area: 'overview', ruta: 'overview',
+    titulo: 'Overview cuenta las consultas generales',
+    detalle: 'Ahora ves cuántas personas escribieron al número sin elegir comunidad, cuántas siguen sin registrar y cuántas después eligieron una comunidad. Las registradas no se cuentan dos veces en el total.' },
+  { id: '2026-11-18-atribucion-actualizada', fecha: '2026-11-18', tipo: 'mejora', area: 'atribucion', ruta: 'atribucion',
+    titulo: 'La pestaña Atribución dice lo que hay hoy',
+    detalle: 'Explica qué se atribuye hoy y cómo (gasto a comunidad, persona a comunidad, entrada a anuncio por código) y el estado real de los cinco requisitos para una atribución exacta.' },
+  { id: '2026-11-18-aviso-conteo-20-11', fecha: '2026-11-18', tipo: 'aviso', area: 'datos',
+    titulo: 'Próximo conteo de miembros: jueves 20/11',
+    detalle: 'El conteo se hace lunes y jueves. Desde ahora el grupo «(general)» no se cuenta ni se carga: ya no es una comunidad del CRM.' },
+  { id: '2026-11-17-semaforo-en-columnas', fecha: '2026-11-17', tipo: 'nuevo', area: 'control', ruta: 'control',
+    titulo: 'Semáforos en la tabla de métricas',
+    detalle: 'Tres columnas con punto de color: Estado (el peor de los semáforos), Cobertura del tracking y Frescura de la lista. Al pasar el mouse explican el porqué, por ejemplo «hace 22 días: más de 14 días».' },
+  { id: '2026-11-17-columnas-de-fabrica', fecha: '2026-11-17', tipo: 'cambio', area: 'control', ruta: 'control',
+    titulo: 'La tabla arranca con menos columnas',
+    detalle: 'Se ocultaron de fábrica 16 columnas repetidas o de detalle. No se borró ninguna: se activan desde el botón Columnas. Si ya habías elegido las tuyas, se respetan.' },
+  { id: '2026-11-17-ultimo-periodo-cerrado', fecha: '2026-11-17', tipo: 'mejora', area: 'control', ruta: 'control',
+    titulo: 'La retención siempre tiene datos',
+    detalle: 'Si las fechas elegidas no tocan ninguna carga de miembros, la tabla muestra el último período cerrado hasta el «Hasta» elegido, y la columna Período entre cargas dice cuál es. Antes quedaba vacía.' },
+  { id: '2026-11-17-costo-por-miembro', fecha: '2026-11-17', tipo: 'cambio', area: 'control', marketing: true, ruta: 'control',
+    titulo: 'Costo por miembro con los miembros reales',
+    detalle: 'El costo por miembro neto ahora usa las cargas de lista completa (las del CRR) y la inversión de ese período. Nueva columna: costo por miembro nuevo, que no se rompe cuando un grupo pierde gente.' },
+  { id: '2026-11-17-general-oculta', fecha: '2026-11-17', tipo: 'cambio', area: 'general',
+    titulo: 'Los canales «(general)» ya no son comunidades',
+    detalle: 'Cortado en Jarrito (general) y Todo un País (general) son el número oficial, no una comunidad: dejaron de verse y de sumar en tablas, totales, CRR, reportes y avisos. Los datos no se borraron.' },
+  { id: '2026-11-17-crr-en-la-tabla', fecha: '2026-11-17', tipo: 'nuevo', area: 'control', ruta: 'control',
+    titulo: 'CRR y churn en la tabla principal, con exportación',
+    detalle: 'La retención y el churn, con una flechita verde o roja contra el período anterior, están en Métricas por comunidad. Los botones Exportar CSV bajan la tabla en formato para presentar a clientes.' },
+  { id: '2026-11-17-para-completar', fecha: '2026-11-17', tipo: 'nuevo', area: 'general', marketing: true, ruta: 'overview',
+    titulo: 'Para completar: el CRM te dice qué falta',
+    detalle: 'Una franja arriba de Overview y Control_Comunidades con lo que el CRM necesita que completes (listas de miembros vencidas, cargas que no cuadran, Meta sin sincronizar, personas sin clasificar), con el botón que lo resuelve. Se puede posponer 7 días.' },
+];
+// Cuántas novedades son más nuevas que la última que esa persona vio (la lista va de la más nueva a la más vieja).
+function novedadesVisibles(lista, esMkt){ return (lista || []).filter(n => esMkt || !n.marketing); }
+function contarNovedadesSinVer(vistoId, lista){
+  const i = (lista || []).findIndex(n => n.id === vistoId);
+  return i < 0 ? (lista || []).length : i;
+}
+function novedadSinVer(id, vistoId, lista){
+  const idx = (lista || []).findIndex(n => n.id === id), visto = (lista || []).findIndex(n => n.id === vistoId);
+  return idx >= 0 && (visto < 0 || idx < visto);
+}
+function fechaNovedad(iso){
+  const [a, m, d] = String(iso).split('-').map(Number);
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${d} de ${meses[m - 1]}`;
+}
+/* NOVEDADES:FIN */
+
 /* ROLES:INICIO */
 // Qué ve cada rol (specs/2026-10-21-sso-cloudflare-y-roles.md). Quien decide es la base (db/031): esto solo evita mostrar
 // pestañas, columnas y botones que para el rol General vendrían vacíos o fallarían.
@@ -3230,6 +3317,7 @@ async function salir(){
 function pantallaAcceso(titulo, detalle){
   document.getElementById('nav').innerHTML = '';
   document.getElementById('sesionInfo').innerHTML = '';
+  const campanita = document.getElementById('novedadesWrap'); if (campanita) { campanita.hidden = true; campanita.innerHTML = ''; }
   document.getElementById('content').innerHTML = '';
   document.getElementById('hTitle').textContent = 'CRM de Comunidades';
   document.getElementById('hSub').textContent = 'Ingreso con la cuenta de Taquion';
@@ -3248,7 +3336,45 @@ function renderSesion(){
     <span class="sesion-rol">${esc(ROL_LABEL[a.rol] || a.rol)}${a.admin ? ' · administrador' : ''}</span>
     <button type="button" class="link-btn" id="btnSalir">Salir</button>`;
   document.getElementById('btnSalir').onclick = salir;
+  montarNovedades();
 }
+// Campanita de novedades. "Lo que ya viste" se recuerda en ESTE navegador (localStorage), no por usuario; si el navegador no deja guardar, funciona igual
+// (todo aparece como nuevo).
+const CLAVE_NOVEDADES_VISTO = 'crm_v2_novedades_visto';
+const leerNovedadVisto = () => { try { return localStorage.getItem(CLAVE_NOVEDADES_VISTO); } catch (_) { return null; } };
+const guardarNovedadVisto = (id) => { try { localStorage.setItem(CLAVE_NOVEDADES_VISTO, id); } catch (_) { /* sin almacenamiento: no se recuerda lo visto */ } };
+const novedadesUI = { abierto: false, vistoAlAbrir: null };
+function montarNovedades(){
+  const wrap = document.getElementById('novedadesWrap');
+  if (!wrap) return;
+  const lista = novedadesVisibles(NOVEDADES, esMarketing());
+  wrap.hidden = false;
+  const sinVer = contarNovedadesSinVer(leerNovedadVisto(), lista);
+  const etiqueta = sinVer > 0 ? `Novedades del CRM: ${sinVer} sin ver` : 'Novedades del CRM';
+  const items = lista.map(n => {
+    const fresca = novedadSinVer(n.id, novedadesUI.vistoAlAbrir, lista);
+    const ir = n.ruta && tabsVisibles().some(t => t.key === n.ruta) ? `<button type="button" class="novedad-ir" data-novedad-ir="${esc(n.ruta)}">Ir a ${esc((TABS.find(t => t.key === n.ruta) || {}).label || n.ruta)} →</button>` : '';
+    return `<li class="novedad${fresca ? ' fresh' : ''}"><div class="novedad-meta"><span class="novedad-tipo ${esc(n.tipo)}">${esc(NOVEDAD_TIPO[n.tipo] || n.tipo)}</span><span>${esc(NOVEDAD_AREA[n.area] || n.area)}</span><span>·</span><span>${esc(fechaNovedad(n.fecha))}</span>${fresca ? '<span class="novedad-new">Sin ver</span>' : ''}</div>
+      <div class="novedad-titulo">${esc(n.titulo)}</div><div class="novedad-detalle">${esc(n.detalle)}</div>${ir}</li>`;
+  }).join('');
+  wrap.innerHTML = `<button type="button" class="novedades-btn" id="btnNovedades" aria-label="${esc(etiqueta)}" aria-haspopup="dialog" aria-expanded="${novedadesUI.abierto}" title="Novedades del CRM">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      ${sinVer > 0 ? `<span class="novedades-badge">${sinVer > 9 ? '9+' : sinVer}</span>` : ''}</button>
+    ${novedadesUI.abierto ? `<div class="novedades-panel" role="dialog" aria-label="Novedades del CRM"><div class="novedades-head"><b>Novedades del CRM</b><button type="button" class="novedades-close" id="btnNovedadesCerrar" aria-label="Cerrar">×</button></div>
+      <ul class="novedades-list">${items || '<li class="novedad"><div class="novedad-detalle">Todavía no hay novedades.</div></li>'}</ul></div>` : ''}`;
+  document.getElementById('btnNovedades').onclick = () => {
+    if (novedadesUI.abierto) { novedadesUI.abierto = false; return montarNovedades(); }
+    novedadesUI.vistoAlAbrir = leerNovedadVisto();   // qué se había visto al abrir: así se marca lo nuevo aunque el puntito ya se apague
+    novedadesUI.abierto = true;
+    if (lista[0]) guardarNovedadVisto(lista[0].id);
+    montarNovedades();
+  };
+  const cerrar = document.getElementById('btnNovedadesCerrar');
+  if (cerrar) cerrar.onclick = () => { novedadesUI.abierto = false; montarNovedades(); };
+  wrap.querySelectorAll('[data-novedad-ir]').forEach(b => b.onclick = () => { novedadesUI.abierto = false; state.tab = b.dataset.novedadIr; renderAll(); montarNovedades(); });
+}
+document.addEventListener('mousedown', (e) => { const w = document.getElementById('novedadesWrap'); if (novedadesUI.abierto && w && !w.contains(e.target)) { novedadesUI.abierto = false; montarNovedades(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && novedadesUI.abierto) { novedadesUI.abierto = false; montarNovedades(); } });
 // Rol y permiso del usuario según la base (mi_acceso, db/030). Vacío = sesión vencida (24 h) o sin acceso.
 async function cargarAcceso(){
   const { data, error } = await supabase.rpc('mi_acceso');
