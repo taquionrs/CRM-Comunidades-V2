@@ -476,6 +476,8 @@ function entradasFlowDesdeFila(r){
   return {
     clasificadas, sin_clasificar: sinClasificar, total,
     tasa_clasificacion_pct: total > 0 ? Math.round(clasificadas / total * 1000) / 10 : null,
+    // Consultas generales (db/050): personas que escribieron sin elegir comunidad, registradas o no. Solo si la base ya las trae.
+    ...(r.consultas_generales != null ? { consultas_generales: n(r.consultas_generales), consultas_registradas: n(r.consultas_registradas) } : {}),
   };
 }
 /* ENTRADAS-FLOW:FIN */
@@ -648,6 +650,9 @@ const AYUDAS_OVERVIEW = {
   cpmi: 'CPMI = costo por mensaje iniciado. Inversión ÷ conversaciones iniciadas en Meta: cuánto costó cada vez que alguien empezó una conversación.',
   entradas: 'Personas únicas que entraron al flow, contadas por su primer contacto, sumadas de todas las comunidades. Incluye pruebas del equipo y personas que llegan sin pasar por la pauta.',
   entradas_totales: 'Toda persona que entró al flow o le escribió al número: las que eligieron su comunidad (entradas únicas) más las que le escribieron y todavía no eligieron. Es el total de ingresantes de ManyChat.',
+  consultas_generales: 'Consultas generales: personas distintas que le escribieron al número oficial sin elegir comunidad (por ejemplo "¡Hola! Quiero más información") en el período, estén o no registradas todavía. Son las consultas sin registrar más las que después eligieron una comunidad.',
+  consultas_sin_registrar: 'Consultas generales sin registrar: escribieron al número oficial y todavía no eligieron comunidad, así que no figuran como entrada de ninguna comunidad. Si después eligen, pasan a registradas y este número baja.',
+  consultas_registradas: 'Consultas generales registradas: escribieron primero una consulta general y después eligieron una comunidad. Ya están contadas como entradas de su comunidad (no se cuentan dos veces en el total).',
   sin_clasificar: 'Personas que le escribieron al número con otro texto (por ejemplo "¡Hola! Quiero más información") y todavía no eligieron comunidad. Si después eligen, pasan a las entradas por comunidad y este número baja.',
   tasa_clasificacion: 'Tasa de clasificación = entradas únicas ÷ entradas totales: de todas las personas que escribieron, cuántas llegaron a elegir su comunidad. Cuanto más alta, menos gente se pierde antes de entrar a un grupo.',
   miembros_efectivos: 'Personas que hoy están en los grupos: suma de los miembros finales (Mf) de todas las comunidades. Es una carga manual.',
@@ -677,7 +682,13 @@ function renderOverview(kpis, comunidades, filtros = null, acciones = null){
   const ef = k.entradas_flow;
   const entradasFlowCards = ef ? kpiGrid([
     [fmtInt(ef.total), 'Entradas totales al flow (con y sin comunidad)', false, AYUDAS_OVERVIEW.entradas_totales],
-    [fmtInt(ef.sin_clasificar), 'Escribieron y no eligieron comunidad', false, AYUDAS_OVERVIEW.sin_clasificar],
+    ...(ef.consultas_generales != null ? [
+      [fmtInt(ef.consultas_generales), 'Entradas totales al flow (sin comunidad): consultas generales', false, AYUDAS_OVERVIEW.consultas_generales],
+      [fmtInt(ef.sin_clasificar), 'Entradas de consultas generales sin registrar', false, AYUDAS_OVERVIEW.consultas_sin_registrar],
+      [fmtInt(ef.consultas_registradas), 'Entradas de consultas generales registradas', false, AYUDAS_OVERVIEW.consultas_registradas],
+    ] : [
+      [fmtInt(ef.sin_clasificar), 'Escribieron y no eligieron comunidad', false, AYUDAS_OVERVIEW.sin_clasificar],
+    ]),
     [fmtPct(ef.tasa_clasificacion_pct), 'Tasa de clasificación', false, AYUDAS_OVERVIEW.tasa_clasificacion],
   ]) : '';
 
