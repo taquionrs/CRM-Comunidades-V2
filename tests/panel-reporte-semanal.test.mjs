@@ -83,3 +83,46 @@ test("el botón está solo para Marketing, dentro de Control_Comunidades, y llam
   assert.match(html, /reporte\.onclick = descargarReporteSemanal/);
   assert.ok(!/key:'reporte'/.test(html), "no tiene que haber una pestaña aparte");
 });
+
+// ---------- semáforos del Excel (PR #92) ----------
+const sem = (o) => { const f = filasReporte([{ ...FILA, ...o }], SEM)[0]; return [f["Semáforo cobertura"], f["Semáforo frescura"], f["Estado general"]]; };
+
+test("semáforo de cobertura: más de 60 % verde, 35 a 60 amarillo, menos de 35 rojo, más de 100 revisar, menos de 20 chats sin datos", () => {
+  assert.equal(sem({ conversaciones: 100, entradas: 61 })[0], "Verde");
+  assert.equal(sem({ conversaciones: 100, entradas: 60 })[0], "Amarillo");
+  assert.equal(sem({ conversaciones: 100, entradas: 35 })[0], "Amarillo");
+  assert.equal(sem({ conversaciones: 100, entradas: 34 })[0], "Rojo");
+  assert.equal(sem({ conversaciones: 100, entradas: 101 })[0], "Revisar");
+  assert.equal(sem({ conversaciones: 19, entradas: 19 })[0], "Sin datos");
+  assert.equal(sem({ conversaciones: null, entradas: null })[0], "Sin datos");
+});
+
+test("semáforo de frescura: hasta 7 días verde, 8 a 14 amarillo, más de 14 rojo, sin cargas sin datos", () => {
+  for (const [d, e] of [[0, "Verde"], [7, "Verde"], [8, "Amarillo"], [14, "Amarillo"], [15, "Rojo"], [22, "Rojo"], [null, "Sin datos"], ["", "Sin datos"]]) assert.equal(sem({ dias_sin_carga: d })[1], e, String(d));
+});
+
+test("estado general: el peor de los dos; los 'Sin datos' no cuentan salvo que los dos lo sean", () => {
+  assert.equal(sem({ conversaciones: 100, entradas: 80, dias_sin_carga: 2 })[2], "Verde");
+  assert.equal(sem({ conversaciones: 100, entradas: 80, dias_sin_carga: 22 })[2], "Rojo");
+  assert.equal(sem({ conversaciones: 100, entradas: 50, dias_sin_carga: 2 })[2], "Amarillo");
+  assert.equal(sem({ conversaciones: 100, entradas: 130, dias_sin_carga: 10 })[2], "Revisar");
+  assert.equal(sem({ conversaciones: 5, entradas: 1, dias_sin_carga: 3 })[2], "Verde");
+  assert.equal(sem({ conversaciones: 5, entradas: 1, dias_sin_carga: null })[2], "Sin datos");
+});
+
+test("las columnas de semáforo van al final (no corren las del historial de Google Sheets) y CRR y triaje siguen sin color", () => {
+  const cols = Object.keys(filasReporte([FILA], SEM)[0]);
+  assert.deepEqual(cols.slice(-3), ["Semáforo cobertura", "Semáforo frescura", "Estado general"]);
+  assert.equal(cols[cols.length - 4], "Tasa de triaje (%)");
+  assert.ok(!cols.some((c) => /semáforo (crr|triaje)/i.test(c)));
+});
+
+test("el panel y el flujo de n8n dan el mismo semáforo en todos los casos", () => {
+  const jsExcel = flujo.nodes.find((n) => n.name === "Armar Excel").parameters.jsCode;
+  const casos = [];
+  for (const conv of [0, 10, 19, 20, 100]) for (const ent of [0, 7, 34, 35, 60, 61, 101]) for (const dias of [null, 0, 7, 8, 14, 15, 40]) casos.push({ conversaciones: conv, entradas: ent, dias_sin_carga: dias });
+  const n8n = new Function("$", "$input", jsExcel)(() => ({ first: () => ({ json: { ...SEM, slug: "x" } }) }), { all: () => casos.map((c) => ({ json: { ...FILA, ...c } })) });
+  const panel = filasReporte(casos.map((c) => ({ ...FILA, ...c })), SEM);
+  assert.equal(n8n.length, panel.length);
+  panel.forEach((p, i) => assert.deepEqual(p, n8n[i].json, JSON.stringify(casos[i])));
+});

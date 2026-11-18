@@ -1841,6 +1841,26 @@ function nombreArchivoReporte(cliente, sem){
   const limpio = String(cliente || 'cliente').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
   return `Reporte semanal ${limpio} ${sem.desde} a ${sem.hasta} ${sem.version}.xlsx`;
 }
+// Semáforos del reporte (PR #92): texto Verde / Amarillo / Rojo / Revisar / Sin datos, para quien solo abre el archivo. Mismos umbrales que las columnas
+// de la tabla (cobertura: más de 60 % verde, 35 a 60 amarillo, menos de 35 rojo, más de 100 revisar, menos de 20 chats sin datos;
+// frescura: hasta 7 días verde, 8 a 14 amarillo, más de 14 rojo, sin cargas sin datos). CRR y triaje no llevan color hasta tener 3 o 4 semanas de fotos.
+// El flujo de n8n usa la misma lógica (docs/n8n/reporte-semanal.workflow.json): una prueba verifica que den igual.
+function semaforoCoberturaReporte(conversaciones, entradas){
+  const c = Number(conversaciones) || 0, e = Number(entradas) || 0;
+  if (c < 20) return 'Sin datos';
+  const p = e / c * 100;
+  return p > 100 ? 'Revisar' : p > 60 ? 'Verde' : p >= 35 ? 'Amarillo' : 'Rojo';
+}
+function semaforoFrescuraReporte(dias){
+  if (dias === null || dias === undefined || dias === '') return 'Sin datos';
+  const d = Number(dias);
+  return d <= 7 ? 'Verde' : d <= 14 ? 'Amarillo' : 'Rojo';
+}
+function estadoGeneralReporte(a, b){
+  const grav = { Rojo: 4, Revisar: 3, Amarillo: 2, Verde: 1 };
+  const con = [a, b].filter((x) => grav[x]);
+  return con.length ? con.reduce((x, y) => (grav[y] > grav[x] ? y : x)) : 'Sin datos';
+}
 function filasReporte(filas, sem){
   const num = (v) => (v === null || v === undefined || v === '' ? '' : Number(v));
   const dia = (v) => (v ? String(v).slice(0, 10) : '');
@@ -1854,6 +1874,8 @@ function filasReporte(filas, sem){
     'CRR (%)': num(r.crr_pct), 'Churn (%)': num(r.churn_pct), 'Las cargas cuadran': r.cuadra === null || r.cuadra === undefined ? '' : (r.cuadra ? 'Sí' : 'No'),
     'Inversión del intervalo': num(r.inversion_intervalo), 'Entradas del intervalo': num(r.entradas_intervalo),
     'Costo por miembro nuevo': num(r.cpmn), 'Tasa de triaje (%)': num(r.triaje_pct),
+    'Semáforo cobertura': semaforoCoberturaReporte(r.conversaciones, r.entradas), 'Semáforo frescura': semaforoFrescuraReporte(r.dias_sin_carga),
+    'Estado general': estadoGeneralReporte(semaforoCoberturaReporte(r.conversaciones, r.entradas), semaforoFrescuraReporte(r.dias_sin_carga)),
   }));
 }
 /* REPORTE-SEMANAL:FIN */
