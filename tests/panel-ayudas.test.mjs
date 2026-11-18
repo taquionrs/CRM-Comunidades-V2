@@ -20,7 +20,7 @@ test("cada sigla de Overview tiene su explicación", () => {
 });
 
 test("ninguna explicación queda vacía y las claves son las que usa Overview", () => {
-  const claves = ["inversion", "conversaciones", "cpmi", "entradas", "entradas_totales", "sin_clasificar", "tasa_clasificacion", "miembros_efectivos", "cpme", "fuga", "mi", "entradas_tabla", "bajas", "mf", "participacion"];
+  const claves = ["inversion", "conversaciones", "cpmi", "entradas", "entradas_totales", "consultas_generales", "consultas_sin_registrar", "consultas_registradas", "sin_clasificar", "tasa_clasificacion", "miembros_efectivos", "cpme", "fuga", "mi", "entradas_tabla", "bajas", "mf", "participacion"];
   assert.deepEqual(Object.keys(AYUDAS_OVERVIEW).sort(), claves.sort());
   for (const c of claves) assert.ok(AYUDAS_OVERVIEW[c].length > 20, c);
 });

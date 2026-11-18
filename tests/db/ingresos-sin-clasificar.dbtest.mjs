@@ -130,6 +130,8 @@ test("el webhook (service_role) puede guardar un aviso, y ningún usuario del pa
 test("la migración se puede correr dos veces sin error (idempotente)", async () => {
   const fs = await import("node:fs");
   const sql = fs.readFileSync(new URL("../../db/035_ingresos_sin_clasificar.sql", import.meta.url), "utf8");
+  // db/050 le agregó columnas al resultado de la función: para volver a correr 035 tal cual (create or replace) hay que soltar la versión nueva.
+  await db.exec(`drop function if exists ${S}.entradas_flow_cliente(uuid, date, date, text)`);
   await db.exec(sql);
   const [r] = await entradas(sesion("mkt"));
   assert.equal(Number(r.total), 7);
