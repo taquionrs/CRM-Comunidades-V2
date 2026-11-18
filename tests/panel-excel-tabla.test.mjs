@@ -143,3 +143,40 @@ test("el botón y la descarga están conectados, con ExcelJS de cdnjs en una ver
   assert.match(html, /No se pudo armar el Excel: /);
   assert.match(html, /id="btnTablaCsv"/);   // el CSV sigue estando
 });
+
+// ---------- logo de Taquión (PR #98) ----------
+const LOGO = { buffer: new Uint8Array(fs.readFileSync(new URL("../public/assets/logo-taquion-blanco.png", import.meta.url))), ancho: 640, alto: 168 };
+
+test("el archivo del logo existe, es un PNG con transparencia y pesa poco", () => {
+  const b = LOGO.buffer;
+  assert.deepEqual(Array.from(b.slice(0, 4)), [0x89, 0x50, 0x4e, 0x47]);
+  assert.ok(b.length > 5000 && b.length < 100000, `pesa ${b.length} bytes`);
+  assert.equal(b[25], 6);   // tipo de color 6 = RGBA (conserva la transparencia)
+});
+
+test("con logo: queda una imagen en la hoja, en la columna A, y el título pasa a la B; el resto del libro no cambia", async () => {
+  const wb = api.armarLibroTabla(ExcelJS, { ...DATOS, logo: LOGO });
+  const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(await wb.xlsx.writeBuffer());
+  const h = wb2.getWorksheet("Métricas por comunidad");
+  const imgs = h.getImages();
+  assert.equal(imgs.length, 1);
+  assert.ok(imgs[0].range.tl.nativeCol < 1, "el logo arranca en la columna A (la congelada)");
+  assert.equal(wb2.model.media.length, 1);
+  assert.equal(h.getCell("B1").value, "Métricas por comunidad · Cortado en Jarrito");
+  assert.equal(h.getCell("A1").fill.fgColor.argb, "FF1B2330");
+  assert.equal(h.getCell("A4").value, "Comunidad");
+  assert.equal(h.getCell("C6").value, 1247902.27);
+});
+
+test("sin logo el libro es el de siempre (el título sigue en A1) y no falla", async () => {
+  const wb = api.armarLibroTabla(ExcelJS, { ...DATOS, logo: null });
+  const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(await wb.xlsx.writeBuffer());
+  const h = wb2.getWorksheet("Métricas por comunidad");
+  assert.equal(h.getImages().length, 0);
+  assert.equal(h.getCell("A1").value, "Métricas por comunidad · Cortado en Jarrito");
+});
+
+test("si no se puede cargar el logo, el exporte sale igual", () => {
+  assert.match(html, /async function cargarLogoTaquion\(\)\{[\s\S]*?catch \(_\) \{ logoTaquion = null; \}/);
+  assert.match(html, /logo: await cargarLogoTaquion\(\) \}\);\n\s*const buffer = await libro\.xlsx\.writeBuffer\(\);/);
+});

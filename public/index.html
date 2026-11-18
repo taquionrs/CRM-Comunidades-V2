@@ -283,6 +283,9 @@ const TAB_SUB = {
 const NOVEDAD_TIPO = { nuevo: 'Nuevo', mejora: 'Mejora', cambio: 'Cambio', arreglo: 'Arreglo', aviso: 'Aviso' };
 const NOVEDAD_AREA = { general: 'Todo el CRM', overview: 'Overview', control: 'Control_Comunidades', atribucion: 'Atribución', datos: 'Datos', reportes: 'Reportes' };
 const NOVEDADES = [
+  { id: '2026-11-18-logo-en-los-exportes', fecha: '2026-11-18', tipo: 'mejora', area: 'control', ruta: 'control',
+    titulo: 'El logo de Taquión en el Excel y en el flyer',
+    detalle: 'El Excel con formato lleva el logo en la columna de comunidad (queda fijo al desplazarte) y el flyer en PDF lo lleva arriba a la izquierda. Si no se puede cargar el logo, el archivo sale igual.' },
   { id: '2026-11-18-sin-tabla-de-retencion', fecha: '2026-11-18', tipo: 'cambio', area: 'control', ruta: 'control',
     titulo: 'Se quitó la tabla de retención de abajo',
     detalle: 'La tabla Retención de miembros (CRR) y churn, con su botón Exportar CSV, ya estaba completa dentro de Métricas por comunidad (período, miembros, CRR y churn con flechitas). Para bajarla, usá Exportar Excel, Exportar CSV o el Flyer de esa tabla.' },
@@ -1479,10 +1482,19 @@ function armarLibroTabla(ExcelJS, d){
   const periodo = d.desde || d.hasta ? `Período: ${d.desde ? fecha(d.desde) : 'inicio'} a ${d.hasta ? fecha(d.hasta) : 'hoy'}` : 'Período: todo el histórico';
   const sub = [periodo, d.comunidad ? `Comunidad: ${d.comunidad}` : null, d.canal && d.canal !== 'todos' ? `Canal: ${d.canal === 'instagram' ? 'Instagram' : 'WhatsApp'}` : null, `Generado el ${d.generado || ''}`].filter(Boolean).join('  ·  ');
 
-  hoja.mergeCells(1, 1, 1, n);
-  Object.assign(hoja.getCell(1, 1), { value: `Métricas por comunidad · ${d.cliente || ''}` });
-  Object.assign(hoja.getCell(1, 1), { font: { name: 'Arial', bold: true, size: 16, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: TINTA } }, alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } });
-  hoja.getRow(1).height = 32;
+  // Con logo (PNG blanco de la marca), el título va a partir de la columna B y el logo queda en la A, que está congelada: se ve siempre.
+  const conLogo = !!(d.logo && d.logo.buffer);
+  const colTitulo = conLogo ? 2 : 1;
+  hoja.mergeCells(1, colTitulo, 1, n);
+  Object.assign(hoja.getCell(1, colTitulo), { value: `Métricas por comunidad · ${d.cliente || ''}` });
+  Object.assign(hoja.getCell(1, colTitulo), { font: { name: 'Arial', bold: true, size: 16, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: TINTA } }, alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } });
+  if (conLogo) {
+    hoja.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TINTA } };
+    const imagen = libro.addImage({ buffer: d.logo.buffer, extension: 'png' });
+    const ancho = 150, alto = Math.round(ancho * (d.logo.alto || 168) / (d.logo.ancho || 640));
+    hoja.addImage(imagen, { tl: { col: 0.1, row: 0.1 }, ext: { width: ancho, height: alto } });
+  }
+  hoja.getRow(1).height = conLogo ? 40 : 32;
   hoja.mergeCells(2, 1, 2, n);
   Object.assign(hoja.getCell(2, 1), { value: sub, font: { name: 'Arial', size: 10, italic: true, color: { argb: 'FF5B6678' } }, alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } });
   hoja.getRow(2).height = 20;
@@ -1567,7 +1579,7 @@ function datosFlyer(d){
   const kpis = FLYER_KPIS.filter(k => !k.plata || d.marketing).map(k => ({ id: k.id, titulo: k.titulo, celda: util(celda(total, k.id)) })).filter(k => k.celda).slice(0, 6);
   const comunidades = filas.map(f => ({ nombre: f.nombre, estado: celda(f, 'estado'), entradas: util(celda(f, 'entradas')), cobertura: util(celda(f, 'cobertura')), crr: util(celda(f, 'crr')), churn: util(celda(f, 'churn')), miembros: util(celda(f, 'crr_fin')) }));
   const totalFila = total ? { nombre: 'Total del cliente', estado: celda(total, 'estado'), entradas: util(celda(total, 'entradas')), cobertura: util(celda(total, 'cobertura')), crr: util(celda(total, 'crr')), churn: util(celda(total, 'churn')), miembros: util(celda(total, 'crr_fin')) } : null;
-  return { cliente: d.cliente, desde: d.desde, hasta: d.hasta, generado: d.generado, kpis, comunidades, total: totalFila };
+  return { cliente: d.cliente, desde: d.desde, hasta: d.hasta, generado: d.generado, kpis, comunidades, total: totalFila, logo: d.logo || null };
 }
 const FLYER_SEMAFORO = { verde: '#1E9E63', amarillo: '#E8A317', rojo: '#D93A58', revisar: '#3C6AE0', pocos: '#9AA3B5' };
 function armarFlyerPdf(jsPDF, d){
@@ -1582,15 +1594,18 @@ function armarFlyerPdf(jsPDF, d){
   const punto = (x, y, estado) => { relleno(FLYER_SEMAFORO[estado] || FLYER_SEMAFORO.pocos); doc.circle(x, y, 1.6, 'F'); };
 
   // Encabezado
-  relleno(INK); doc.rect(0, 0, W, 40, 'F'); relleno(AZUL); doc.rect(0, 40, W, 1.6, 'F');
-  tinta('#FFFFFF'); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.text('Reporte de comunidades', M, 18);
-  doc.setFontSize(13); tinta('#9DB8FF'); doc.text(String(d.cliente || ''), M, 28);
+  const conLogo = !!(d.logo && d.logo.buffer);
+  const altoCab = conLogo ? 46 : 40, dy = conLogo ? 6 : 0;
+  relleno(INK); doc.rect(0, 0, W, altoCab, 'F'); relleno(AZUL); doc.rect(0, altoCab, W, 1.6, 'F');
+  if (conLogo) { const lw = 34; doc.addImage(d.logo.buffer, 'PNG', M, 7, lw, lw * (d.logo.alto || 168) / (d.logo.ancho || 640)); }
+  tinta('#FFFFFF'); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.text('Reporte de comunidades', M, 18 + dy);
+  doc.setFontSize(13); tinta('#9DB8FF'); doc.text(String(d.cliente || ''), M, 28 + dy);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); tinta('#C7CBD4');
-  doc.text('Período', W - M, 15, { align: 'right' }); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); tinta('#FFFFFF'); doc.text(periodo, W - M, 21, { align: 'right' });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); tinta('#C7CBD4'); doc.text(`Generado el ${d.generado || ''}`, W - M, 30, { align: 'right' });
+  doc.text('Período', W - M, 15 + dy, { align: 'right' }); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); tinta('#FFFFFF'); doc.text(periodo, W - M, 21 + dy, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); tinta('#C7CBD4'); doc.text(`Generado el ${d.generado || ''}`, W - M, 30 + dy, { align: 'right' });
 
   // Números clave (hasta 6 tarjetas, 3 por fila)
-  let y = 50;
+  let y = 50 + dy;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(12); tinta(AZUL); doc.text('Números clave', M, y);
   y += 4;
   const gap = 5, tw = (ANCHO - 2 * gap) / 3, th = 29;
@@ -2014,6 +2029,17 @@ function wireControl(){
   wireAcciones();
 }
 
+// Logo de Taquión (PNG blanco, 640 x 168) para los exportes. Si no se puede leer, el archivo sale igual, sin logo.
+let logoTaquion;
+async function cargarLogoTaquion(){
+  if (logoTaquion !== undefined) return logoTaquion;
+  try {
+    const r = await fetch('assets/logo-taquion-blanco.png');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    logoTaquion = { buffer: new Uint8Array(await r.arrayBuffer()), ancho: 640, alto: 168 };
+  } catch (_) { logoTaquion = null; }
+  return logoTaquion;
+}
 // ExcelJS (con estilos) se carga recién al exportar; el resto del CRM no lo necesita.
 function cargarExcelJS(){
   if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
@@ -2045,7 +2071,7 @@ async function descargarFlyerPdf(){
   try {
     const jsPDF = await cargarJsPDF();
     const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre || '';
-    const datos = datosFlyer({ cliente, columnas: fc.columnas, filas: fc.filas, desde: fc.desde, hasta: fc.hasta, generado: fmtDia(hoyAR()), marketing: esMarketing() });
+    const datos = datosFlyer({ cliente, columnas: fc.columnas, filas: fc.filas, desde: fc.desde, hasta: fc.hasta, generado: fmtDia(hoyAR()), marketing: esMarketing(), logo: await cargarLogoTaquion() });
     const doc = armarFlyerPdf(jsPDF, datos);
     const nombre = nombreArchivoFlyer(cliente, state.fechaDesde || '', state.fechaHasta || '');
     doc.save(nombre);
@@ -2065,7 +2091,7 @@ async function descargarTablaXlsx(){
   try {
     const ExcelJS = await cargarExcelJS();
     const cliente = (state.clientes.find(c => c.id === state.clienteId) || {}).nombre || '';
-    const libro = armarLibroTabla(ExcelJS, { cliente, columnas: tc.columnas, filas: tc.filas, desde: tc.desde, hasta: tc.hasta, comunidad: tc.comunidad, canal: tc.canal, generado: fmtDia(hoyAR()) });
+    const libro = armarLibroTabla(ExcelJS, { cliente, columnas: tc.columnas, filas: tc.filas, desde: tc.desde, hasta: tc.hasta, comunidad: tc.comunidad, canal: tc.canal, generado: fmtDia(hoyAR()), logo: await cargarLogoTaquion() });
     const buffer = await libro.xlsx.writeBuffer();
     const nombre = nombreArchivoTabla(cliente, state.fechaDesde || '', state.fechaHasta || '', 'xlsx');
     const a = document.createElement('a');

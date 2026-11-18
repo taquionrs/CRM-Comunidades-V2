@@ -93,3 +93,22 @@ test("el botón y la descarga están conectados, con jsPDF de cdnjs en una versi
   assert.match(html, /state\.flyerControl = \{/);
   assert.match(html, /const todasCols = cfg\.orden\.map\(id => porId\[id\]\)\.filter\(Boolean\);/);
 });
+
+// ---------- logo de Taquión (PR #98) ----------
+const LOGO = { buffer: new Uint8Array(fs.readFileSync(new URL("../public/assets/logo-taquion-blanco.png", import.meta.url))), ancho: 640, alto: 168 };
+
+test("con logo el PDF lleva una imagen y sigue siendo una sola página; sin logo no lleva ninguna", () => {
+  const con = api.armarFlyerPdf(jsPDF, api.datosFlyer({ ...BASE, logo: LOGO }));
+  assert.equal(con.getNumberOfPages(), 1);
+  assert.ok(texto(con).includes("/Subtype /Image"));
+  assert.ok(texto(con).includes("Reporte de comunidades"));
+  const sin = api.armarFlyerPdf(jsPDF, api.datosFlyer({ ...BASE, logo: null }));
+  assert.ok(!texto(sin).includes("/Subtype /Image"));
+  assert.equal(sin.getNumberOfPages(), 1);
+  if (process.env.FLYER_OUT) fs.writeFileSync(process.env.FLYER_OUT.replace(/\.pdf$/, "_logo.pdf"), Buffer.from(con.output("arraybuffer")));
+});
+
+test("con muchas comunidades y logo sigue entrando en una página", () => {
+  const muchas = Array.from({ length: 9 }, (_, k) => fila(`Comunidad ${k + 1}`, FILAS[2].celdas));
+  assert.equal(api.armarFlyerPdf(jsPDF, api.datosFlyer({ ...BASE, filas: [...muchas, FILAS[3]], logo: LOGO })).getNumberOfPages(), 1);
+});
