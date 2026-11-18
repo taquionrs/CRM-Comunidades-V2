@@ -7,6 +7,7 @@
     "test:db": "node --test \"tests/db/*.dbtest.mjs\""
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.5"
+    "@electric-sql/pglite": "0.5.5",
+    "exceljs": "^4.4.0"
   }
 }
