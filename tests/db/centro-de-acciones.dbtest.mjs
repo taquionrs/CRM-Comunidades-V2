@@ -38,7 +38,7 @@ const sinClas = (tel, dias) =>
   `insert into ${S}.ingreso_sin_clasificar (cliente_id, telefono_id, mensaje, payload, recibido_en) values ('${CLI}', '${tel}', 'hola', '{}', now() - interval '${dias} days');`;
 
 // Cada prueba parte de cero, con un escenario "al día" (todas las comunidades con dos cargas recientes) al que se le cambia lo que haga falta.
-const cargasAlDia = (comunidades = [BOE, PAL, DEV, GEN]) => comunidades.map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n");
+const cargasAlDia = (comunidades = [BOE, PAL, DEV, GEN]) => comunidades.map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n");
 const alDia = () => cargasAlDia() + "\n" + log("windsor_raw.facebook_ads", 0);
 async function escenario(sql = "") {
   await db.exec(`delete from ${S}.accion_pospuesta; delete from ${S}.carga_miembros; delete from ${S}.windsor_sync_log;
@@ -55,7 +55,7 @@ test("todo al día: no hay nada que completar", async () => {
 });
 
 test("varias comunidades sin carga hace más de 8 días son UNA sola acción, con el mensaje ya escrito y las comunidades involucradas", async () => {
-  await escenario([PAL, DEV].map((c) => carga(c, CLI, 30, 10) + carga(c, CLI, 22, 12, 2, 0)).join("\n") + carga(BOE, CLI, 12, 10) + carga(BOE, CLI, 2, 12, 2, 0) + carga(GEN, CLI, 12, 10) + carga(GEN, CLI, 2, 12, 2, 0));
+  await escenario([PAL, DEV].map((c) => carga(c, CLI, 30, 10) + carga(c, CLI, 22, 12, 2, 0)).join("\n") + carga(BOE, CLI, 12, 10) + carga(BOE, CLI, 0, 12, 2, 0) + carga(GEN, CLI, 12, 10) + carga(GEN, CLI, 0, 12, 2, 0));
   const a = por(await acciones(), "miembros_sin_carga");
   assert.deepEqual(a.comunidades, ["Palermo", "Villa Devoto"]);
   assert.equal(a.comunidad_ids.length, 2);
@@ -68,9 +68,9 @@ test("varias comunidades sin carga hace más de 8 días son UNA sola acción, co
 
 test("con días distintos dice entre cuántos y cuántos; con una sola comunidad dice hace cuántos días", async () => {
   await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + carga(DEV, CLI, 20, 10) + carga(DEV, CLI, 15, 12, 2, 0)
-    + [BOE, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n"));
+    + [BOE, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n"));
   assert.match(por(await acciones(), "miembros_sin_carga").mensaje, /Palermo y Villa Devoto: llevan entre 15 y 22 días sin actualizarse/);
-  await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + [BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n"));
+  await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + [BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n"));
   assert.equal(por(await acciones(), "miembros_sin_carga").mensaje, "Cargá la lista de Palermo: hace 22 días que no se actualiza. Sin eso el CRR queda viejo.");
 });
 
@@ -82,23 +82,23 @@ test("a los 8 días justos todavía no se pide; a los 9 sí", async () => {
 });
 
 test("una comunidad con una sola carga reciente pide otra para calcular el CRR; si esa carga es vieja entra en 'sin carga', no en las dos", async () => {
-  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n") + carga(PAL, CLI, 3, 10));
+  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n") + carga(PAL, CLI, 3, 10));
   const r = await acciones();
   assert.equal(por(r, "miembros_una_carga").mensaje, "Palermo tiene una sola carga de lista completa: cargá otra para calcular su CRR.");
   assert.equal(por(r, "miembros_sin_carga"), undefined);
-  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n") + carga(PAL, CLI, 20, 10));
+  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n") + carga(PAL, CLI, 20, 10));
   const r2 = await acciones();
   assert.deepEqual(por(r2, "miembros_sin_carga").comunidades, ["Palermo"]);
   assert.equal(por(r2, "miembros_una_carga"), undefined);
 });
 
 test("una carga que no es lista completa no cuenta como carga", async () => {
-  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n") + carga(PAL, CLI, 1, 5, 5, 0, false));
+  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n") + carga(PAL, CLI, 1, 5, 5, 0, false));
   assert.equal(por(await acciones(), "miembros_sin_cargas").mensaje, "Palermo no tiene ninguna carga de lista completa de miembros: cargala para empezar a medir su CRR.");
 });
 
 test("la última carga que no cuadra se avisa, y lleva a ver las cargas", async () => {
-  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n") + carga(PAL, CLI, 14, 10) + carga(PAL, CLI, 5, 20, 2, 0));
+  await escenario([BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n") + carga(PAL, CLI, 14, 10) + carga(PAL, CLI, 5, 20, 2, 0));
   const a = por(await acciones(), "carga_no_cuadra");
   assert.equal(a.mensaje, "Palermo: la última carga no cuadra (miembros al inicio + nuevos − bajas no da los miembros al final). Revisala antes de confiar en su CRR.");
   assert.equal(a.destino, "consultas");
@@ -143,8 +143,8 @@ test("sin clasificar: desde 3 personas distintas en 7 días; no cuenta a quien y
 });
 
 test("las acciones salen ordenadas por prioridad", async () => {
-  await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + carga(DEV, CLI, 3, 10) + carga(BOE, CLI, 12, 10) + carga(BOE, CLI, 2, 12, 2, 0)
-    + carga(GEN, CLI, 12, 10) + carga(GEN, CLI, 2, 12, 2, 0) + log("windsor_raw.facebook_ads", 0) + sinClas("5491100000001", 1) + sinClas("5491100000002", 1) + sinClas("5491100000003", 1));
+  await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + carga(DEV, CLI, 3, 10) + carga(BOE, CLI, 12, 10) + carga(BOE, CLI, 0, 12, 2, 0)
+    + carga(GEN, CLI, 12, 10) + carga(GEN, CLI, 0, 12, 2, 0) + log("windsor_raw.facebook_ads", 0) + sinClas("5491100000001", 1) + sinClas("5491100000002", 1) + sinClas("5491100000003", 1));
   assert.deepEqual((await acciones()).map((r) => [r.prioridad, r.codigo]), [[1, "miembros_sin_carga"], [2, "miembros_una_carga"], [3, "sin_clasificar"]]);
 });
 
@@ -164,7 +164,7 @@ test("posponer deja la acción en silencio hasta la fecha y devuelve cuándo vue
 });
 
 test("una acción pospuesta vuelve cuando se cumple la fecha, y posponer una no oculta a las otras", async () => {
-  await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + [BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 2, 12, 2, 0)).join("\n")
+  await escenario(carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0) + [BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n")
     + log("windsor_raw.facebook_ads", 0) + sinClas("5491100000001", 1) + sinClas("5491100000002", 1) + sinClas("5491100000003", 1));
   await db.exec(`insert into ${S}.accion_pospuesta (cliente_id, codigo, hasta) values ('${CLI}', 'sin_clasificar', (now() at time zone 'America/Argentina/Buenos_Aires')::date)`);
   let r = await acciones();
@@ -204,4 +204,61 @@ test("lista_en_texto: una, dos y tres o más", async () => {
   assert.equal(await q(["A"]), "A");
   assert.equal(await q(["A", "B"]), "A y B");
   assert.equal(await q(["A", "B", "C"]), "A, B y C");
+});
+
+// ---------- Aviso "Toca cargar" (db/051): lunes y jueves, hasta que se cargue ----------
+// Días que pasaron desde el último plazo (lunes o jueves, hoy incluido). Se lee de la base para que la prueba sirva cualquier día de la semana.
+const diasDesdePlazo = async () =>
+  (await db.query(`select (case extract(isodow from (now() at time zone 'America/Argentina/Buenos_Aires'))::int
+     when 1 then 0 when 2 then 1 when 3 then 2 when 4 then 0 when 5 then 1 when 6 then 2 else 3 end)::int as d`)).rows[0].d;
+const restoAlDia = () => [BOE, DEV, GEN].map((c) => carga(c, CLI, 12, 10) + carga(c, CLI, 0, 12, 2, 0)).join("\n");
+
+test("toca cargar: la última lista es anterior al último lunes o jueves, así que aparece", async () => {
+  const d = await diasDesdePlazo();
+  await escenario(restoAlDia() + carga(PAL, CLI, 20, 10) + carga(PAL, CLI, d + 1, 12, 2, 0));
+  const a = por(await acciones(), "miembros_toca_carga");
+  assert.ok(a, "tiene que avisar");
+  assert.equal(a.prioridad, 1);
+  assert.equal(a.destino, "cargar_miembros");
+  assert.deepEqual(a.comunidades, ["Palermo"]);
+  assert.match(a.mensaje, /^Hoy toca cargar la lista de Palermo: la última carga fue (ayer|hace \d+ días)\.$/);
+});
+
+test("toca cargar: si ya se cargó desde el último plazo, no aparece", async () => {
+  const d = await diasDesdePlazo();
+  await escenario(restoAlDia() + carga(PAL, CLI, 20, 10) + carga(PAL, CLI, d, 12, 2, 0));
+  assert.equal(por(await acciones(), "miembros_toca_carga"), undefined);
+});
+
+test("toca cargar: no se duplica con el aviso de más de 8 días ni con el de una sola carga", async () => {
+  const d = await diasDesdePlazo();
+  await escenario(restoAlDia() + carga(PAL, CLI, 30, 10) + carga(PAL, CLI, 22, 12, 2, 0));
+  const r = await acciones();
+  assert.ok(por(r, "miembros_sin_carga"));
+  assert.equal(por(r, "miembros_toca_carga"), undefined);
+  await escenario(restoAlDia() + carga(PAL, CLI, d + 1, 10));
+  const r2 = await acciones();
+  assert.ok(por(r2, "miembros_una_carga"));
+  assert.equal(por(r2, "miembros_toca_carga"), undefined);
+});
+
+test("toca cargar: agrupa varias comunidades en un solo aviso", async () => {
+  const d = await diasDesdePlazo();
+  await escenario([PAL, DEV].map((c) => carga(c, CLI, 20, 10) + carga(c, CLI, d + 1, 12, 2, 0)).join("\n") + carga(BOE, CLI, 12, 10) + carga(BOE, CLI, 0, 12, 2, 0) + carga(GEN, CLI, 12, 10) + carga(GEN, CLI, 0, 12, 2, 0));
+  const a = por(await acciones(), "miembros_toca_carga");
+  assert.deepEqual(a.comunidades, ["Palermo", "Villa Devoto"]);
+  assert.match(a.mensaje, /^Toca cargar la lista de miembros de Palermo y Villa Devoto: la última carga fue hace \d+ días\.$/);
+});
+
+test("toca cargar: vale para cualquier cliente, ignora las comunidades ocultas y se puede posponer", async () => {
+  const d = await diasDesdePlazo();
+  await escenario(carga(OTRA, CLI2, 20, 10) + carga(OTRA, CLI2, d + 1, 12, 2, 0));
+  assert.deepEqual(por(await acciones("mkt", CLI2), "miembros_toca_carga").comunidades, ["Otra"]);
+  await escenario(restoAlDia() + carga(PAL, CLI, 20, 10) + carga(PAL, CLI, d + 1, 12, 2, 0));
+  await db.exec(`update ${S}.comunidad set oculta = true where id = '${PAL}'`);
+  try { assert.equal(por(await acciones(), "miembros_toca_carga"), undefined); }
+  finally { await db.exec(`update ${S}.comunidad set oculta = false where id = '${PAL}'`); }
+  await db.exec(`select set_config('request.jwt.claims', '', false)`);   // como() deshace todo: se pospone fuera de él
+  await db.query(`select ${S}.posponer_accion($1::uuid, 'miembros_toca_carga', 7, 'Ya lo estoy haciendo')`, [CLI]);
+  assert.equal(por(await acciones(), "miembros_toca_carga"), undefined);
 });
