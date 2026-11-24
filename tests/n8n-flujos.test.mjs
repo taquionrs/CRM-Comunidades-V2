@@ -158,7 +158,7 @@ test("Unir con el id: una comunidad que no existe con ese nombre queda sin id (n
 const freno = (vp, comunidadId = "uuid", modoReal = false) => {
   const flujo = JSON.parse(JSON.stringify(carga));
   if (modoReal) nodo(flujo, "Freno de seguridad").parameters.jsCode = nodo(flujo, "Freno de seguridad").parameters.jsCode.replace("const MODO = 'prueba'", "const MODO = 'real'");
-  return correr(flujo, "Freno de seguridad", { json: [vp], item: { "Unir con el id": { json: { comunidad: "Boedo", comunidad_id: comunidadId, filas: [], archivo: "a.csv" } } } })[0].json;
+  return correr(flujo, "Freno de seguridad", { entrada: [{ json: [vp] }], nodos: { "Unir con el id": [{ json: { comunidad: "Boedo", comunidad_id: comunidadId, filas: [], archivo: "a.csv" } }] } })[0].json;
 };
 const VP = (o) => ({ total_archivo: 62, nuevos: 11, duplicados: 51, salidas: 0, activos_actuales: 51, ...o });
 
@@ -191,6 +191,17 @@ test("Freno: una comunidad sin id en el CRM no se carga", () => {
   const r = freno(VP(), null, true);
   assert.equal(r.hacer_carga, false);
   assert.ok(r.motivos.some((m) => /no existe/.test(m)));
+});
+
+test("Freno: con varias comunidades decide cada una por separado (antes solo miraba la primera)", () => {
+  const flujo = JSON.parse(JSON.stringify(carga));
+  nodo(flujo, "Freno de seguridad").parameters.jsCode = nodo(flujo, "Freno de seguridad").parameters.jsCode.replace("const MODO = 'prueba'", "const MODO = 'real'");
+  const cargas = [["General", "u1"], ["Boedo", "u2"], ["Devoto", "u3"], ["Palermo", null]].map(([comunidad, comunidad_id]) => ({ json: { comunidad, comunidad_id, filas: [], archivo: "a.csv" } }));
+  const vps = [VP(), VP({ total_archivo: 51 }), VP({ salidas: 12, total_archivo: 45 }), VP()].map((vp) => ({ json: [vp] }));
+  const r = correr(flujo, "Freno de seguridad", { entrada: vps, nodos: { "Unir con el id": cargas } });
+  assert.equal(r.length, 4);
+  assert.deepEqual(r.map((x) => x.json.comunidad), ["General", "Boedo", "Devoto", "Palermo"]);
+  assert.deepEqual(r.map((x) => x.json.hacer_carga), [true, true, false, false]);
 });
 
 test("Armar aviso: separa lo cargado de lo que espera a una persona e indica por qué", () => {
