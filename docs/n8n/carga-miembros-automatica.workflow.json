@@ -182,7 +182,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Une cada comunidad del archivo con su id en el CRM (por el nombre exacto). Si un nombre no existe, la carga de esa comunidad NO se hace.\nconst ids = {};\nfor (const c of $('Supabase: comunidades').all().flatMap((i) => (Array.isArray(i.json) ? i.json : [i.json]))) ids[c.nombre] = c.id;\nreturn $('Armar cargas').all().map((i) => ({ json: { ...i.json, comunidad_id: ids[i.json.comunidad] || null } }));"
+        "jsCode": "// Une cada comunidad del archivo con su id en el CRM (por el nombre exacto; el grupo \"Cortado en Jarrito\" del archivo se une con \"Cortado en Jarrito (general)\"). Si un nombre no existe, la carga de esa comunidad NO se hace.\nconst ids = {};\nfor (const c of $('Supabase: comunidades').all().flatMap((i) => (Array.isArray(i.json) ? i.json : [i.json]))) ids[c.nombre] = c.id;\nreturn $('Armar cargas').all().map((i) => ({ json: { ...i.json, comunidad_id: ids[i.json.comunidad] || ids[i.json.comunidad + ' (general)'] || null } }));"
       },
       "id": "b20000008-0000-4000-8000-000000000008",
       "name": "Unir con el id",
